@@ -22,7 +22,7 @@
   })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CG Toolbox</title>
+<title>Toolbox45</title>
 <!-- Favicon: mesmo ícone (.ico) usado na intranet da empresa, a pedido do
      usuário — ver img/icoCG.ico. -->
 <link rel="icon" type="image/x-icon" href="img/icoCG.ico">
@@ -738,7 +738,7 @@
              lida com o catálogo inteiro em CSV), aqui é UMA pasta específica
              (escolhida no modal), com toda a sua subárvore (subpastas +
              comandos + notes), num arquivo .json auto-contido — pensado
-             sobretudo para levar uma pasta de uma instalação do CG Toolbox
+             sobretudo para levar uma pasta de uma instalação do Toolbox45
              para outra. Sem gate de admin (igual ao grupo "Commands" acima):
              pastas são dados privados de cada usuário, não uma operação de
              banco inteiro (essa continua só em "Database", admin-only). Ver
@@ -773,7 +773,7 @@
         </div>
         <!-- SSL Certificate — importar/substituir/excluir o certificado usado
              pelo nginx do frontend para servir HTTPS (ver frontend/nginx.conf,
-             docker-compose.yml: volume cg-toolbox-tls compartilhado). Sem
+             docker-compose.yml: volume toolbox45-tls compartilhado). Sem
              certificado próprio, a aplicação já serve HTTPS com um
              autoassinado gerado no primeiro boot (ensureTlsBootstrap() em
              server/index.js) — este botão é só para quem quiser trocar por um
@@ -1017,7 +1017,7 @@
     <div class="modal-body">
       <div class="set-group">
         <span class="set-label">File</span>
-        <span class="set-hint">A .json file created by "Export folder" (this or another CG Toolbox installation). The whole folder is recreated as new — it never overwrites anything you already have.</span>
+        <span class="set-hint">A .json file created by "Export folder" (this or another Toolbox45 installation). The whole folder is recreated as new — it never overwrites anything you already have.</span>
         <input type="file" id="folderImportFile" accept="application/json,.json" onchange="onFolderImportFileChosen()">
       </div>
       <div class="set-group">

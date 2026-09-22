@@ -89,7 +89,7 @@ const COPY_BTN_ICON_ERR = `<svg width="10" height="10" fill="none" viewBox="0 0 
 
 // navigator.clipboard (Clipboard API assíncrona) só existe em "contexto
 // seguro" — HTTPS ou localhost. Enquanto o servidor estiver em HTTP puro
-// (antes de um certificado TLS ser configurado — ver install-cgtoolbox.sh
+// (antes de um certificado TLS ser configurado — ver install-toolbox45.sh
 // --tls-cert/--tls-key), navigator.clipboard normalmente é undefined no
 // navegador, e chamar .writeText direto quebra silenciosamente (o clique
 // nem chega a copiar nada). Aqui tentamos a API moderna primeiro e, se não

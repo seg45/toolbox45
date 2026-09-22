@@ -3,7 +3,7 @@ node_modules
 server/node_modules
 
 # O banco de dados agora é PostgreSQL, num container/volume próprios
-# (cg-toolbox-db) — nunca fica dentro da imagem do backend nem do frontend.
+# (toolbox45-db) — nunca fica dentro da imagem do backend nem do frontend.
 server/backup/
 /backup/
 

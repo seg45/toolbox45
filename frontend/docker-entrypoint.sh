@@ -1,9 +1,9 @@
 #!/bin/sh
 # ════════════════════════════════════════════════════════════════════════
-# CG Toolbox — frontend entrypoint (cg-toolbox-frontend)
+# Toolbox45 — frontend entrypoint (toolbox45-frontend)
 #
 # nginx already terminates HTTPS using /etc/nginx/tls/cert.pem + key.pem
-# (see nginx.conf) mounted from the cg-toolbox-tls shared volume — but nginx
+# (see nginx.conf) mounted from the toolbox45-tls shared volume — but nginx
 # only reads those files once, at startup. When an admin imports/replaces/
 # deletes a certificate via Settings → System → SSL Certificate, the backend
 # (server/index.js) writes the new cert.pem/key.pem to that SAME volume, but

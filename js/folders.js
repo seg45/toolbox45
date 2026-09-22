@@ -1872,7 +1872,7 @@ document.addEventListener('mouseout', ev => {
 // (ver GET /api/folders/:id/export + POST /api/folders/import em
 // server/index.js) — cada comando vai por INTEIRO no arquivo, não só uma
 // referência por id (o id só faz sentido no banco de origem). Pensado
-// sobretudo para levar uma pasta de uma instalação do CG Toolbox para outra;
+// sobretudo para levar uma pasta de uma instalação do Toolbox45 para outra;
 // dentro da MESMA instalação, "Copy folder" (copyFolderFromUser acima) já
 // resolve, só que sem subpastas.
 // ════════════════════════════════════════════════
@@ -1930,7 +1930,7 @@ async function confirmExportFolder() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cg-toolbox-folder-${slug}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `toolbox45-folder-${slug}-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -2001,7 +2001,7 @@ function onFolderImportFileChosen() {
   reader.onload = () => {
     let parsed = null;
     try { parsed = JSON.parse(reader.result); } catch (e) { parsed = null; }
-    if (!parsed || parsed.type !== 'cg-toolbox-folder-export' || !parsed.root || typeof parsed.root.name !== 'string') {
+    if (!parsed || parsed.type !== 'toolbox45-folder-export' || !parsed.root || typeof parsed.root.name !== 'string') {
       if (preview) {
         preview.style.display = 'block';
         preview.textContent = "This doesn't look like a folder export file (or it's from an incompatible version).";

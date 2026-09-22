@@ -1,7 +1,7 @@
 {
-  "name": "cg-toolbox-backend",
+  "name": "toolbox45-backend",
   "version": "2.0.0",
-  "description": "Backend (Express + PostgreSQL) for CG Toolbox, the multi-vendor network support tool — pure REST API, no static file serving (see cg-toolbox-frontend for that). Supports both NTLM-based browser sessions and API-key authenticated external integrations.",
+  "description": "Backend (Express + PostgreSQL) for Toolbox45, the multi-vendor network support tool — pure REST API, no static file serving (see toolbox45-frontend for that). Supports both NTLM-based browser sessions and API-key authenticated external integrations.",
   "private": true,
   "main": "index.js",
   "scripts": {

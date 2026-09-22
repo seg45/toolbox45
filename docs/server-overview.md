@@ -1,10 +1,10 @@
-# CG Toolbox — Backend
+# Toolbox45 — Backend
 
-Backend (Node.js + Express + PostgreSQL, via `pg`) for CG Toolbox, the multi-vendor network
+Backend (Node.js + Express + PostgreSQL, via `pg`) for Toolbox45, the multi-vendor network
 support tool. This is a **pure REST API** under `/api` — it does not serve the static frontend
 anymore (see `../frontend/` for the nginx image that does that + reverse-proxies `/api/*` here).
 The whole app runs as 3 Docker containers (see `../docker-compose.yml`):
-`cg-toolbox-db` (PostgreSQL), `cg-toolbox-backend` (this), `cg-toolbox-frontend` (nginx).
+`toolbox45-db` (PostgreSQL), `toolbox45-backend` (this), `toolbox45-frontend` (nginx).
 
 ## Install & run (standalone, without Docker)
 
@@ -12,7 +12,7 @@ The whole app runs as 3 Docker containers (see `../docker-compose.yml`):
 cd server
 npm install
 # point at your own Postgres instance:
-export PGHOST=localhost PGPORT=5432 PGDATABASE=cgtoolbox PGUSER=cgtoolbox PGPASSWORD=cgtoolbox
+export PGHOST=localhost PGPORT=5432 PGDATABASE=toolbox45 PGUSER=toolbox45 PGPASSWORD=toolbox45
 npm start
 ```
 
@@ -23,7 +23,7 @@ The server listens on `PORT` (env var, default `3000`) and exposes the REST API 
 
 In the normal Docker deployment (see `../docker-compose.yml`), none of this needs to be
 done manually — `docker compose up -d --build` builds and starts all 3 containers, and the
-backend waits for `cg-toolbox-db` to become healthy before applying the schema.
+backend waits for `toolbox45-db` to become healthy before applying the schema.
 
 ## API keys (programmatic access)
 

@@ -1,49 +1,49 @@
 services:
   # ── BANCO DE DADOS ──
   # PostgreSQL "de verdade" (não mais SQLite num volume) — server/db.js
-  # conecta nele via rede (PGHOST=cg-toolbox-db) e aplica server/schema.sql a
+  # conecta nele via rede (PGHOST=toolbox45-db) e aplica server/schema.sql a
   # cada boot do backend (idempotente). Sem "ports:" — não é alcançável de
-  # fora do host, só pelo cg-toolbox-backend via rede interna do compose.
-  cg-toolbox-db:
+  # fora do host, só pelo toolbox45-backend via rede interna do compose.
+  toolbox45-db:
     image: postgres:16-alpine
-    container_name: cg-toolbox-db
+    container_name: toolbox45-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: "${POSTGRES_DB:-cgtoolbox}"
-      POSTGRES_USER: "${POSTGRES_USER:-cgtoolbox}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-cgtoolbox}"
+      POSTGRES_DB: "${POSTGRES_DB:-toolbox45}"
+      POSTGRES_USER: "${POSTGRES_USER:-toolbox45}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-toolbox45}"
     volumes:
-      - cg-toolbox-db-data:/var/lib/postgresql/data
+      - toolbox45-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cgtoolbox} -d ${POSTGRES_DB:-cgtoolbox}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-toolbox45} -d ${POSTGRES_DB:-toolbox45}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   # ── BACKEND ──
   # API REST pura (Express + PostgreSQL) — não serve mais o frontend estático
-  # (isso é o cg-toolbox-frontend abaixo). Também aceita chamadas externas
+  # (isso é o toolbox45-frontend abaixo). Também aceita chamadas externas
   # autenticadas por API key (header X-API-Key — ver Settings → System →
   # API access na UI, e api_keys em server/schema.sql). Sem "ports:" — só o
-  # cg-toolbox-frontend fala com ele (proxy reverso /api/*, ver
+  # toolbox45-frontend fala com ele (proxy reverso /api/*, ver
   # frontend/nginx.conf).
-  cg-toolbox-backend:
+  toolbox45-backend:
     build:
       context: .
       dockerfile: Dockerfile
-      # Ver nota de MTU/rede no serviço cg-toolbox-frontend abaixo — mesmo
+      # Ver nota de MTU/rede no serviço toolbox45-frontend abaixo — mesmo
       # racional (apt-get durante o build precisa da rede do host nesta VM).
       network: host
-    image: cg-toolbox-backend:latest
-    container_name: cg-toolbox-backend
+    image: toolbox45-backend:latest
+    container_name: toolbox45-backend
     restart: unless-stopped
     depends_on:
-      cg-toolbox-db:
+      toolbox45-db:
         condition: service_healthy
     # GET /api/health só responde depois de initDb() E ensureTlsBootstrap()
     # (ver server/index.js) — ou seja, "healthy" aqui também garante que o
-    # volume de certificados (cg-toolbox-tls) já tem um cert.pem/key.pem
-    # válidos, o que o cg-toolbox-frontend abaixo depende para poder subir
+    # volume de certificados (toolbox45-tls) já tem um cert.pem/key.pem
+    # válidos, o que o toolbox45-frontend abaixo depende para poder subir
     # seu bloco "listen 443 ssl" sem erro.
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
@@ -52,11 +52,11 @@ services:
       retries: 20
       start_period: 15s
     environment:
-      PGHOST: cg-toolbox-db
+      PGHOST: toolbox45-db
       PGPORT: "5432"
-      PGDATABASE: "${POSTGRES_DB:-cgtoolbox}"
-      PGUSER: "${POSTGRES_USER:-cgtoolbox}"
-      PGPASSWORD: "${POSTGRES_PASSWORD:-cgtoolbox}"
+      PGDATABASE: "${POSTGRES_DB:-toolbox45}"
+      PGUSER: "${POSTGRES_USER:-toolbox45}"
+      PGPASSWORD: "${POSTGRES_PASSWORD:-toolbox45}"
       # Descomente se este host não estiver num domínio Windows — sem NTLM,
       # os usuários são identificados por um header x-dev-user (ou caem no
       # usuário do sistema operacional rodando o Node dentro do container),
@@ -74,19 +74,19 @@ services:
       # Dumps do Backup & Restore (Settings → System → Database) — pg_dump/
       # pg_restore, fora do volume de dados do Postgres, sobrevive a
       # rebuild/restart deste container.
-      - cg-toolbox-backups:/app/backups
+      - toolbox45-backups:/app/backups
       # Certificado/chave TLS (Settings → System → SSL Certificate) —
       # ensureTlsBootstrap()/generateSelfSignedCert() em server/index.js
-      # escrevem aqui; COMPARTILHADO (rw aqui, ro no cg-toolbox-frontend
+      # escrevem aqui; COMPARTILHADO (rw aqui, ro no toolbox45-frontend
       # abaixo) porque quem realmente termina HTTPS é o nginx do frontend,
       # não este container — ver frontend/nginx.conf.
-      - cg-toolbox-tls:/app/tls
+      - toolbox45-tls:/app/tls
 
   # ── FRONTEND ──
   # nginx: serve os arquivos estáticos (index.html/css/js/img) e faz proxy
-  # reverso de /api/* para o cg-toolbox-backend — ver frontend/nginx.conf.
+  # reverso de /api/* para o toolbox45-backend — ver frontend/nginx.conf.
   # ÚNICO container com porta publicada; é com ele que o navegador fala.
-  cg-toolbox-frontend:
+  toolbox45-frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
@@ -96,8 +96,8 @@ services:
       # que baixam pacotes travam com "Connection timed out" mesmo com
       # internet funcionando normalmente no host.
       network: host
-    image: cg-toolbox-frontend:latest
-    container_name: cg-toolbox-frontend
+    image: toolbox45-frontend:latest
+    container_name: toolbox45-frontend
     restart: unless-stopped
     depends_on:
       # "service_healthy" (não só "started") — o healthcheck do backend só
@@ -106,7 +106,7 @@ services:
       # volume compartilhado quando o nginx aqui sobe e lê o bloco "listen
       # 443 ssl" de frontend/nginx.conf — sem isso, o nginx falharia ao
       # iniciar (arquivo inexistente) numa primeira subida "do zero".
-      cg-toolbox-backend:
+      toolbox45-backend:
         condition: service_healthy
     ports:
       # Host:container — único ponto de entrada da aplicação, em
@@ -114,12 +114,12 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      # Somente leitura — quem escreve é o cg-toolbox-backend (ver volume
+      # Somente leitura — quem escreve é o toolbox45-backend (ver volume
       # acima); docker-entrypoint.sh observa esta pasta com inotifywait e dá
       # `nginx -s reload` sempre que o certificado mudar.
-      - cg-toolbox-tls:/etc/nginx/tls:ro
+      - toolbox45-tls:/etc/nginx/tls:ro
 
 volumes:
-  cg-toolbox-db-data:
-  cg-toolbox-backups:
-  cg-toolbox-tls:
+  toolbox45-db-data:
+  toolbox45-backups:
+  toolbox45-tls:

@@ -1,7 +1,7 @@
 // index.js — Express app: expõe SÓ a API REST /api/* (PostgreSQL via
 // server/db.js, node-postgres). Não serve mais o frontend estático — isso
-// agora é responsabilidade do container cg-toolbox-frontend (nginx), que
-// também faz proxy reverso de /api/* para este backend (cg-toolbox-backend)
+// agora é responsabilidade do container toolbox45-frontend (nginx), que
+// também faz proxy reverso de /api/* para este backend (toolbox45-backend)
 // — ver docker-compose.yml e frontend/nginx.conf. O browser nunca fala
 // direto com este processo.
 //
@@ -49,7 +49,7 @@ const PORT = process.env.PORT || process.env.HTTP_PORT || 3000;
 app.use(express.json({ limit: '15mb' }));
 
 // Healthcheck simples e público (sem auth) — usado pelo HEALTHCHECK do
-// Dockerfile/docker-compose.yml para o cg-toolbox-frontend só iniciar
+// Dockerfile/docker-compose.yml para o toolbox45-frontend só iniciar
 // (depends_on condition:service_healthy) depois que este processo já
 // terminou o boot (initDb() + ensureTlsBootstrap(), ver o final deste
 // arquivo) — sem isso, o frontend podia tentar escutar na porta 443 antes
@@ -65,9 +65,9 @@ function hashApiKey(rawKey) {
   return crypto.createHash('sha256').update(rawKey).digest('hex');
 }
 function generateApiKey() {
-  // Prefixo "cgtb_" (CG Toolbox) só facilita reconhecer o tipo de segredo em
+  // Prefixo "tb45_" (Toolbox45) só facilita reconhecer o tipo de segredo em
   // logs/scanners — o valor que importa é o restante, aleatório (32 bytes).
-  return 'cgtb_' + crypto.randomBytes(32).toString('hex');
+  return 'tb45_' + crypto.randomBytes(32).toString('hex');
 }
 async function authenticateApiKey(rawKey) {
   const hash = hashApiKey(rawKey);
@@ -1245,7 +1245,7 @@ app.post('/api/folders/:id/copy', async (req, res) => {
 // importar e exportar a pasta folders. incluir todas subfolders, comandos e
 // anotações.") — pensado para levar uma pasta (com toda a árvore de
 // subpastas, os comandos que ela contém e as notes) de uma instalação para
-// outra (ex.: entre ambientes de clientes diferentes do CG Toolbox), não só
+// outra (ex.: entre ambientes de clientes diferentes do Toolbox45), não só
 // entre usuários da MESMA instalação (isso já existia via "copy" acima, mas
 // só uma pasta única, sem subpastas). Formato do arquivo: um JSON
 // auto-contido — cada comando vai por INTEIRO (mesmo shape de
@@ -1316,7 +1316,7 @@ app.get('/api/folders/:id/export', async (req, res) => {
     const owned = await pool.query('SELECT id FROM folders WHERE id = $1 AND username = $2', [req.params.id, username]);
     if (!owned.rows.length) return res.status(404).json({ error: 'not_found', message: `Folder '${req.params.id}' not found` });
     const root = await buildFolderExportNode(Number(req.params.id), username);
-    res.json({ type: 'cg-toolbox-folder-export', version: 1, exported_at: new Date().toISOString(), root });
+    res.json({ type: 'toolbox45-folder-export', version: 1, exported_at: new Date().toISOString(), root });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });
@@ -3098,7 +3098,7 @@ function checkScheduledBackup() {
 // Certificado SSL/TLS (Settings → System → SSL Certificate) — pedido do
 // usuário: "crie um menu que permita importar, substituir ou excluir um
 // certificado ssl para ser utilizado na aplicação em HTTPS". Quem realmente
-// TERMINA o TLS é o cg-toolbox-frontend (nginx, ver frontend/nginx.conf,
+// TERMINA o TLS é o toolbox45-frontend (nginx, ver frontend/nginx.conf,
 // bloco "listen 443 ssl") — este backend só possui/valida os arquivos, que
 // moram num volume Docker COMPARTILHADO entre os dois containers (TLS_DIR,
 // por padrão /app/tls aqui e /etc/nginx/tls no frontend — ver
@@ -3127,7 +3127,7 @@ async function generateSelfSignedCert() {
   await runCli('openssl', [
     'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
     '-keyout', TLS_KEY_PATH, '-out', TLS_CERT_PATH,
-    '-days', '825', '-subj', '/CN=cg-toolbox',
+    '-days', '825', '-subj', '/CN=toolbox45',
   ]);
 }
 
@@ -3238,7 +3238,7 @@ app.delete('/api/system/ssl-certificate', requireAdmin, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════
-// Startup — aguarda o Postgres (cg-toolbox-db) responder e o schema ser
+// Startup — aguarda o Postgres (toolbox45-db) responder e o schema ser
 // aplicado antes de começar a aceitar requisições HTTP. O agendamento de
 // backup (setInterval) só é registrado DEPOIS disso — chamá-lo antes faria
 // checkScheduledBackup() consultar `user_data` numa corrida contra o CREATE
@@ -3246,7 +3246,7 @@ app.delete('/api/system/ssl-certificate', requireAdmin, async (req, res) => {
 // "relation does not exist" inofensivo mas ruidoso no primeiro boot.
 // ensureTlsBootstrap() (ver seção "Certificado SSL/TLS" acima) também
 // precisa rodar ANTES do app.listen — só depois disso GET /api/health
-// responde 200, e só depois disso o cg-toolbox-frontend (que depende deste
+// responde 200, e só depois disso o toolbox45-frontend (que depende deste
 // healthcheck, ver docker-compose.yml) sobe seu bloco 443 sabendo que o
 // volume compartilhado de certificados já tem um arquivo válido.
 // ════════════════════════════════════════════════
@@ -3257,7 +3257,7 @@ app.delete('/api/system/ssl-certificate', requireAdmin, async (req, res) => {
     setInterval(checkScheduledBackup, 60 * 1000);
     checkScheduledBackup();
     app.listen(PORT, () => {
-      console.log(`CG Toolbox backend listening on port ${PORT}`);
+      console.log(`Toolbox45 backend listening on port ${PORT}`);
     });
   } catch (err) {
     console.error('Failed to start: could not connect to the database.', err);

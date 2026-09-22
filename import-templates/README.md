@@ -1,6 +1,6 @@
 # Templates de importação de comandos
 
-Planilhas `.csv` prontas para importar comandos no CG Toolbox via
+Planilhas `.csv` prontas para importar comandos no Toolbox45 via
 **Configurações → Cadastro → Import commands**. Cada arquivo cobre um
 fabricante e serve tanto de exemplo (comandos reais, prontos para importar)
 quanto de ponto de partida para quem quiser adaptar/estender.

@@ -1,16 +1,16 @@
-COMO INSTALAR O CG TOOLBOX A PARTIR DO GITHUB
+COMO INSTALAR O TOOLBOX45 A PARTIR DO GITHUB
 ================================================
 
 Repositório: https://github.com/metalab-tec-br/downloads
 Servidor: Linux (Ubuntu/Debian), com acesso root/sudo, Docker + Docker Compose.
 
 A aplicação roda como 3 containers Docker (ver docker-compose.yml):
-  - cg-toolbox-db        PostgreSQL (banco de dados)
-  - cg-toolbox-backend   API REST (Node.js/Express)
-  - cg-toolbox-frontend  nginx (arquivos estáticos + proxy reverso de /api/*)
+  - toolbox45-db        PostgreSQL (banco de dados)
+  - toolbox45-backend   API REST (Node.js/Express)
+  - toolbox45-frontend  nginx (arquivos estáticos + proxy reverso de /api/*)
 
-Só o cg-toolbox-frontend tem porta publicada no host — é com ele que o
-navegador fala; cg-toolbox-backend e cg-toolbox-db não são alcançáveis de
+Só o toolbox45-frontend tem porta publicada no host — é com ele que o
+navegador fala; toolbox45-backend e toolbox45-db não são alcançáveis de
 fora do host. Não há mais instalação bare-metal (systemd) — esta versão
 depende de um servidor Postgres próprio, então Docker Compose é o único
 caminho suportado.
@@ -28,12 +28,12 @@ caminho suportado.
 Evite clonar dentro do home de um usuário (ex.: /home/usuario/...) — prefira
 um local neutro, como /opt:
 
-    sudo git clone https://github.com/metalab-tec-br/downloads.git /opt/cg-toolbox
-    cd /opt/cg-toolbox
+    sudo git clone https://github.com/metalab-tec-br/downloads.git /opt/toolbox45
+    cd /opt/toolbox45
 
 Se o git reclamar de "dubious ownership", rode:
 
-    git config --global --add safe.directory /opt/cg-toolbox
+    git config --global --add safe.directory /opt/toolbox45
 
 
 3) INSTALAR (subir os 3 containers)
@@ -43,7 +43,7 @@ Se o git reclamar de "dubious ownership", rode:
 Isso constrói as imagens do backend e do frontend, baixa a imagem oficial
 do PostgreSQL, e sobe os 3 containers. O app fica disponível em:
 
-    http://<ip-do-servidor>          (porta 80 — cg-toolbox-frontend)
+    http://<ip-do-servidor>          (porta 80 — toolbox45-frontend)
 
 Numa instalação NOVA (catálogo vazio, "como em outra empresa"): não precisa
 fazer mais nada — o banco começa vazio e o backend aplica o schema (sem
@@ -51,7 +51,7 @@ seed de dados) no primeiro boot. Cadastre os comandos depois pela própria
 aplicação (editor de comandos, ou Importar comandos via CSV), ou rode o
 seed inicial com os ~30 comandos de referência (opcional):
 
-    sudo docker compose exec cg-toolbox-backend node seed.js
+    sudo docker compose exec toolbox45-backend node seed.js
 
 
 4) VARIÁVEIS DE AMBIENTE (opcional)
@@ -60,11 +60,11 @@ Definidas num arquivo ".env" ao lado do docker-compose.yml, ou exportadas
 antes do "docker compose up":
 
     POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD
-        # credenciais do banco (usadas por cg-toolbox-db E cg-toolbox-backend
+        # credenciais do banco (usadas por toolbox45-db E toolbox45-backend
         # — mudar aqui já reflete nos dois). Troque a senha padrão em
         # produção.
 
-    NTLM_DISABLED=1   (definido em cg-toolbox-backend, docker-compose.yml)
+    NTLM_DISABLED=1   (definido em toolbox45-backend, docker-compose.yml)
         # desliga a identificação automática de usuário via NTLM (login do
         # Windows) — use se o servidor não estiver num domínio Windows, ou
         # se notar problemas de autenticação através do proxy reverso (ver
@@ -97,9 +97,9 @@ depois disso só o hash fica no banco.
 6) HTTPS COM CERTIFICADO
 ---------------------------------------
 HTTPS já vem habilitado por padrão, sem nenhum passo manual: no primeiro
-boot, o cg-toolbox-backend gera automaticamente um certificado autoassinado
+boot, o toolbox45-backend gera automaticamente um certificado autoassinado
 (ensureTlsBootstrap(), ver server/index.js) e o grava num volume Docker
-compartilhado ("cg-toolbox-tls") com o cg-toolbox-frontend, que o serve em
+compartilhado ("toolbox45-tls") com o toolbox45-frontend, que o serve em
 https://<ip-do-servidor> (porta 443) junto com o HTTP de sempre na porta 80.
 O navegador vai mostrar aviso de segurança enquanto o certificado for
 autoassinado — normal.
@@ -123,27 +123,27 @@ autoassinado novo, a qualquer momento.
 ------------------------
 Pela própria aplicação (Configurações → System → Database → "Backup &
 Restore"): cria um dump do Postgres (`pg_dump`, formato custom) guardado no
-volume "cg-toolbox-backups" (fora do container, sobrevive a rebuild).
+volume "toolbox45-backups" (fora do container, sobrevive a rebuild).
 Também dá pra agendar backups automáticos (diário/semanal/mensal) na mesma
 tela.
 
 Backup manual via linha de comando (equivalente ao botão da UI):
 
-    sudo docker compose exec cg-toolbox-backend \
-      pg_dump -d "postgresql://cgtoolbox:cgtoolbox@cg-toolbox-db:5432/cgtoolbox" -F c -f /app/backups/manual.dump
+    sudo docker compose exec toolbox45-backend \
+      pg_dump -d "postgresql://toolbox45:toolbox45@toolbox45-db:5432/toolbox45" -F c -f /app/backups/manual.dump
 
 Para restaurar um dump trazido de outra instalação, copie o arquivo .dump
 para dentro do volume e restaure pela UI (Backup & Restore → Restore), ou:
 
-    sudo docker cp meu-backup.dump $(docker compose ps -q cg-toolbox-backend):/app/backups/meu-backup.dump
-    sudo docker compose exec cg-toolbox-backend \
-      pg_restore --clean --if-exists --no-owner -d "postgresql://cgtoolbox:cgtoolbox@cg-toolbox-db:5432/cgtoolbox" /app/backups/meu-backup.dump
+    sudo docker cp meu-backup.dump $(docker compose ps -q toolbox45-backend):/app/backups/meu-backup.dump
+    sudo docker compose exec toolbox45-backend \
+      pg_restore --clean --if-exists --no-owner -d "postgresql://toolbox45:toolbox45@toolbox45-db:5432/toolbox45" /app/backups/meu-backup.dump
 
 
 8) VERIFICAR A INSTALAÇÃO
 ------------------------------
     sudo docker compose ps
-    sudo docker compose logs -f cg-toolbox-backend    # deve mostrar "schema aplicado" e "listening"
+    sudo docker compose logs -f toolbox45-backend    # deve mostrar "schema aplicado" e "listening"
     curl -I http://localhost
 
 
@@ -155,15 +155,15 @@ Dentro da pasta do projeto:
     sudo docker compose up -d --build
 
 É seguro rodar quantas vezes precisar — reconstrói só o que mudou e nunca
-mexe nos dados (volumes cg-toolbox-db-data e cg-toolbox-backups continuam
+mexe nos dados (volumes toolbox45-db-data e toolbox45-backups continuam
 intactos entre updates).
 
 
 10) COMANDOS DO DIA A DIA
 ------------------------------
-    sudo docker compose logs -f cg-toolbox-backend    # acompanhar logs do backend
-    sudo docker compose logs -f cg-toolbox-frontend    # acompanhar logs do nginx
-    sudo docker compose restart cg-toolbox-backend     # reiniciar só o backend
+    sudo docker compose logs -f toolbox45-backend    # acompanhar logs do backend
+    sudo docker compose logs -f toolbox45-frontend    # acompanhar logs do nginx
+    sudo docker compose restart toolbox45-backend     # reiniciar só o backend
     sudo docker compose down                           # parar tudo (mantém os volumes/dados)
     sudo docker compose down -v                         # parar E apagar os volumes (perde os dados!)
 
@@ -200,18 +200,18 @@ host, com um "clamp" do MSS do TCP:
 
 Se 1400 não resolver, teste valores menores (1300, 1200) — o valor ideal
 depende de quanto overhead a rede/VPN em questão está adicionando. Tanto o
-serviço cg-toolbox-backend quanto o cg-toolbox-frontend já usam
+serviço toolbox45-backend quanto o toolbox45-frontend já usam
 "network: host" no build (ver docker-compose.yml) por causa disso.
 
 
 12) PROBLEMAS COMUNS
 ------------------------
-- "cg-toolbox-backend" reiniciando em loop, log mostra "Failed to start:
-  could not connect to the database": o cg-toolbox-db ainda pode estar
+- "toolbox45-backend" reiniciando em loop, log mostra "Failed to start:
+  could not connect to the database": o toolbox45-db ainda pode estar
   inicializando (primeira vez que o volume é criado, o Postgres oficial
   demora alguns segundos) — o backend tenta reconectar por ~1 minuto
   sozinho (ver server/db.js); se persistir depois disso, confira
-  "docker compose logs cg-toolbox-db".
+  "docker compose logs toolbox45-db".
 
 - Login do Windows (NTLM) parou de funcionar depois da migração para 3
   containers: o handshake NTLM agora passa por um hop a mais (o proxy
@@ -220,6 +220,6 @@ serviço cg-toolbox-backend quanto o cg-toolbox-frontend já usam
   integrações programáticas.
 
 - Ver logs detalhados de um container específico:
-      sudo docker compose logs -f cg-toolbox-backend
-      sudo docker compose logs -f cg-toolbox-db
-      sudo docker compose logs -f cg-toolbox-frontend
+      sudo docker compose logs -f toolbox45-backend
+      sudo docker compose logs -f toolbox45-db
+      sudo docker compose logs -f toolbox45-frontend

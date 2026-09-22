@@ -1,4 +1,4 @@
-// db.js — abre um pool de conexões PostgreSQL (cg-toolbox-db, container
+// db.js — abre um pool de conexões PostgreSQL (toolbox45-db, container
 // próprio — ver docker-compose.yml) e aplica schema.sql (idempotente —
 // CREATE TABLE IF NOT EXISTS, então reexecutar é seguro).
 //
@@ -19,11 +19,11 @@ const { hashPassword } = require('./auth');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 const CONN = {
-  host: process.env.PGHOST || process.env.DB_HOST || 'cg-toolbox-db',
+  host: process.env.PGHOST || process.env.DB_HOST || 'toolbox45-db',
   port: Number(process.env.PGPORT || process.env.DB_PORT || 5432),
-  database: process.env.PGDATABASE || process.env.DB_NAME || 'cgtoolbox',
-  user: process.env.PGUSER || process.env.DB_USER || 'cgtoolbox',
-  password: process.env.PGPASSWORD || process.env.DB_PASSWORD || 'cgtoolbox',
+  database: process.env.PGDATABASE || process.env.DB_NAME || 'toolbox45',
+  user: process.env.PGUSER || process.env.DB_USER || 'toolbox45',
+  password: process.env.PGPASSWORD || process.env.DB_PASSWORD || 'toolbox45',
 };
 
 const pool = new Pool(process.env.DATABASE_URL ? { connectionString: process.env.DATABASE_URL } : CONN);
@@ -48,8 +48,8 @@ pool.on('error', err => {
 });
 
 // Tenta conectar/aplicar o schema a cada 2s até o Postgres responder — no
-// docker-compose, o container cg-toolbox-db pode ainda estar inicializando
-// quando cg-toolbox-backend sobe (mesmo com `depends_on` + healthcheck, é uma
+// docker-compose, o container toolbox45-db pode ainda estar inicializando
+// quando toolbox45-backend sobe (mesmo com `depends_on` + healthcheck, é uma
 // rede real, não um arquivo local — vale ter uma margem de segurança aqui).
 async function initDb({ retries = 30, delayMs = 2000 } = {}) {
   const schemaSql = fs.readFileSync(SCHEMA_PATH, 'utf8');

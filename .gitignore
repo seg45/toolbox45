@@ -7,9 +7,9 @@ server/node_modules/
 *.bak_*
 
 # Dumps de backup do banco (pg_dump — ver server/index.js, GET/POST
-# /api/backups). Ficam só no volume do container cg-toolbox-backend
+# /api/backups). Ficam só no volume do container toolbox45-backend
 # (/app/backups); nunca versionados. O banco em si (PostgreSQL) vive inteiramente
-# no container cg-toolbox-db + seu próprio volume nomeado — não há mais
+# no container toolbox45-db + seu próprio volume nomeado — não há mais
 # nenhum arquivo de banco de dados dentro deste repositório (antes era
 # server/commands.db, SQLite; removido junto com a migração para Postgres).
 server/backup/

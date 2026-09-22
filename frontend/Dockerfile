@@ -1,16 +1,16 @@
 # ════════════════════════════════════════════════════════════════════════
-# CG Toolbox — frontend image (cg-toolbox-frontend)
+# Toolbox45 — frontend image (toolbox45-frontend)
 #
 # Static files (index.html, css/, js/, img/) served by nginx, with a reverse
-# proxy for /api/* to the backend container (cg-toolbox-backend) — see
+# proxy for /api/* to the backend container (toolbox45-backend) — see
 # nginx.conf. This is the ONLY container exposed to the browser/host network
-# (see docker-compose.yml: cg-toolbox-db and cg-toolbox-backend have no
+# (see docker-compose.yml: toolbox45-db and toolbox45-backend have no
 # published ports).
 #
 # Build context is the repo root (same as the backend Dockerfile) — see
 # docker-compose.yml: "dockerfile: frontend/Dockerfile".
 #
-# `inotify-tools` + docker-entrypoint.sh: watches the cg-toolbox-tls shared
+# `inotify-tools` + docker-entrypoint.sh: watches the toolbox45-tls shared
 # volume (mounted read-only at /etc/nginx/tls — see docker-compose.yml) and
 # runs `nginx -s reload` whenever cert.pem/key.pem change, so importing or
 # deleting a certificate via Settings → System → SSL Certificate takes effect

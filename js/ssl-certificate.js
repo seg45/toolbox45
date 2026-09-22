@@ -12,8 +12,8 @@
 //      volta a gerar um autoassinado (ensureTlsBootstrap()/
 //      generateSelfSignedCert() em server/index.js).
 //
-// O certificado em si é servido pelo nginx do cg-toolbox-frontend, não por
-// este backend (ver frontend/nginx.conf) — o volume cg-toolbox-tls é
+// O certificado em si é servido pelo nginx do toolbox45-frontend, não por
+// este backend (ver frontend/nginx.conf) — o volume toolbox45-tls é
 // compartilhado entre os dois containers, e um watcher (inotifywait, ver
 // frontend/docker-entrypoint.sh) dá `nginx -s reload` sempre que o backend
 // escreve um novo cert.pem/key.pem, então a troca feita aqui já vale para

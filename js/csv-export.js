@@ -243,7 +243,7 @@ async function exportCommandsCsv(selectedKeys, scope) {
     const stamp = new Date().toISOString().slice(0, 10);
     const scopeSuffix = scope === 'system' ? '-system' : scope === 'user' ? '-user' : '';
     a.href = url;
-    a.download = `cg-toolbox-commands${scopeSuffix}-${stamp}.csv`;
+    a.download = `toolbox45-commands${scopeSuffix}-${stamp}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();

@@ -1,7 +1,7 @@
-# CG Toolbox — Referência da API
+# Toolbox45 — Referência da API
 
-API REST exposta pelo container `cg-toolbox-backend` (ver `server/index.js`), acessada
-pelo navegador através do proxy reverso do `cg-toolbox-frontend` (`/api/*`) ou
+API REST exposta pelo container `toolbox45-backend` (ver `server/index.js`), acessada
+pelo navegador através do proxy reverso do `toolbox45-frontend` (`/api/*`) ou
 diretamente por integrações externas via API key. Todas as respostas são JSON; corpos
 de requisição em `POST`/`PUT` também devem ser JSON (`Content-Type: application/json`).
 
@@ -50,8 +50,8 @@ usuário identificado. Uma chamada sem `role: admin` para um endpoint **(admin)*
 
 **Exemplo (curl, API key):**
 ```bash
-curl https://cgtoolbox.metalab.tec.br/api/commands \
-  -H "X-API-Key: cgtb_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+curl https://toolbox45.metalab.tec.br/api/commands \
+  -H "X-API-Key: tb45_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
 ## Formato de erro
@@ -393,7 +393,7 @@ Ver também a seção Autenticação acima e `api_keys` em `server/schema.sql`.
 
 - `GET /api/api-keys` → lista (sem o valor da key, só metadados):
   ```json
-  [{ "id": 3, "name": "Zabbix", "role": "user", "key_prefix": "cgtb_a1b2c3d4", "created_by": "rsilva", "created_at": "...", "expires_at": null, "last_used_at": "...", "revoked_at": null }]
+  [{ "id": 3, "name": "Zabbix", "role": "user", "key_prefix": "tb45_a1b2c3d4", "created_by": "rsilva", "created_at": "...", "expires_at": null, "last_used_at": "...", "revoked_at": null }]
   ```
 - `POST /api/api-keys` — corpo `{ "name": "Zabbix", "role": "user", "validity": "1m" }` →
   `201`, **a única vez** que a key completa aparece. `role` é opcional (`admin` ou
@@ -402,7 +402,7 @@ Ver também a seção Autenticação acima e `api_keys` em `server/schema.sql`.
   acima). `validity` é opcional (`"1d"` | `"1w"` | `"1m"` | `"1y"` | `"never"`, default
   `"never"`) e é convertida em `expires_at` (data absoluta, `null` quando `"never"`):
   ```json
-  { "id": 3, "name": "Zabbix", "role": "user", "key_prefix": "cgtb_a1b2c3d4", "created_by": "rsilva", "created_at": "...", "expires_at": "2026-09-05T00:00:00.000Z", "key": "cgtb_a1b2c3d4e5f6...(64 hex)" }
+  { "id": 3, "name": "Zabbix", "role": "user", "key_prefix": "tb45_a1b2c3d4", "created_by": "rsilva", "created_at": "...", "expires_at": "2026-09-05T00:00:00.000Z", "key": "tb45_a1b2c3d4e5f6...(64 hex)" }
   ```
 - `DELETE /api/api-keys/:id` → exclusão permanente (remove a linha da tabela — não é
   mais um soft-delete). Uma key excluída nunca mais autentica e não pode ser
@@ -482,7 +482,7 @@ etc.), administrados na aba Parâmetros da tela de catálogo.
 
 ## Backup & Restore (`/api/backups`, `/api/backup-schedule`) — **(admin)**
 Dumps do PostgreSQL via `pg_dump`/`pg_restore` (formato "custom"), guardados no volume
-`cg-toolbox-backups` do container backend.
+`toolbox45-backups` do container backend.
 
 - `GET /api/backups` → `[{ "filename": "backup-20260804-020000.dump", "sizeBytes": 123456, "createdAt": "..." }]`.
 - `POST /api/backups` → cria um dump agora → `201 { "filename": "..." }`.
@@ -501,8 +501,8 @@ Dumps do PostgreSQL via `pg_dump`/`pg_restore` (formato "custom"), guardados no 
 ---
 
 ## SSL Certificate (`/api/system/ssl-certificate`) — **(admin)**
-Certificado/chave usados pelo nginx do `cg-toolbox-frontend` para servir HTTPS (porta
-443) — guardados no volume `cg-toolbox-tls`, compartilhado (rw aqui, ro no frontend). No
+Certificado/chave usados pelo nginx do `toolbox45-frontend` para servir HTTPS (porta
+443) — guardados no volume `toolbox45-tls`, compartilhado (rw aqui, ro no frontend). No
 primeiro boot (e sempre que não houver certificado customizado), o backend gera um
 autoassinado sozinho (`ensureTlsBootstrap()`/`generateSelfSignedCert()` em
 `server/index.js`, via `openssl req`) — estes endpoints só entram em cena para
@@ -515,7 +515,7 @@ mudam.
   chave privada):
   ```json
   {
-    "subject": "CN=cg-toolbox", "issuer": "CN=cg-toolbox",
+    "subject": "CN=toolbox45", "issuer": "CN=toolbox45",
     "validFrom": "...", "validTo": "...",
     "fingerprint256": "AA:BB:...", "serialNumber": "...",
     "isSelfSigned": true, "isExpired": false

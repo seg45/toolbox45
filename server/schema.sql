@@ -1,9 +1,9 @@
 -- ════════════════════════════════════════════════
 -- Check Point Commands — schema relacional (PostgreSQL)
 -- ════════════════════════════════════════════════
--- Convertido de SQLite para PostgreSQL (cg-toolbox-db, container próprio —
+-- Convertido de SQLite para PostgreSQL (toolbox45-db, container próprio —
 -- ver docker-compose.yml) como parte da separação em 3 containers
--- (cg-toolbox-db / cg-toolbox-backend / cg-toolbox-frontend). O backend
+-- (toolbox45-db / toolbox45-backend / toolbox45-frontend). O backend
 -- (server/db.js) aplica este arquivo por inteiro a cada boot — todo comando
 -- é CREATE TABLE IF NOT EXISTS, então reexecutar é seguro (idempotente).
 --

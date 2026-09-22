@@ -127,7 +127,7 @@ function downloadImportTemplate() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'cgtoolbox-template.csv';
+  a.download = 'toolbox45-template.csv';
   document.body.appendChild(a);
   a.click();
   a.remove();
