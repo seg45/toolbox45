@@ -36,3 +36,7 @@
   width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 9px 14px;
 }
+.login-google-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 9px 14px; margin-top: 8px;
+}

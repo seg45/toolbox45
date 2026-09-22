@@ -69,7 +69,15 @@ services:
       # AD_DOMAIN_CONTROLLER: "ldap://dc01.empresa.local"
       # AD_BASE_DN: "DC=empresa,DC=local"
       # AD_BIND_DN: ""
-      # AD_BIND_PASSWORD: ""
+      # AD_BIND_PASSWORD: 
+      #
+      # Login com Google (opcional) — habilita o botão "Sign in with Google"
+      # em login.html (ver GET /api/auth/google* em server/index.js). Crie um
+      # Client ID OAuth no Google Cloud Console (tipo "Web application") com
+      # este redirect URI EXATO: https://toolbox45.seg45.com.br/api/auth/google/callback
+      # GOOGLE_CLIENT_ID: ""
+      # GOOGLE_CLIENT_SECRET: ""
+      # GOOGLE_REDIRECT_URI: "https://toolbox45.seg45.com.br/api/auth/google/callback"""
     volumes:
       # Dumps do Backup & Restore (Settings → System → Database) — pg_dump/
       # pg_restore, fora do volume de dados do Postgres, sobrevive a

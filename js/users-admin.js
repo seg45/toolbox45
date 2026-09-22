@@ -60,7 +60,7 @@ function _uaRenderRows(rows) {
     return `
     <tr style="${isDisabled ? 'opacity:.5;' : ''}">
       <td>${_uaEscHtml(u.username)}</td>
-      <td>${u.is_local ? 'Local' : 'Windows'}</td>
+      <td>${u.auth_provider === 'google' ? 'Google' : (u.is_local ? 'Local' : 'Windows')}</td>
       <td>${isAdmin ? 'Admin' : 'User'}</td>
       <td>${isDisabled ? 'Disabled' : 'Active'}</td>
       <td style="white-space:nowrap;">

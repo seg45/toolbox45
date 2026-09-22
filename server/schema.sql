@@ -494,10 +494,11 @@ CREATE TABLE IF NOT EXISTS users (
   username      TEXT PRIMARY KEY,
   password_hash TEXT,                          -- scrypt "salt:hash" (hex) — NULL para contas NTLM (is_local=0)
   role          TEXT NOT NULL DEFAULT 'user',   -- 'user' | 'admin'
-  is_local      INTEGER NOT NULL DEFAULT 0,     -- 1 = conta local (login usuário/senha); 0 = identificada via Windows/NTLM
+  is_local      INTEGER NOT NULL DEFAULT 0,     -- 1 = conta local (login usuário/senha); 0 = identificada via Windows/NTLM ou Google
   disabled      INTEGER NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_by    TEXT
+  created_by    TEXT,
+  auth_provider TEXT NOT NULL DEFAULT 'ntlm'    -- 'ntlm' | 'local' | 'google' — só identifica a ORIGEM da conta (ver login com Google em server/index.js); não decide permissão (isso é role)
 );
 
 -- Sessões de login local — o cookie `tb45_session` guarda só o token (chave

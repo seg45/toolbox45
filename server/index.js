@@ -137,7 +137,7 @@ app.use(async (req, res, next) => {
   if (!token) return next();
   try {
     const { rows } = await pool.query(
-      `SELECT s.username, u.role, u.disabled FROM sessions s
+      `SELECT s.username, u.role, u.disabled, u.auth_provider FROM sessions s
        JOIN users u ON u.username = s.username
        WHERE s.token = $1 AND s.expires_at > NOW()`,
       [token]
@@ -145,7 +145,10 @@ app.use(async (req, res, next) => {
     if (rows.length && !rows[0].disabled) {
       req.currentUser = rows[0].username;
       req.userRole = rows[0].role;
-      req.authMethod = 'local';
+      // Sessão local (usuário/senha) e sessão Google usam a MESMA tabela
+      // sessions/o MESMO cookie tb45_session — só users.auth_provider diz
+      // qual dos dois foi (ver login com Google abaixo e getAuthMethod()).
+      req.authMethod = rows[0].auth_provider === 'google' ? 'google' : 'local';
     }
   } catch (err) {
     console.error('Session lookup failed:', err);
@@ -379,6 +382,159 @@ app.post('/api/auth/logout', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════
+// Login com Google (OAuth 2.0 Authorization Code) — pedido do usuário:
+// "crie integração para permitir autenticação com google. o usuário poderá
+// logar com a conta do google". Mesma sessão local de sempre por baixo
+// (cookie `tb45_session`, tabela `sessions`) — só o jeito de CHEGAR nela é
+// diferente; users.auth_provider ('google') é o que distingue uma conta
+// Google de uma conta local por senha (ver middleware de sessão acima e
+// getAuthMethod()). Sem restrição de domínio Google Workspace (decisão do
+// usuário) — qualquer conta Google pode tentar entrar; a primeira vez que um
+// e-mail aparece, uma conta é criada automaticamente com role 'user'
+// (decisão do usuário) — um admin promove depois em Manage users, igual a
+// uma conta NTLM vista pela primeira vez.
+//
+// Só usa `fetch`/`crypto` nativos do Node (sem SDK do Google) — mesma
+// filosofia de server/auth.js (evitar dependência nova/binário nativo na
+// imagem Docker). Verificação de identidade não depende de validar a
+// assinatura de um ID token: o e-mail/perfil vem de uma chamada HTTPS
+// SERVIDOR-A-SERVIDOR direto ao Google (userinfo endpoint, autenticada com
+// o access_token que acabamos de trocar pelo `code`) — o navegador nunca
+// manipula esse dado, então já é confiável pela própria cadeia HTTPS.
+//
+// Variáveis de ambiente (mesmo padrão de AD_DOMAIN_CONTROLLER etc. abaixo):
+//   GOOGLE_CLIENT_ID      Client ID OAuth do Google Cloud Console
+//   GOOGLE_CLIENT_SECRET  Client Secret correspondente
+//   GOOGLE_REDIRECT_URI   URL pública EXATA de GET /api/auth/google/callback
+//                         (ex.: https://toolbox45.seg45.com.br/api/auth/google/callback)
+//                         — precisa bater com o registrado no Google Cloud
+//                         Console, caractere por caractere.
+// Sem as 3, o login com Google fica desligado (botão escondido no
+// login.html via GET /api/auth/providers) — nunca trava a aplicação.
+// ════════════════════════════════════════════════
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || null;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || null;
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || null;
+const GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_REDIRECT_URI);
+// Cookie curto (5min), só durante a ida-e-volta do consentimento do Google —
+// protege contra CSRF no callback (state precisa bater com o que foi
+// gravado aqui antes do redirect pro Google). Nada sensível dentro dele.
+const OAUTH_STATE_COOKIE = 'tb45_oauth_state';
+
+// Público (sem auth) — login.html usa isto pra decidir se mostra o botão
+// "Sign in with Google" (ver js/login.js).
+app.get('/api/auth/providers', (req, res) => {
+  res.json({ google: GOOGLE_ENABLED });
+});
+
+app.get('/api/auth/google', (req, res) => {
+  if (!GOOGLE_ENABLED) {
+    return res.status(503).send('Google login is not configured on this server.');
+  }
+  const state = crypto.randomBytes(24).toString('hex');
+  res.setHeader('Set-Cookie', `${OAUTH_STATE_COOKIE}=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=300`);
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    response_type: 'code',
+    scope: 'openid email profile',
+    state,
+    prompt: 'select_account',
+  });
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+app.get('/api/auth/google/callback', async (req, res) => {
+  const clearOauthStateCookie = () => {
+    res.setHeader('Set-Cookie', `${OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  };
+  // login.html é quem realmente mostra o erro pro usuário (ver
+  // _lpHandleGoogleRedirectResult() em js/login.js) — isto aqui é sempre um
+  // full-page redirect (veio de accounts.google.com), nunca um fetch, então
+  // não dá pra devolver um JSON de erro direto.
+  const failure = (reason) => {
+    clearOauthStateCookie();
+    res.redirect(`/login.html?google=error&reason=${encodeURIComponent(reason)}`);
+  };
+
+  if (!GOOGLE_ENABLED) return failure('not_configured');
+  const { code, state, error: googleError } = req.query;
+  if (googleError) return failure('access_denied');
+  const cookieState = parseCookies(req)[OAUTH_STATE_COOKIE];
+  if (!state || !cookieState || state !== cookieState) return failure('invalid_state');
+  if (!code) return failure('missing_code');
+
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: String(code),
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: GOOGLE_REDIRECT_URI,
+        grant_type: 'authorization_code',
+      }),
+    });
+    if (!tokenRes.ok) {
+      console.error('[google-auth] token exchange failed:', tokenRes.status, await tokenRes.text().catch(() => ''));
+      return failure('token_exchange_failed');
+    }
+    const tokens = await tokenRes.json();
+
+    // Perfil confirmado com uma chamada autenticada direto ao Google com o
+    // access_token recém-obtido — ver comentário no topo desta seção sobre
+    // por que isso já é confiável sem verificar assinatura de JWT à parte.
+    const profileRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    if (!profileRes.ok) return failure('profile_fetch_failed');
+    const profile = await profileRes.json();
+
+    if (!profile.email || (profile.email_verified !== true && profile.email_verified !== 'true')) {
+      return failure('email_not_verified');
+    }
+    const email = String(profile.email).toLowerCase();
+
+    const { rows: existingRows } = await pool.query('SELECT * FROM users WHERE username = $1', [email]);
+    let user = existingRows[0];
+    if (user) {
+      if (user.auth_provider !== 'google') {
+        // Esse username (e-mail) já pertence a uma conta local ou NTLM —
+        // recusa entrar "como" ela via Google (evitaria um account takeover
+        // se alguém tiver/criar uma conta Google com esse mesmo e-mail).
+        return failure('account_exists_other_method');
+      }
+      if (user.disabled) return failure('account_disabled');
+    } else {
+      // Primeira vez que este e-mail Google aparece — provisiona
+      // automaticamente com role 'user' (decisão do usuário), igual ao que
+      // getOrCreateUserRole() já faz para contas NTLM vistas pela 1ª vez.
+      await pool.query(
+        `INSERT INTO users (username, role, is_local, created_by, auth_provider)
+         VALUES ($1, 'user', 0, 'google-oauth', 'google')
+         ON CONFLICT (username) DO NOTHING`,
+        [email]
+      );
+      await ensureDefaultFolder(email);
+      const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [email]);
+      user = rows[0];
+      if (!user) return failure('provisioning_failed');
+    }
+
+    const token = generateSessionToken();
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+    await pool.query('INSERT INTO sessions (token, username, expires_at) VALUES ($1, $2, $3)', [token, user.username, expiresAt]);
+    clearOauthStateCookie();
+    setSessionCookie(res, token);
+    res.redirect('/login.html?google=success');
+  } catch (err) {
+    console.error('[google-auth] callback failed:', err);
+    failure('internal_error');
   }
 });
 
@@ -713,7 +869,7 @@ app.get('/api/commands/:id', async (req, res) => {
 // só refina o que /api/me REPORTA sobre o método usado.
 function getAuthMethod(req) {
   if (req.apiKey) return 'api_key';
-  if (req.authMethod === 'local') return 'local';
+  if (req.authMethod === 'local' || req.authMethod === 'google') return req.authMethod;
   if (req.ntlm && req.ntlm.UserName) return 'ntlm';
   return 'anonymous';
 }
@@ -1927,7 +2083,7 @@ app.delete('/api/api-keys/:id', requireAdmin, async (req, res) => {
 // admin pode promovê-las, mas não pode dar/trocar senha nelas (só contas
 // locais, is_local=1, têm senha). Nunca devolve password_hash.
 // ════════════════════════════════════════════════
-const USERS_PUBLIC_COLUMNS = 'username, role, is_local, disabled, created_at, created_by';
+const USERS_PUBLIC_COLUMNS = 'username, role, is_local, disabled, created_at, created_by, auth_provider';
 
 app.get('/api/users', requireAdmin, async (req, res) => {
   try {
@@ -1953,7 +2109,7 @@ app.post('/api/users', requireAdmin, async (req, res) => {
     const { rows: existing } = await pool.query('SELECT username FROM users WHERE username = $1', [trimmed]);
     if (existing.length) return res.status(409).json({ error: 'conflict', message: `User '${trimmed}' already exists` });
     await pool.query(
-      'INSERT INTO users (username, password_hash, role, is_local, created_by) VALUES ($1, $2, $3, 1, $4)',
+      "INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider) VALUES ($1, $2, $3, 1, $4, 'local')",
       [trimmed, hashPassword(password), roleVal, getCurrentUsername(req)]
     );
     await ensureDefaultFolder(trimmed);

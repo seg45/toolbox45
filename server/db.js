@@ -220,6 +220,15 @@ async function runMigrations() {
   // nada. Ver migrateCommandsIdToSerial() acima.
   await migrateCommandsIdToSerial();
   try {
+    // users.auth_provider ('ntlm'|'local'|'google') — ver comentário em
+    // schema.sql e o login com Google em server/index.js. DEFAULT 'ntlm'
+    // preserva o comportamento das contas NTLM já existentes (nunca tinham
+    // essa coluna); o UPDATE abaixo faz o backfill das contas LOCAIS
+    // (is_local=1) que também já existiam antes desta coluna existir — sem
+    // isso ficariam incorretamente marcadas 'ntlm'. Contas Google nunca
+    // existiam antes desta coluna, então não precisam de backfill.
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider TEXT NOT NULL DEFAULT 'ntlm'`);
+    await pool.query(`UPDATE users SET auth_provider = 'local' WHERE is_local = 1 AND auth_provider = 'ntlm'`);
     // api_keys.role (admin|user) — ver comentário em schema.sql. DEFAULT
     // 'admin' preserva o acesso total das keys criadas antes deste campo
     // existir.
@@ -593,8 +602,8 @@ async function runMigrations() {
 async function seedDefaultAdmin() {
   try {
     await pool.query(
-      `INSERT INTO users (username, password_hash, role, is_local, created_by)
-       VALUES ('admin', $1, 'admin', 1, 'system')
+      `INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider)
+       VALUES ('admin', $1, 'admin', 1, 'system', 'local')
        ON CONFLICT (username) DO NOTHING`,
       [hashPassword('admin')]
     );

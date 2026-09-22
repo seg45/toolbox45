@@ -67,6 +67,35 @@ mostrando `DOMÍNIO\usuário` em vez do UPN.
 - `AD_BIND_DN` — conta de serviço para autenticar a busca (opcional se o AD aceitar bind anônimo)
 - `AD_BIND_PASSWORD` — senha da conta de serviço (junto com `AD_BIND_DN`)
 
+### Login com Google (opcional)
+
+Além de NTLM e login local (usuário/senha), a página de login (`login.html`) pode
+mostrar um botão "Sign in with Google" (OAuth 2.0) — ver `GET /api/auth/google*` em
+`server/index.js` e a seção **Login com Google** em `docs/api.md`. Desligado por
+padrão; sem restrição de domínio Google Workspace (qualquer conta Google pode entrar).
+Primeiro login de um e-mail cria a conta automaticamente com `role: "user"`.
+
+1. No [Google Cloud Console](https://console.cloud.google.com/), crie (ou reaproveite)
+   um projeto e vá em **APIs & Services → OAuth consent screen** — configure um app
+   básico (nome, e-mail de suporte); "External" funciona mesmo para uso interno.
+2. Em **APIs & Services → Credentials → Create Credentials → OAuth client ID**, tipo
+   **Web application**.
+3. Em **Authorized redirect URIs**, adicione a URL pública EXATA de
+   `GET /api/auth/google/callback` (ex.: `https://toolbox45.seg45.com.br/api/auth/google/callback`)
+   — precisa bater caractere por caractere com `GOOGLE_REDIRECT_URI` abaixo.
+4. Copie o **Client ID** e o **Client secret** gerados.
+5. Defina no backend (`toolbox45-backend`, ver bloco comentado em `docker-compose.yml`):
+
+```
+GOOGLE_CLIENT_ID=<client id>
+GOOGLE_CLIENT_SECRET=<client secret>
+GOOGLE_REDIRECT_URI=https://toolbox45.seg45.com.br/api/auth/google/callback
+```
+
+6. Recrie o container (`docker compose up -d --build`) — o botão "Sign in with Google"
+   aparece automaticamente em `login.html` assim que as 3 variáveis estiverem presentes
+   (`GET /api/auth/providers`).
+
 ## Catálogos administráveis (Versão / Ambiente / Tópico)
 
 Versão, Ambiente e Tópico (antes listas fixas no código) agora ficam nas tabelas

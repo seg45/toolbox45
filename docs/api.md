@@ -29,7 +29,9 @@ prioridade:
    `POST /api/auth/login` (ver **Login local e usuários** abaixo). Enquanto o cookie
    for válido (12h), tem prioridade sobre a NTLM — é o que permite "sair" da
    identificação automática do Windows e logar com outra credencial sem fechar o
-   navegador.
+   navegador. **Login com Google** (ver **Login com Google** abaixo) usa exatamente
+   este mesmo cookie/sessão — só muda a FORMA de chegar até ele; `authMethod` reporta
+   `"google"` separado de `"local"` para essas contas.
 3. **NTLM** (navegador) — login do Windows resolvido automaticamente pelo
    `express-ntlm`, sem prompt de senha (zona "Intranet local"). Se `NTLM_DISABLED=1`
    estiver definido no backend, cai no header `x-dev-user` (ou `?__user=` na query
@@ -311,9 +313,10 @@ Identifica o chamador atual, seu papel e como foi autenticado.
 ```
 `upn` vem de uma consulta LDAP ao Active Directory (se `AD_DOMAIN_CONTROLLER`/
 `AD_BASE_DN` estiverem configurados no backend) — cai em `username` se não configurado
-ou indisponível. `authMethod` é `"ntlm"` | `"local"` | `"api_key"`. Para chamadas com API
-key, `username` é `api:<nome da key>`, `upn` espelha o mesmo valor e `role`/`isAdmin`
-sempre vêm como admin (ver seção Permissões acima).
+ou indisponível. `authMethod` é `"ntlm"` | `"local"` | `"google"` | `"api_key"` |
+`"anonymous"`. Para chamadas com API key, `username` é `api:<nome da key>`, `upn`
+espelha o mesmo valor e `role`/`isAdmin` sempre vêm como admin (ver seção Permissões
+acima).
 
 ---
 
@@ -337,12 +340,49 @@ Toda instalação nova já vem com uma conta local `admin` / senha `admin`, role
 `seedDefaultAdmin()`). **Troque essa senha assim que possível** (`PUT
 /api/users/admin`, veja abaixo, ou pela tela Settings → System → Users).
 
+---
+
+## Login com Google
+
+OAuth 2.0 (Authorization Code) contra o Google — habilitado só quando o backend tem as
+3 variáveis de ambiente `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e
+`GOOGLE_REDIRECT_URI` configuradas (ver comentário no topo desta seção em
+`server/index.js` e o bloco comentado em `docker-compose.yml`). Sem restrição de
+domínio Google Workspace — qualquer conta Google pode entrar. Login com o `code` de
+outro provedor/flow não é aceito; o fluxo inteiro é feito de navegações de página
+inteira (não `fetch`), já que precisa passar por `accounts.google.com`.
+
+### `GET /api/auth/providers`
+Público (sem auth). `{ "google": true|false }` — `login.html` usa isto para decidir se
+mostra o botão "Sign in with Google".
+
+### `GET /api/auth/google`
+Redireciona (`302`) para a tela de consentimento do Google. `503` se as 3 variáveis de
+ambiente acima não estiverem configuradas.
+
+### `GET /api/auth/google/callback`
+Destino do redirect de volta do Google (`redirect_uri` registrado no Google Cloud
+Console — precisa ser EXATAMENTE `GOOGLE_REDIRECT_URI`). Troca o `code` pelos tokens do
+Google, confirma o e-mail (`email_verified`) via `GET
+https://openidconnect.googleapis.com/v1/userinfo`, e:
+- Se o e-mail já existe como usuário local/NTLM (não como conta Google) → recusa (evita
+  account takeover) e redireciona para `login.html?google=error&reason=account_exists_other_method`.
+- Se é a primeira vez que esse e-mail aparece → cria a conta automaticamente
+  (`role: "user"`, `auth_provider: "google"`) — um admin promove depois em **Manage
+  users**, igual a uma conta NTLM vista pela primeira vez.
+- Em qualquer sucesso, cria uma sessão (mesmo mecanismo de `POST /api/auth/login`,
+  cookie `tb45_session`) e redireciona para `login.html?google=success`.
+- Em qualquer falha, redireciona para `login.html?google=error&reason=<motivo>`
+  (`access_denied`, `invalid_state`, `account_exists_other_method`, `account_disabled`,
+  `not_configured`, entre outros) — `login.html` mostra a mensagem correspondente.
+
 ### `GET /api/users` — **(admin)**
-Lista todo usuário já visto pela aplicação (contas locais e identificadas via NTLM).
-Nunca devolve `password_hash`.
+Lista todo usuário já visto pela aplicação (contas locais, identificadas via NTLM, ou
+via Google). Nunca devolve `password_hash`.
 ```json
-[{ "username": "admin", "role": "admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system" },
- { "username": "EMPRESA\\jsilva", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": null }]
+[{ "username": "admin", "role": "admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system", "auth_provider": "local" },
+ { "username": "EMPRESA\\jsilva", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": null, "auth_provider": "ntlm" },
+ { "username": "jsilva@gmail.com", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": "google-oauth", "auth_provider": "google" }]
 ```
 
 ### `POST /api/users` — **(admin)**

@@ -76,6 +76,16 @@ antes do "docker compose up":
         # opcional — resolve o UPN (nome@dominio) exibido na UI via consulta
         # LDAP ao Active Directory. Sem isso, a UI mostra DOMÍNIO\usuario.
 
+    GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI
+        # opcional — habilita o botão "Sign in with Google" em login.html
+        # (ver docs/api.md e docs/server-overview.md para o passo a passo
+        # completo de criar o Client ID/Secret no Google Cloud Console).
+        # GOOGLE_REDIRECT_URI precisa ser a URL pública exata de
+        # GET /api/auth/google/callback (ex.:
+        # https://toolbox45.seg45.com.br/api/auth/google/callback),
+        # registrada nos "Authorized redirect URIs" do Client ID. Sem as 3
+        # variáveis, o botão fica escondido — nunca trava a aplicação.
+
 Depois de mudar variáveis, recrie os containers:
 
     sudo docker compose up -d --build

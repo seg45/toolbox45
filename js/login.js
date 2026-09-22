@@ -44,6 +44,57 @@ function _lpMarkAuthenticatedAndEnter() {
   location.href = 'index.html';
 }
 
+// "Sign in with Google" — navegação de página inteira pra GET
+// /api/auth/google (server/index.js), que redireciona pro consentimento do
+// Google e, no fim, volta pra ESTA página via GET /api/auth/google/callback
+// (ver _lpHandleGoogleRedirectResult() abaixo). Não dá pra fazer isso com
+// fetch: o navegador precisa navegar de verdade pra accounts.google.com.
+function startGoogleLogin() {
+  location.href = '/api/auth/google';
+}
+
+// Só mostra o botão do Google quando o backend está configurado
+// (GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI) — GET /api/auth/providers é
+// público e nunca falha "de verdade" (backend sem essas variáveis só
+// devolve { google: false }), então um botão morto nunca aparece.
+async function _lpInitGoogleButton() {
+  const btn = document.getElementById('lpGoogleBtn');
+  if (!btn) return;
+  try {
+    const res = await fetch('/api/auth/providers');
+    const data = await res.json();
+    btn.style.display = data.google ? '' : 'none';
+  } catch (e) {
+    btn.style.display = 'none';
+  }
+}
+
+// Depois da ida-e-volta pelo Google, o resultado chega como querystring
+// nesta MESMA página (?google=success|error&reason=...), não como resposta
+// de fetch — ver GET /api/auth/google/callback em server/index.js. Em caso
+// de sucesso o cookie tb45_session já foi gravado pelo backend; só falta
+// marcar o localStorage e entrar, igual aos outros 2 métodos de login.
+// Limpa a querystring (history.replaceState) pra um F5 não reprocessar.
+function _lpHandleGoogleRedirectResult() {
+  const params = new URLSearchParams(location.search);
+  const google = params.get('google');
+  if (!google) return;
+  const reason = params.get('reason');
+  history.replaceState(null, '', location.pathname);
+  if (google === 'success') {
+    _lpMarkAuthenticatedAndEnter();
+    return;
+  }
+  const reasons = {
+    access_denied: 'Google sign-in was cancelled.',
+    invalid_state: 'Google sign-in session expired. Please try again.',
+    account_exists_other_method: "This Google account's e-mail matches an existing account that uses a different sign-in method. Please log in with your username and password instead.",
+    account_disabled: 'This account has been disabled. Contact an administrator.',
+    not_configured: 'Google sign-in is not configured on this server.',
+  };
+  _lpShowError(reasons[reason] || 'Google sign-in failed. Please try again.');
+}
+
 async function submitLocalLogin() {
   const username = (document.getElementById('lpUsernameInput') || {}).value || '';
   const password = (document.getElementById('lpPasswordInput') || {}).value || '';
@@ -115,4 +166,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (userInput) userInput.focus();
   const passInput = document.getElementById('lpPasswordInput');
   if (passInput) passInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') submitLocalLogin(); });
+  _lpInitGoogleButton();
+  _lpHandleGoogleRedirectResult();
 });

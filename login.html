@@ -52,6 +52,19 @@
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="1.5"/><path d="M3 9h18"/><path d="M8 20h8"/><path d="M12 16v4"/></svg>
     <span>Continue with Windows authentication</span>
   </button>
+
+  <!-- "Sign in with Google": só aparece quando o backend tem
+       GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI configurados (ver GET
+       /api/auth/providers e GET /api/auth/google em server/index.js) —
+       escondido por padrão aqui e revelado por js/login.js
+       (_lpInitGoogleButton()) pra nunca mostrar um botão morto. Clicar
+       nele é uma navegação de página inteira (não um fetch) — o fluxo
+       OAuth termina com um redirect de volta pra esta mesma página
+       (?google=success|error, ver _lpHandleGoogleRedirectResult()). -->
+  <button type="button" class="btn login-google-btn" id="lpGoogleBtn" onclick="startGoogleLogin()" style="display:none;">
+    <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.4 0 6.4 1.2 8.8 3.5l6.6-6.6C35.2 2.6 30 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.7 6C12.2 13.1 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8C43.9 38 46.5 31.8 46.5 24.5z"/><path fill="#FBBC05" d="M10.3 19.2c-.5 1.5-.8 3.1-.8 4.8s.3 3.3.8 4.8l-7.7 6C1 31 0 27.7 0 24s1-7 2.6-10l7.7 6.2z"/><path fill="#34A853" d="M24 48c6 0 11.2-2 14.9-5.4l-7.5-5.8c-2.1 1.4-4.7 2.2-7.4 2.2-6.4 0-11.8-3.6-13.7-8.7l-7.7 6C6.5 42.6 14.6 48 24 48z"/></svg>
+    <span>Sign in with Google</span>
+  </button>
 </div>
 
 <script src="js/theme.js"></script>

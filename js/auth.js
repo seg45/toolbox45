@@ -35,7 +35,7 @@ function updateAccountUI(me) {
   const roleLine = document.getElementById('hdrUserRoleLine');
   if (roleLine) {
     const roleLabel = me.isAdmin ? 'Admin' : 'User';
-    const methodLabels = { local: 'local account', api_key: 'API key', ntlm: 'Windows login', anonymous: 'unidentified session' };
+    const methodLabels = { local: 'local account', api_key: 'API key', ntlm: 'Windows login', google: 'Google account', anonymous: 'unidentified session' };
     const methodLabel = methodLabels[me.authMethod] || 'Windows login';
     roleLine.textContent = `${roleLabel} — signed in via ${methodLabel}`;
   }
