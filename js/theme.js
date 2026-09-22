@@ -33,8 +33,11 @@ function toggleModalTheme() {
 // SETTINGS/user-sync.js, é local ao navegador, igual ao tema).
 // ════════════════════════════════════════════════
 const ACCENT_PRESETS = {
+  // "teal" é a cor oficial da marca Toolbox45 (#1695A3) e é o padrão do app.
+  teal:   { teal: '#1695A3', tealBg: 'rgba(22,149,163,.08)' },
   // "pink" é a cor oficial de marca da Check Point (#DA1572 — mesma usada como
-  // msapplication-TileColor em checkpoint.com) e é o padrão do app.
+  // msapplication-TileColor em checkpoint.com) — mantido como opção, não é
+  // mais o padrão desde o rebranding para Toolbox45.
   pink:   { teal: '#DA1572', tealBg: 'rgba(218,21,114,.08)' },
   blue:   { teal: '#60A5FA', tealBg: 'rgba(96,165,250,.08)' },
   green:  { teal: '#4ADE80', tealBg: 'rgba(74,222,128,.08)' },
@@ -42,7 +45,7 @@ const ACCENT_PRESETS = {
   orange: { teal: '#FB923C', tealBg: 'rgba(251,146,60,.08)' },
   red:    { teal: '#F87171', tealBg: 'rgba(248,113,113,.08)' },
 };
-const DEFAULT_ACCENT = 'pink';
+const DEFAULT_ACCENT = 'teal';
 function applyAccentColor(key) {
   const preset = ACCENT_PRESETS[key] || ACCENT_PRESETS[DEFAULT_ACCENT];
   document.documentElement.style.setProperty('--teal', preset.teal);

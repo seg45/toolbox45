@@ -3,18 +3,20 @@
   --bdr: #30363D; --bdr2: #444C56;
   /* Cor de destaque (accent) — a mesma escolha do usuário vale para claro e
      escuro (sem distinção por tema); só definida aqui em :root, o tema claro
-     não redefine --teal/--teal-bg. Padrão é a cor oficial de marca da Check
-     Point (#DA1572); o valor real em vigor é sempre sobrescrito inline em
+     não redefine --teal/--teal-bg. Padrão é a cor oficial da marca Toolbox45
+     (#1695A3); o valor real em vigor é sempre sobrescrito inline em
      document.documentElement por applyAccentColor() (ver js/theme.js), que
      roda no boot com a preferência salva — este valor aqui é só o fallback
      antes do JS rodar. */
-  --teal: #DA1572; --teal-bg: rgba(218,21,114,.08);
-  /* Cores da marca (logo "CG//Toolbox" no header, no estilo do logo CG One)
-     — fixas, independentes da cor de destaque (--teal) escolhida em
-     Configurações. --brand-pink é sempre a barra "//" nos dois temas;
-     --brand-text é o texto "CG"/"Toolbox": branco no tema escuro (padrão
-     aqui em :root, igual à versão branca do logo CG One) e azul-marinho no
-     tema claro (ver [data-theme="light"] abaixo, igual à versão azul). */
+  --teal: #1695A3; --teal-bg: rgba(22,149,163,.08);
+  /* Cores da marca CG One (não confundir com a marca do próprio app,
+     Toolbox45, que usa --teal acima) — usadas só pelo rodapé "Developed by
+     CG One" da sidebar (.cg-mark/.sb-credit-mark, ver css/components.css e
+     css/layout.css), fixas, independentes da cor de destaque escolhida em
+     Configurações. --brand-pink é a barra "//" da marca CG One nos dois
+     temas. O logo do próprio Toolbox45 (header/login) não usa mais estas
+     variáveis — é um PNG de cor única (img/logo-toolbox45.png, ver
+     css/layout.css). */
   --brand-pink: #E5136E;
   --brand-text: #FFFFFF;
   --blue: #60A5FA; --blue-bg: rgba(96,165,250,.08);

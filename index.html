@@ -37,14 +37,15 @@
 
 <header class="hdr">
   <div class="hdr-logo" onclick="goHome()" title="Go to home page">
-    <!-- Logo "CG//Toolbox": mesma arte do logo oficial "CG//One" (fonte
-         Poppins Bold + barras rosa), só trocando "One" por "Toolbox" —
-         imagens em img/logo-cg-toolbox-light.png (versão azul-marinho, tema
-         claro) e img/logo-cg-toolbox-dark.png (versão branca, tema escuro),
-         trocadas via [data-theme] (ver css/layout.css). O rodapé "Developed
-         by CG One" da sidebar usa o logo original e não foi alterado. -->
-    <img class="hdr-logo-img for-dark" src="img/logo-cg-toolbox-dark.png?v=4" alt="CG Toolbox">
-    <img class="hdr-logo-img for-light" src="img/logo-cg-toolbox-light.png?v=4" alt="CG Toolbox">
+    <!-- Logo Toolbox45: mark losangular + "45" (img/logo-toolbox45.png,
+         PNG com fundo transparente, cor sólida --teal #1695A3) ao lado do
+         nome em texto (não é mais um bitmap único como no logo antigo) —
+         mesma cor em claro/escuro, então não precisa mais de troca via
+         [data-theme] (ver css/layout.css). O rodapé "Developed by CG One"
+         da sidebar usa o logo original (CG One, marca diferente) e não foi
+         alterado. -->
+    <img class="hdr-logo-img" src="img/logo-toolbox45.png?v=1" alt="Toolbox45">
+    <span class="hdr-logo-txt">Toolbox45</span>
   </div>
   <div class="hdr-gap"></div>
   <!-- Menu de conta — clicar no usuário identificado abre um dropdown com o
@@ -470,19 +471,21 @@
             <div class="tog-track"><div class="tog-knob"></div></div><span>Dark mode</span>
           </div>
           <!-- Cor de destaque (--teal/--teal-bg) — vale igual nos dois temas,
-               ver ACCENT_PRESETS/applyAccentColor em js/theme.js. Padrão: rosa
-               (cor oficial de marca da Check Point, #DA1572), por isso listado
-               primeiro. stopPropagation evita disparar o toggle do tema
-               (onclick do pai) ao clicar num swatch. Agora alinhados à
-               esquerda dentro da 2ª metade da linha (antes ficavam
-               encostados na borda direita via margin-left:auto). Rótulo
-               "Color" na frente, mesmo padrão de "Group by"/"Export to"
-               nas outras linhas divididas (pedido do usuário, com
-               screenshot). -->
+               ver ACCENT_PRESETS/applyAccentColor em js/theme.js. Padrão: teal
+               (cor oficial da marca Toolbox45, #1695A3), por isso listado
+               primeiro; "pink" (Check Point) continua disponível como opção,
+               só deixou de ser o padrão no rebranding. stopPropagation evita
+               disparar o toggle do tema (onclick do pai) ao clicar num
+               swatch. Alinhados à esquerda dentro da 2ª metade da linha
+               (antes ficavam encostados na borda direita via
+               margin-left:auto). Rótulo "Color" na frente, mesmo padrão de
+               "Group by"/"Export to" nas outras linhas divididas (pedido do
+               usuário, com screenshot). -->
           <div class="set-row-half">
             <span class="set-label">Color</span>
             <div class="accent-swatches" id="accentSwatches" onclick="event.stopPropagation()">
-              <button type="button" class="accent-swatch" data-accent="pink" style="background:#DA1572" onclick="setAccentColor('pink')" title="Check Point pink (default)"></button>
+              <button type="button" class="accent-swatch" data-accent="teal" style="background:#1695A3" onclick="setAccentColor('teal')" title="Toolbox45 teal (default)"></button>
+              <button type="button" class="accent-swatch" data-accent="pink" style="background:#DA1572" onclick="setAccentColor('pink')" title="Check Point pink"></button>
               <button type="button" class="accent-swatch" data-accent="blue" style="background:#60A5FA" onclick="setAccentColor('blue')" title="Light blue"></button>
               <button type="button" class="accent-swatch" data-accent="green" style="background:#4ADE80" onclick="setAccentColor('green')" title="Green"></button>
               <button type="button" class="accent-swatch" data-accent="purple" style="background:#C084FC" onclick="setAccentColor('purple')" title="Purple"></button>

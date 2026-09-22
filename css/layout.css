@@ -9,15 +9,13 @@
   transition: opacity .12s;
 }
 .hdr-logo:hover { opacity: .8; }
-/* Logo "CG//Toolbox" (imagem, mesma arte do logo oficial CG//One) —
-   dimensionado para ocupar a largura do campo de busca da sidebar
-   (~190px, ver .cmd-search em css/layout.css). Duas versões trocadas por
-   tema: for-dark (texto branco) visível no escuro, for-light (texto
-   azul-marinho) visível no claro. Ver comentário em index.html. */
-.hdr-logo-img { width: 158px; height: auto; display: block; }
-.hdr-logo-img.for-light { display: none; }
-[data-theme="light"] .hdr-logo-img.for-dark { display: none; }
-[data-theme="light"] .hdr-logo-img.for-light { display: block; }
+/* Logo Toolbox45 — mark (img/logo-toolbox45.png, PNG transparente, cor
+   sólida --teal) + nome em texto ao lado (.hdr-logo-txt). Cor única do
+   mark funciona igual em claro/escuro, sem precisar de [data-theme]
+   (diferente do logo antigo). Ver comentário em index.html. */
+.hdr-logo { gap: 9px; }
+.hdr-logo-img { width: 28px; height: 28px; display: block; }
+.hdr-logo-txt { font-size: 16px; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
 .hdr-gap { flex: 1; }
 /* Usuário identificado (login do Windows via NTLM, ou sessão local — ver
    js/auth.js) — mostrado à esquerda do botão de Configurações. É também o
