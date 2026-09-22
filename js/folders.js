@@ -315,11 +315,8 @@ function setFolderScope(scope) {
 // Clique no cabeçalho "Folders" da sidebar — funciona como um toggle: clicar
 // de novo enquanto já está ativo desliga a visão e volta para o menu normal
 // (todos os comandos, agrupados por Tópico/etc. de novo), em vez de ficar
-// preso em Folders sem um jeito óbvio de sair. Mesmo easter egg de sempre
-// (Ctrl+Alt+clique, ver _q7 em js/state.js) preservado aqui no lugar de
-// toggleFavoritesView(), que cumpria o mesmo papel antes.
+// preso em Folders sem um jeito óbvio de sair.
 function viewAllFolders() {
-  if (_q7 === 3) return _rvl9();
   VIEW_FOLDERS_HOME = !VIEW_FOLDERS_HOME;
   persistLastView(VIEW_FOLDERS_HOME);
   const nav = document.getElementById('foldersNavRow');

@@ -177,7 +177,7 @@ function _mcBar() {
   // "Delete selected" só existe para admin (ver requireAdmin() no DELETE
   // /api/commands/:id em server/index.js — a API já recusaria de qualquer
   // forma, isto é só pra não mostrar um botão que vai falhar) — visibilidade
-  // real controlada em _mcUpdateBar() (window.CG_IS_ADMIN só fica disponível
+  // real controlada em _mcUpdateBar() (window.TB45_IS_ADMIN só fica disponível
   // depois que /api/me responde, ver updateAccountUI em js/auth.js).
   bar.innerHTML = `
     <span class="multi-copy-count" id="multiCopyCount">0 selected</span>
@@ -207,7 +207,7 @@ function _mcUpdateBar() {
   if (copyBtnEl) copyBtnEl.disabled = n === 0;
   const delBtnEl = document.getElementById('multiCopyDeleteBtn');
   if (delBtnEl) {
-    delBtnEl.style.display = (typeof window !== 'undefined' && window.CG_IS_ADMIN) ? '' : 'none';
+    delBtnEl.style.display = (typeof window !== 'undefined' && window.TB45_IS_ADMIN) ? '' : 'none';
     delBtnEl.disabled = _mcSelectedCommandIds().length === 0;
   }
   bar.classList.toggle('show', MULTI_COPY_MODE);
@@ -526,7 +526,7 @@ function card({ id, name, desc, details, lines, folderIds = [], createdBy, modif
   // Cada alteração fica registrada no log de auditoria do servidor
   // (audit_log, ver botão "View audit log" em Configurações).
   const isOwnCommand = typeof CURRENT_USER !== 'undefined' && CURRENT_USER === createdBy;
-  const canEdit = window.CG_IS_ADMIN || isSystem || isOwnCommand;
+  const canEdit = window.TB45_IS_ADMIN || isSystem || isOwnCommand;
   // id vai SEM aspas aqui (mesmo motivo do folderMenuHtml acima) — id é
   // INTEGER agora, e _cePopulateForm (js/command-editor.js) faz
   // list.find(c => c.id === id), comparação estrita que falharia se id

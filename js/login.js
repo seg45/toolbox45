@@ -8,7 +8,7 @@
 // lado do servidor além de authMethod ficar mais preciso — ver
 // getAuthMethod() em server/index.js):
 //   1) Local (usuário/senha) -> POST /api/auth/login (mesma rota de sempre)
-//      — cria uma sessão local via cookie httpOnly cg_session.
+//      — cria uma sessão local via cookie httpOnly tb45_session.
 //   2) "Continue with Windows authentication" -> GET /api/me, que dispara o
 //      handshake NTLM do navegador (silencioso, sem prompt, desde que o
 //      site esteja na zona "Intranet local") através do middleware NTLM do
@@ -17,7 +17,7 @@
 //      desligado no servidor, fora de domínio Windows, ou handshake sem
 //      sucesso) mostra um erro e sugere usar usuário/senha.
 //
-// Depois de qualquer login bem-sucedido, grava CG_LOGIN_FLAG_KEY no
+// Depois de qualquer login bem-sucedido, grava LOGIN_FLAG_KEY no
 // localStorage e manda pra index.html — o gate inline no topo do <head> de
 // index.html é quem lê essa marca pra decidir se deixa entrar direto ou
 // redireciona de volta pra cá. js/auth.js::authLogout() é quem apaga a
@@ -29,7 +29,7 @@
 //   - index.html (gate inline no <head>)
 //   - js/auth.js (authLogout)
 // ════════════════════════════════════════════════
-const CG_LOGIN_FLAG_KEY = 'cpa-authenticated';
+const LOGIN_FLAG_KEY = 'cpa-authenticated';
 
 function _lpShowError(msg) {
   const box = document.getElementById('loginPageErrorMsg');
@@ -40,7 +40,7 @@ function _lpClearError() {
   if (box) { box.style.display = 'none'; box.textContent = ''; }
 }
 function _lpMarkAuthenticatedAndEnter() {
-  try { localStorage.setItem(CG_LOGIN_FLAG_KEY, '1'); } catch (e) { /* localStorage indisponível — entra mesmo assim, só não persiste entre reloads */ }
+  try { localStorage.setItem(LOGIN_FLAG_KEY, '1'); } catch (e) { /* localStorage indisponível — entra mesmo assim, só não persiste entre reloads */ }
   location.href = 'index.html';
 }
 

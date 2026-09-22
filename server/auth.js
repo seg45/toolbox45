@@ -29,7 +29,7 @@ function verifyPassword(password, stored) {
   }
 }
 
-// Token de sessão local (cookie `cg_session`) — 32 bytes aleatórios, guardado
+// Token de sessão local (cookie `tb45_session`) — 32 bytes aleatórios, guardado
 // em texto puro na tabela `sessions` (não é uma senha, só uma capability
 // opaca; o mesmo modelo usado para as API keys, salvo que ali é hasheado
 // porque a key é de uso externo/prolongado — uma sessão expira sozinha).

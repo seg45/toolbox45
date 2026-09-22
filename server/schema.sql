@@ -500,7 +500,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_by    TEXT
 );
 
--- Sessões de login local — o cookie `cg_session` guarda só o token (chave
+-- Sessões de login local — o cookie `tb45_session` guarda só o token (chave
 -- primária desta tabela); nenhum dado sensível viaja no cookie em si. Uma
 -- sessão local tem prioridade sobre a identificação NTLM enquanto for válida
 -- (permite "logout" do usuário do Windows e login com outra credencial sem

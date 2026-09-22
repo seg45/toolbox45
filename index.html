@@ -23,10 +23,10 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Toolbox45</title>
-<!-- Favicon: mesmo ícone (.ico) usado na intranet da empresa, a pedido do
-     usuário — ver img/icoCG.ico. -->
-<link rel="icon" type="image/x-icon" href="img/icoCG.ico">
-<link rel="shortcut icon" type="image/x-icon" href="img/icoCG.ico">
+<!-- Favicon: mark do Toolbox45 (img/icon-toolbox45.ico, gerado a partir de
+     img/logo-toolbox45.png). -->
+<link rel="icon" type="image/x-icon" href="img/icon-toolbox45.ico">
+<link rel="shortcut icon" type="image/x-icon" href="img/icon-toolbox45.ico">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/theme.css">
@@ -41,9 +41,7 @@
          PNG com fundo transparente, cor sólida --teal #1695A3) ao lado do
          nome em texto (não é mais um bitmap único como no logo antigo) —
          mesma cor em claro/escuro, então não precisa mais de troca via
-         [data-theme] (ver css/layout.css). O rodapé "Developed by CG One"
-         da sidebar usa o logo original (CG One, marca diferente) e não foi
-         alterado. -->
+         [data-theme] (ver css/layout.css). -->
     <img class="hdr-logo-img" src="img/logo-toolbox45.png?v=1" alt="Toolbox45">
     <span class="hdr-logo-txt">Toolbox45</span>
   </div>
@@ -250,21 +248,6 @@
        into the Settings modal → "Register" tab (see #settingsOverlay,
        .settings-pane[data-pane="catalog"]) — no longer gated behind Admin
        mode, which was removed entirely. -->
-
-  <a class="sb-credit" href="https://cg-one.com" target="_blank" rel="noopener noreferrer">
-    <span class="sb-credit-txt">Developed by</span>
-    <!-- Logo oficial CG//One (arquivo enviado pelo usuário) — não gerado,
-         apenas recortado/redimensionado a partir do original em
-         img/cg-one-navy.png / img/cg-one-white.png. Some na barra colapsada
-         (ver css/layout.css), dando lugar só à marca "//" (.sb-credit-mark
-         abaixo), do mesmo jeito que o resto do rodapé some virando ícone. -->
-    <img class="sb-credit-img for-dark" src="img/cg-one-white.png?v=1" alt="CG One">
-    <img class="sb-credit-img for-light" src="img/cg-one-navy.png?v=1" alt="CG One">
-    <!-- Marca "//" isolada (mesma estrutura/cor de .cg-mark i, ver
-         components.css) — some por padrão; só aparece na barra colapsada,
-         no lugar do texto+logo, proporcional aos demais ícones do rodapé. -->
-    <i class="sb-credit-mark" aria-hidden="true"><span></span><span></span></i>
-  </a>
 
 </div>
 
@@ -1870,7 +1853,7 @@
         <span class="set-label">CSV file</span>
         <input type="file" id="importCsvFile" accept=".csv,text/csv" onchange="handleImportFileSelected(this)">
       </div>
-      <!-- Admin-only — ver window.CG_IS_ADMIN em js/auth.js. Marcado, os
+      <!-- Admin-only — ver window.TB45_IS_ADMIN em js/auth.js. Marcado, os
            comandos importados são gravados como created_by='System' (header
            X-Save-As-System, checado de novo no servidor — ver POST
            /api/commands em server/index.js) em vez de como próprios do
@@ -2001,13 +1984,6 @@
         </div>
       </div>
     </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="ovl9x">
-  <div class="cg-mark-box">
-    <div class="cg-mark-txt" id="ovl9xTxt"></div>
-    <a class="cg-mark" href="https://cg-one.com" target="_blank" rel="noopener noreferrer"><b>CG</b><i><span></span><span></span></i><b>One</b></a>
   </div>
 </div>
 

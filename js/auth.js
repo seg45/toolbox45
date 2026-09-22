@@ -9,10 +9,10 @@
 // não mais daqui), POST /api/auth/logout, GET /api/me (devolve role/
 // isAdmin/authMethod), e users/sessions em server/schema.sql.
 //
-// window.CG_IS_ADMIN / window.CG_AUTH_METHOD são preenchidos por
+// window.TB45_IS_ADMIN / window.TB45_AUTH_METHOD são preenchidos por
 // updateAccountUI(), chamada a partir de js/user-sync.js assim que /api/me
 // responde (e de novo depois de logout) — outros arquivos
-// (js/command-editor.js, js/settings-modal.js) leem window.CG_IS_ADMIN para
+// (js/command-editor.js, js/settings-modal.js) leem window.TB45_IS_ADMIN para
 // decidir o que mostrar/esconder.
 //
 // A marca 'cpa-authenticated' no localStorage (mesma chave usada em
@@ -20,17 +20,17 @@
 // o app abre direto ou volta pra login.html — authLogout() abaixo é quem a
 // limpa.
 // ════════════════════════════════════════════════
-window.CG_IS_ADMIN = false;
-window.CG_AUTH_METHOD = 'ntlm';
-const CG_LOGIN_FLAG_KEY = 'cpa-authenticated';
+window.TB45_IS_ADMIN = false;
+window.TB45_AUTH_METHOD = 'ntlm';
+const LOGIN_FLAG_KEY = 'cpa-authenticated';
 
 // Atualiza o rótulo do usuário no header, o texto do dropdown de conta
 // (role atual + botão Log out só quando a sessão ativa é local) e dispara a
 // re-aplicação do gate de admin no resto da UI (ver js/user-sync.js).
 function updateAccountUI(me) {
   if (!me) return;
-  window.CG_IS_ADMIN = !!me.isAdmin;
-  window.CG_AUTH_METHOD = me.authMethod || 'ntlm';
+  window.TB45_IS_ADMIN = !!me.isAdmin;
+  window.TB45_AUTH_METHOD = me.authMethod || 'ntlm';
 
   const roleLine = document.getElementById('hdrUserRoleLine');
   if (roleLine) {
@@ -75,7 +75,7 @@ const ADMIN_ONLY_SETTINGS_GROUP_IDS = ['sysGroupDatabase', 'sysGroupSslCertifica
 function applyAdminGating() {
   ADMIN_ONLY_SETTINGS_GROUP_IDS.forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.style.display = window.CG_IS_ADMIN ? '' : 'none';
+    if (el) el.style.display = window.TB45_IS_ADMIN ? '' : 'none';
   });
 }
 
@@ -92,6 +92,6 @@ async function authLogout() {
   // pularia direto pra dentro de novo, sem passar pela página de login
   // (pedido do usuário: "quando o usuário fizer logout deverá ser
   // direcionado para essa página").
-  try { localStorage.removeItem(CG_LOGIN_FLAG_KEY); } catch (e) {}
+  try { localStorage.removeItem(LOGIN_FLAG_KEY); } catch (e) {}
   location.href = 'login.html';
 }

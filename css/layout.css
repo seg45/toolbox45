@@ -243,22 +243,6 @@
 /* "Clear filters" não tem ícone próprio — some inteiro (não faz sentido
    virar só um ícone). */
 .app.sidebar-collapsed .sidebar .sb-block-clearfilters { display: none; }
-/* Rodapé "Developed by CG One" — o texto e o logo completo somem, dando
-   lugar só à marca "//" (.sb-credit-mark), do mesmo tamanho dos demais
-   ícones da barra colapsada (21px de altura). */
-.app.sidebar-collapsed .sidebar .sb-credit {
-  display: flex; flex-direction: row; align-items: center; justify-content: center;
-  padding: 10px 4px 12px;
-}
-.app.sidebar-collapsed .sidebar .sb-credit-txt,
-.app.sidebar-collapsed .sidebar .sb-credit-img { display: none; }
-.app.sidebar-collapsed .sidebar .sb-credit-mark { display: inline-flex; gap: 3px; }
-.app.sidebar-collapsed .sidebar .sb-credit-mark span {
-  width: 4px; height: 21px; background: var(--brand-pink);
-  transform: skewX(-18deg); border-radius: 1px; display: inline-block;
-}
-
-
 /* ─── MAIN ─── */
 /* position: relative + z-index: 1 (bem abaixo do z-index: 10 da .sidebar,
    ver acima) — garante que dropdowns internos (.dd, .cpq-panel etc., todos

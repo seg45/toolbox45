@@ -101,7 +101,7 @@ app.use(async (req, res, next) => {
 });
 
 // ════════════════════════════════════════════════
-// Login local (usuário/senha) — sessão via cookie `cg_session`, ver users/
+// Login local (usuário/senha) — sessão via cookie `tb45_session`, ver users/
 // sessions em schema.sql e server/auth.js. Verificado ANTES do NTLM, com a
 // MESMA prioridade que API key (se já autenticado, pula o handshake NTLM
 // inteiramente) — isso é o que permite "logout" do usuário identificado pelo
@@ -109,7 +109,7 @@ app.use(async (req, res, next) => {
 // cookie de sessão local for válido, ele manda, independente do que o NTLM
 // diria sobre quem está logado no Windows.
 // ════════════════════════════════════════════════
-const SESSION_COOKIE_NAME = 'cg_session';
+const SESSION_COOKIE_NAME = 'tb45_session';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12h
 
 function parseCookies(req) {

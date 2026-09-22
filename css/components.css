@@ -533,33 +533,7 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 .wiz-panel { display: flex; flex-direction: column; gap: 15px; }
 
 
-/* ─── OVERLAY AUX ─── */
-.cg-mark-box {
-  background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px;
-  padding: 34px 46px; display: flex; flex-direction: column; align-items: center; gap: 18px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.5); cursor: pointer;
-}
-.cg-mark-txt { font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: .4px; }
-.cg-mark { display: inline-flex; align-items: center; gap: 11px; font-family: var(--sans); text-decoration: none; color: inherit; }
-.cg-mark b { color: var(--text); font-size: 32px; font-weight: 800; letter-spacing: -.5px; }
-.cg-mark i { display: inline-flex; gap: 6px; font-style: normal; }
-.cg-mark i span { width: 6px; height: 36px; background: var(--brand-pink); transform: skewX(-18deg); border-radius: 1px; display: inline-block; }
 
-.sb-credit {
-  margin-top: auto; padding: 12px 14px 14px; border-top: 1px solid var(--bdr);
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
-  text-decoration: none; color: inherit; transition: opacity .12s;
-}
-.sb-credit:hover { opacity: .8; }
-.sb-credit-txt { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: .3px; }
-.sb-credit .cg-mark { gap: 6px; }
-.sb-credit .cg-mark b { font-size: 17px; }
-.sb-credit .cg-mark i { gap: 3px; }
-.sb-credit .cg-mark i span { width: 3px; height: 18px; }
-.sb-credit-img { height: 13px; width: auto; display: block; }
-.sb-credit-img.for-light { display: none; }
-[data-theme="light"] .sb-credit-img.for-dark { display: none; }
-[data-theme="light"] .sb-credit-img.for-light { display: block; }
 /* Marca "//" isolada do rodapé — escondida no estado normal (só aparece na
    barra colapsada, ver regra .app.sidebar-collapsed em css/layout.css). */
 .sb-credit-mark { display: none; }

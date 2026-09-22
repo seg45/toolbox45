@@ -730,7 +730,7 @@ async function _cePopulateForm(id) {
   // (DELETE /api/commands/:id em server/index.js). Um comando 'System' ou
   // de outro usuário nunca bate com CURRENT_USER, então continua exigindo
   // admin automaticamente, sem precisar de um caso especial aqui.
-  const canDeleteThis = window.CG_IS_ADMIN || (typeof CURRENT_USER !== 'undefined' && CURRENT_USER === row.created_by);
+  const canDeleteThis = window.TB45_IS_ADMIN || (typeof CURRENT_USER !== 'undefined' && CURRENT_USER === row.created_by);
   // Só guarda a permissão aqui — a visibilidade real do botão (também exige
   // estar no último passo do wizard) é decidida em _ceRenderWizardState().
   CMD_EDITOR_CAN_DELETE = canDeleteThis;
@@ -769,7 +769,7 @@ async function openCommandEditor(mode, id, ev) {
     // formulário de edição. O servidor também recusa com 403 (ver PUT
     // /api/commands/:id em server/index.js) — esta checagem só evita abrir
     // a tela para nada.
-    if (mode === 'edit' && !window.CG_IS_ADMIN && !row.is_system) {
+    if (mode === 'edit' && !window.TB45_IS_ADMIN && !row.is_system) {
       const isOwn = typeof CURRENT_USER !== 'undefined' && CURRENT_USER === row.created_by;
       if (!isOwn) {
         alert('You can only edit your own commands (or System commands). Use "Duplicate" to create your own editable copy.');

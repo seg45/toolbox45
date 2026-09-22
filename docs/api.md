@@ -25,7 +25,7 @@ prioridade:
    para de autenticar (`401 invalid_api_key`) mas continua listada até ser excluída
    manualmente. Excluir uma key (`DELETE /api/api-keys/:id`) é permanente — não existe
    mais "revogar" (soft-delete): a linha é removida da tabela e não pode ser recuperada.
-2. **Sessão local** (cookie `cg_session`, `HttpOnly`) — login com usuário/senha via
+2. **Sessão local** (cookie `tb45_session`, `HttpOnly`) — login com usuário/senha via
    `POST /api/auth/login` (ver **Login local e usuários** abaixo). Enquanto o cookie
    for válido (12h), tem prioridade sobre a NTLM — é o que permite "sair" da
    identificação automática do Windows e logar com outra credencial sem fechar o
@@ -302,7 +302,7 @@ sempre forçando `target="_blank" rel="noopener noreferrer"`.
 Identifica o chamador atual, seu papel e como foi autenticado.
 ```json
 {
-  "username": "CG2000\\rsilva",
+  "username": "EMPRESA\\rsilva",
   "upn": "rsilva@empresa.com",
   "role": "admin",
   "isAdmin": true,
@@ -322,7 +322,7 @@ sempre vêm como admin (ver seção Permissões acima).
 ### `POST /api/auth/login`
 Loga com uma conta local (usuário/senha), substituindo a identificação NTLM nesta sessão
 do navegador. Corpo: `{ "username": "admin", "password": "admin" }`. Sucesso: `200`
-`{ "username": "admin", "role": "admin" }` + `Set-Cookie: cg_session=...` (`HttpOnly`,
+`{ "username": "admin", "role": "admin" }` + `Set-Cookie: tb45_session=...` (`HttpOnly`,
 12h). Falha: `401 invalid_credentials` (usuário local inexistente, senha errada, ou
 conta desabilitada).
 
@@ -342,7 +342,7 @@ Lista todo usuário já visto pela aplicação (contas locais e identificadas vi
 Nunca devolve `password_hash`.
 ```json
 [{ "username": "admin", "role": "admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system" },
- { "username": "CG2000\\jsilva", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": null }]
+ { "username": "EMPRESA\\jsilva", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": null }]
 ```
 
 ### `POST /api/users` — **(admin)**

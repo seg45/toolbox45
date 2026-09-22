@@ -9,16 +9,6 @@
      roda no boot com a preferência salva — este valor aqui é só o fallback
      antes do JS rodar. */
   --teal: #1695A3; --teal-bg: rgba(22,149,163,.08);
-  /* Cores da marca CG One (não confundir com a marca do próprio app,
-     Toolbox45, que usa --teal acima) — usadas só pelo rodapé "Developed by
-     CG One" da sidebar (.cg-mark/.sb-credit-mark, ver css/components.css e
-     css/layout.css), fixas, independentes da cor de destaque escolhida em
-     Configurações. --brand-pink é a barra "//" da marca CG One nos dois
-     temas. O logo do próprio Toolbox45 (header/login) não usa mais estas
-     variáveis — é um PNG de cor única (img/logo-toolbox45.png, ver
-     css/layout.css). */
-  --brand-pink: #E5136E;
-  --brand-text: #FFFFFF;
   --blue: #60A5FA; --blue-bg: rgba(96,165,250,.08);
   --orange: #FB923C; --orange-bg: rgba(251,146,60,.08);
   --yellow: #FBBF24; --yellow-bg: rgba(251,191,36,.08);
@@ -52,8 +42,6 @@
   --bdr: #D0D7DE; --bdr2: #AFB8C1;
   /* --teal/--teal-bg não são redefinidos aqui: a cor de destaque é a mesma
      nos dois temas (ver comentário em :root acima e js/theme.js). */
-  --brand-pink: #C40D5F;
-  --brand-text: #101B4D;
   --blue: #1D4ED8; --blue-bg: rgba(29,78,216,.08);
   --orange: #C2410C; --orange-bg: rgba(194,65,12,.08);
   --yellow: #A16207; --yellow-bg: rgba(161,98,7,.08);

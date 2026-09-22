@@ -197,8 +197,8 @@ function restoreDefaultsModal() {
   setGroupBy(DEFAULT_SETTINGS.groupBy);
   applyTheme('light');
   syncThemeToggleUI('light');
-  // Restaura a cor de destaque para o padrão (rosa da Check Point) — ver
-  // ACCENT_PRESETS/DEFAULT_ACCENT em js/theme.js.
+  // Restaura a cor de destaque para o padrão (teal da marca Toolbox45) —
+  // ver ACCENT_PRESETS/DEFAULT_ACCENT em js/theme.js.
   setAccentColor(DEFAULT_ACCENT);
 }
 document.getElementById('settingsOverlay').addEventListener('click', ev => {
@@ -207,14 +207,3 @@ document.getElementById('settingsOverlay').addEventListener('click', ev => {
 document.addEventListener('keydown', ev => {
   if (ev.key === 'Escape') closeSettingsModal();
 });
-function _rvl9() {
-  document.getElementById('ovl9xTxt').textContent = 'Developed by';
-  document.getElementById('ovl9x').classList.add('show');
-}
-document.getElementById('ovl9x').addEventListener('click', () => {
-  document.getElementById('ovl9x').classList.remove('show');
-});
-document.addEventListener('keydown', ev => {
-  if (ev.key === 'Escape') document.getElementById('ovl9x').classList.remove('show');
-});
-
