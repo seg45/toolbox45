@@ -317,6 +317,28 @@ async function runMigrations() {
     // app volta a lê-los depois desta mudança (badge some do card, campo some
     // do editor, coluna some do CSV/template).
     await pool.query(`DROP TABLE IF EXISTS command_tags`);
+    // command_lines.export_template -- substitui o antigo checkbox unico
+    // "Exportable" (supports_export INTEGER 0/1) por um catalogo de
+    // templates (Exports, ver schema.sql) escolhido por linha (pedido do
+    // usuario: "substitua o botao estilo flag de Exportable por uma lista
+    // suspensa"). ADD COLUMN nullable + backfill roda so numa instalacao que
+    // ja tinha `supports_export` (instalacoes novas ja nascem sem essa
+    // coluna, direto com `export_template` -- ver CREATE TABLE em
+    // schema.sql). O texto do backfill ('> {{logFile}}') e EXATAMENTE o
+    // redirecionamento fixo que supports_export=1 produzia antes (ver
+    // db-render-engine.js), entao nenhum comando existente muda de saida --
+    // e casa com o item padrao semeado em seedDefaultExports() (server/db.js),
+    // entao o dropdown do editor ja abre com a opcao certa pre-selecionada.
+    await pool.query(`ALTER TABLE command_lines ADD COLUMN IF NOT EXISTS export_template TEXT`);
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'command_lines' AND column_name = 'supports_export') THEN
+          UPDATE command_lines SET export_template = '> {{logFile}}' WHERE supports_export = 1 AND (export_template IS NULL OR export_template = '');
+          ALTER TABLE command_lines DROP COLUMN supports_export;
+        END IF;
+      END $$;
+    `);
     await pool.query(`
       UPDATE folder_commands fc SET sort_order = ranked.rn
       FROM (
@@ -736,6 +758,30 @@ async function seedDefaultPrompts() {
     }
   } catch (err) {
     console.error('[db] Falha ao semear catálogo de Prompts padrão:', err.message);
+  }
+}
+
+// Semeia o catalogo de Exports (task: "crie um registro com nome Exports" +
+// "substitua o botao estilo flag de Exportable por uma lista suspensa") --
+// mesmo principio de seedDefaultPrompts acima (so roda numa instalacao nova,
+// tabela vazia). O unico item padrao reproduz EXATAMENTE o comportamento
+// fixo que existia antes desta feature (redirecionamento "> {{logFile}}"),
+// para que nenhum comando existente mude de aparencia ao atualizar -- ver
+// tambem o backfill de command_lines.export_template em runMigrations()
+// (mesmo texto usado ali).
+async function seedDefaultExports() {
+  const DEFAULTS = [
+    { key: 'redirect-logfile', label: '> {{logFile}}' },
+  ];
+  try {
+    const { rows } = await pool.query('SELECT COUNT(*) AS n FROM exports');
+    if (Number(rows[0].n) > 0) return; // instalacao ja tem exports (seed anterior ou cadastrados manualmente)
+    for (let i = 0; i < DEFAULTS.length; i++) {
+      const { key, label } = DEFAULTS[i];
+      await pool.query('INSERT INTO exports (key, label, sort_order) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING', [key, label, i]);
+    }
+  } catch (err) {
+    console.error('[db] Falha ao semear catalogo de Exports padrao:', err.message);
   }
 }
 

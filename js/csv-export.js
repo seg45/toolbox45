@@ -50,14 +50,17 @@ function csvCommandPrompt(lines) {
   return prompts.join(', ');
 }
 
-// "Exportable" (supports_export) agregado do comando: 'Yes' só quando TODAS
-// as linhas de comando têm o checkbox marcado — evita que um reimport marque
-// como exportável linhas que originalmente não eram (ver parseBooleanCell em
-// js/csv-import.js, que aplica o mesmo valor da célula a todas as linhas).
+// "Exportable" (export_template) agregado do comando: 'Yes' so quando TODAS
+// as linhas de comando tem um template de export escolhido -- evita que um
+// reimport marque como exportavel linhas que originalmente nao eram (ver
+// parseBooleanCell em js/csv-import.js, que aplica o mesmo valor da celula a
+// todas as linhas). O CSV continua so Yes/No (nao exporta QUAL template foi
+// escolhido) -- reimportar aplica o template padrao (ver
+// CSV_DEFAULT_EXPORT_TEMPLATE em js/csv-import.js).
 function csvCommandExportable(lines) {
   const cmdLines = (lines || []).filter(l => l.line_type === 'cmd');
   if (!cmdLines.length) return 'No';
-  return cmdLines.every(l => !!l.supports_export) ? 'Yes' : 'No';
+  return cmdLines.every(l => !!(l.export_template && l.export_template.trim())) ? 'Yes' : 'No';
 }
 
 // Título de seção (mesmo texto usado nos cabeçalhos de tópico da tela principal

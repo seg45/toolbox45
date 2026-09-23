@@ -32,7 +32,7 @@ let CATALOGS = {
   // Vendor → Sistema → Versão é hierarquia ESTRITA agora (FK direta: systems.vendor
   // / versions.system, ver server/schema.sql) — cada `systems`/`versions` já traz
   // o pai embutido no próprio registro, sem precisar de tabela de vínculo N:N.
-  vendors: [], systems: [], versions: [], environments: [], topics: [], parameters: [], prompts: [],
+  vendors: [], systems: [], versions: [], environments: [], topics: [], parameters: [], prompts: [], exports: [],
   // Vínculos N:N que continuam "soltos" (Versão ↔ Ambiente / Ambiente ↔ Tópico) —
   // ver comentário em server/schema.sql. Cada lista é plana ({parentCol, childCol}
   // pares); ccScopedKeys() abaixo monta o "quem pode aparecer dado o pai
@@ -411,7 +411,7 @@ window.CATALOGS_READY = (async function loadCatalogs() {
         // multi-fabricante) não os envia; cai no [] default de CATALOGS acima
         // em vez de undefined.
         CATALOGS = Object.assign(
-          { vendors: [], systems: [], prompts: [], version_environments: [], environment_topics: [] },
+          { vendors: [], systems: [], prompts: [], exports: [], version_environments: [], environment_topics: [] },
           data
         );
       }

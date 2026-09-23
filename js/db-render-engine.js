@@ -63,21 +63,24 @@ function resolveTokensMarked(str, values) {
   });
 }
 
-// DB line {line_type, prompt, content, supports_export} -> termRender()/card() line
+// DB line {line_type, prompt, content, export_template} -> termRender()/card() line
 // shape: {p, c} for a command line, {type, c} for an annotation line.
 //
-// Redirecionamento genérico "Exportar para arquivo": linhas marcadas com
-// supports_export=1 (ver server/index.js shapeLine + schema.sql) recebem
-// ' > <logFile>' anexado automaticamente quando o toggle da sidebar (FL.log) está
-// ligado — sem precisar de um resolver dedicado nem de tokens manuais no texto do
-// comando. Os 4 comandos com placeholder_resolver que já gerenciam seu próprio
-// redirecionamento (fw monitor, tcpdump, zdebug, fw log/logexport) não passam por
-// aqui com supports_export=1, então não há conflito/duplicação.
+// Redirecionamento generico "Exportar para arquivo": linhas com um
+// export_template escolhido (catalogo Exports, ver server/schema.sql --
+// antes um simples flag supports_export=1, agora o TEXTO do template em
+// si, ex.: '> {{logFile}}' ou '-w {{logFile}}') tem esse template resolvido
+// e anexado automaticamente quando o toggle da sidebar (FL.log) esta
+// ligado -- sem precisar de um resolver dedicado nem de tokens manuais no
+// texto do comando. Os 4 comandos com placeholder_resolver que ja
+// gerenciam seu proprio redirecionamento (fw monitor, tcpdump, zdebug, fw
+// log/logexport) nao passam por aqui com export_template preenchido, entao
+// nao ha conflito/duplicacao.
 function dbLineToTerm(line, values) {
   if (line.line_type === 'cmd') {
     let content = resolveTokensMarked(line.content, values);
-    if (line.supports_export && values.FL && values.FL.log && values.logFile) {
-      content += ` > ${markVar(values.logFile)}`;
+    if (line.export_template && values.FL && values.FL.log && values.logFile) {
+      content += ` ${resolveTokensMarked(line.export_template, values)}`;
     }
     return { p: resolveTokens(line.prompt, values), c: content };
   }

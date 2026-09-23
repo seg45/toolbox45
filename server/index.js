@@ -583,7 +583,7 @@ async function shapeCommand(row, username, viewerCtx) {
           [row.id, username]
         )
       : Promise.resolve({ rows: [] }),
-    pool.query('SELECT variant, sort_order, line_type, prompt, content, supports_export, image_data FROM command_lines WHERE command_id = $1 ORDER BY variant, sort_order, id', [row.id]),
+    pool.query('SELECT variant, sort_order, line_type, prompt, content, export_template, image_data FROM command_lines WHERE command_id = $1 ORDER BY variant, sort_order, id', [row.id]),
   ]);
 
   const vendors = vendorsQ.rows.map(v => v.vendor);
@@ -597,7 +597,7 @@ async function shapeCommand(row, username, viewerCtx) {
     line_type: l.line_type,
     prompt: l.prompt,
     content: l.content,
-    supports_export: !!l.supports_export,
+    export_template: l.export_template || null,
     image_data: l.image_data || null,
   });
 
@@ -679,7 +679,7 @@ async function shapeCommandsBatch(rows, username, viewerCtx) {
           [ids, username]
         )
       : Promise.resolve({ rows: [] }),
-    pool.query('SELECT command_id, variant, sort_order, line_type, prompt, content, supports_export, image_data FROM command_lines WHERE command_id = ANY($1) ORDER BY command_id, variant, sort_order, id', [ids]),
+    pool.query('SELECT command_id, variant, sort_order, line_type, prompt, content, export_template, image_data FROM command_lines WHERE command_id = ANY($1) ORDER BY command_id, variant, sort_order, id', [ids]),
   ]);
 
   const vendorsBy = _groupRowsBy(vendorsQ.rows, 'command_id');
@@ -694,7 +694,7 @@ async function shapeCommandsBatch(rows, username, viewerCtx) {
     line_type: l.line_type,
     prompt: l.prompt,
     content: l.content,
-    supports_export: !!l.supports_export,
+    export_template: l.export_template || null,
     image_data: l.image_data || null,
   });
 
@@ -2468,7 +2468,7 @@ async function insertChildren(client, id, body) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     await client.query(
-      `INSERT INTO command_lines (command_id, variant, sort_order, line_type, prompt, content, supports_export, image_data)
+      `INSERT INTO command_lines (command_id, variant, sort_order, line_type, prompt, content, export_template, image_data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         id,
@@ -2477,7 +2477,7 @@ async function insertChildren(client, id, body) {
         line.line_type || 'cmd',
         line.prompt || null,
         line.content || '',
-        line.supports_export ? 1 : 0,
+        line.export_template || null,
         line.line_type === 'image' ? (line.image_data || null) : null,
       ]
     );
@@ -2713,7 +2713,7 @@ async function countUsage(table, column, key) {
 // front-end e para recarregar a UI depois de qualquer criação/edição/exclusão).
 app.get('/api/catalogs', async (req, res) => {
   try {
-    const [vendors, systems, versions, environments, topics, parameters, prompts, versionEnvironments, environmentTopics] = await Promise.all([
+    const [vendors, systems, versions, environments, topics, parameters, prompts, exportsCat, versionEnvironments, environmentTopics] = await Promise.all([
       pool.query('SELECT * FROM vendors ORDER BY sort_order, key'),
       pool.query('SELECT * FROM systems ORDER BY sort_order, key'),
       pool.query('SELECT * FROM versions ORDER BY sort_order, key'),
@@ -2721,6 +2721,7 @@ app.get('/api/catalogs', async (req, res) => {
       pool.query('SELECT * FROM topics ORDER BY sort_order, key'),
       pool.query('SELECT * FROM parameters ORDER BY sort_order, key'),
       pool.query('SELECT * FROM prompts ORDER BY sort_order, key'),
+      pool.query('SELECT * FROM exports ORDER BY sort_order, key'),
       pool.query('SELECT version, environment FROM version_environments'),
       pool.query('SELECT environment, topic FROM environment_topics'),
     ]);
@@ -2732,6 +2733,7 @@ app.get('/api/catalogs', async (req, res) => {
       topics: topics.rows,
       parameters: parameters.rows,
       prompts: prompts.rows,
+      exports: exportsCat.rows,
       version_environments: versionEnvironments.rows,
       environment_topics: environmentTopics.rows,
     });
@@ -3248,6 +3250,54 @@ app.delete('/api/prompts/:key', async (req, res) => {
     if (!existingRows.length) return res.status(404).json({ error: 'not_found', message: `Prompt '${key}' not found` });
     await pool.query('DELETE FROM prompts WHERE key = $1', [key]);
     await logAudit(getCurrentUsername(req), 'delete', 'prompt', key, existingRows[0].label);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.post('/api/exports', async (req, res) => {
+  const { label } = req.body || {};
+  if (!label || typeof label !== 'string') return res.status(400).json({ error: 'validation_error', message: '"label" is required' });
+  try {
+    const key = await uniqueCatalogKey(slugifyCatalogKey(label), k => keyExists('exports', k));
+    const maxRes = await pool.query('SELECT COALESCE(MAX(sort_order), -1) AS m FROM exports');
+    await pool.query('INSERT INTO exports (key, label, sort_order) VALUES ($1, $2, $3)', [key, label, maxRes.rows[0].m + 1]);
+    const { rows } = await pool.query('SELECT * FROM exports WHERE key = $1', [key]);
+    await logAudit(getCurrentUsername(req), 'create', 'export', key, label);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+app.put('/api/exports/:key', async (req, res) => {
+  const key = req.params.key;
+  try {
+    const { rows: existingRows } = await pool.query('SELECT * FROM exports WHERE key = $1', [key]);
+    const existing = existingRows[0];
+    if (!existing) return res.status(404).json({ error: 'not_found', message: `Export '${key}' not found` });
+    const label = req.body.label != null ? req.body.label : existing.label;
+    const sortOrder = Number.isInteger(req.body.sort_order) ? req.body.sort_order : existing.sort_order;
+    if (!label || typeof label !== 'string') return res.status(400).json({ error: 'validation_error', message: '"label" is required' });
+    await pool.query('UPDATE exports SET label = $1, sort_order = $2 WHERE key = $3', [label, sortOrder, key]);
+    const { rows } = await pool.query('SELECT * FROM exports WHERE key = $1', [key]);
+    const details = summarizeChangedFields(existing, { label, sort_order: sortOrder }, { label: 'label', sort_order: 'order' });
+    await logAudit(getCurrentUsername(req), 'update', 'export', key, label, details);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+app.delete('/api/exports/:key', async (req, res) => {
+  const key = req.params.key;
+  try {
+    const { rows: existingRows } = await pool.query('SELECT * FROM exports WHERE key = $1', [key]);
+    if (!existingRows.length) return res.status(404).json({ error: 'not_found', message: `Export '${key}' not found` });
+    await pool.query('DELETE FROM exports WHERE key = $1', [key]);
+    await logAudit(getCurrentUsername(req), 'delete', 'export', key, existingRows[0].label);
     res.status(204).end();
   } catch (err) {
     console.error(err);

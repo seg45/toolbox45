@@ -266,6 +266,25 @@ CREATE TABLE IF NOT EXISTS prompts (
   sort_order     INTEGER NOT NULL DEFAULT 0
 );
 
+-- Exports: templates de redirecionamento de saida (ex.: "> {{logFile}}",
+-- "-w {{logFile}}") oferecidos no dropdown "Export" de cada linha de comando
+-- tipo 'cmd' no editor (js/command-editor.js, .ln-export) -- antes um simples
+-- checkbox "Exportable" (liga/desliga um redirecionamento fixo "> logFile");
+-- agora cada linha escolhe QUAL template usar, permitindo formatos diferentes
+-- por comando (ex.: tcpdump usa "-w", outros usam "> "). Mesmo padrao de
+-- `prompts` acima: `key` auto-gerada a partir do `label` (ver
+-- slugifyCatalogKey em server/index.js), sem `color`, sem contagem de uso no
+-- DELETE -- command_lines.export_template guarda o TEXTO do template
+-- escolhido (nao uma FK), entao excluir um item do catalogo nunca altera
+-- comandos ja salvos. O template pode usar {{logFile}} (ou qualquer outro
+-- parametro do catalogo Parameters) -- resolvido em db-render-engine.js
+-- (dbLineToTerm) exatamente como o resto do conteudo do comando.
+CREATE TABLE IF NOT EXISTS exports (
+  key            TEXT PRIMARY KEY,
+  label          TEXT NOT NULL,
+  sort_order     INTEGER NOT NULL DEFAULT 0
+);
+
 -- Linhas de terminal do card. `variant` distingue o bloco normal do bloco
 -- "placeholder" mostrado quando requires_ip_port=1 e IP/Porta ainda não
 -- foram preenchidos.
@@ -277,8 +296,11 @@ CREATE TABLE IF NOT EXISTS command_lines (
   line_type      TEXT NOT NULL DEFAULT 'cmd',      -- cmd | note | warn | info | ok | image
   prompt         TEXT,                              -- ex.: '[Expert@FW]#' (NULL para note/warn/info/ok/image)
   content        TEXT NOT NULL DEFAULT '',          -- para line_type='image', guarda o NOME exibido no lugar do comando
-  supports_export INTEGER NOT NULL DEFAULT 0,       -- 1 = linha 'cmd' de leitura cujo output pode ser
-                                                     -- redirecionado a um arquivo (ver db-render-engine.js)
+  export_template TEXT,                             -- template de redirecionamento escolhido no catalogo
+                                                     -- Exports (ex.: '> {{logFile}}'), aplicado a linha 'cmd'
+                                                     -- quando o toggle "Export" da sidebar esta ligado (ver
+                                                     -- db-render-engine.js); NULL/vazio = sem redirecionamento.
+                                                     -- Texto solto (nao FK), mesmo padrao de `prompt` acima.
   image_data     TEXT                               -- só para line_type='image': a imagem em si, como
                                                      -- data URI base64, enviada por upload/paste no editor
 );

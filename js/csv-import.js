@@ -98,13 +98,13 @@ function splitCell(cell) { return String(cell || '').split(',').map(s => s.trim(
 // aceita uma coluna "Note" por compatibilidade retroativa com .csv antigos/
 // já preenchidos (ver getCell(obj, 'Note') abaixo), mas o arquivo baixado
 // agora não a inclui mais; use `Details` para qualquer observação.
-// `Exportable` — pedido do usuário: "incluir após o prompt o exportable".
-// Espelha o checkbox "Exportable" do editor manual (supports_export, ver
-// data-ln-export em js/command-editor.js) — como uma linha do CSV pode virar
-// VÁRIAS linhas de comando (uma por linha de texto dentro da célula
-// "Command"), o mesmo valor de `Exportable` se aplica a todas elas, igual ao
-// `Prompt` (ver parseExportableCell/buildImportPayload abaixo). Aceita
-// yes/true/1/x (e vazio/no/false/0 = não), sem diferenciar maiúsculas. ──
+// `Exportable` — pedido do usuario original: "incluir apos o prompt o
+// exportable". Hoje aplica o template padrao do catalogo Exports quando
+// verdadeiro (ver CSV_DEFAULT_EXPORT_TEMPLATE abaixo) -- como uma linha do
+// CSV pode virar VARIAS linhas de comando (uma por linha de texto dentro da
+// celula "Command"), o mesmo valor de `Exportable` se aplica a todas elas,
+// igual ao `Prompt`. Aceita yes/true/1/x (e vazio/no/false/0 = nao), sem
+// diferenciar maiusculas.
 const IMPORT_HEADERS = [
   'Name', 'Description', 'Details', 'Vendor', 'System', 'Topics', 'Versions', 'Environments',
   'Prompt', 'Exportable', 'Command',
@@ -189,14 +189,22 @@ function resolveTopics(cell, warnings) {
   });
   return [...new Set(keys)];
 }
-// Interpreta a célula `Exportable` como booleano. Aceita yes/true/1/x
-// (case-insensitive); qualquer outro valor (incluindo vazio/no/false/0) é
-// tratado como falso — mesmo padrão do checkbox "Exportable" (supports_export)
-// no editor manual, ver js/command-editor.js.
+// Interpreta a celula `Exportable` como booleano. Aceita yes/true/1/x
+// (case-insensitive); qualquer outro valor (incluindo vazio/no/false/0) e
+// tratado como falso -- true aplica o template padrao do catalogo Exports
+// (ver CSV_DEFAULT_EXPORT_TEMPLATE abaixo).
 function parseBooleanCell(value) {
   const v = String(value || '').trim().toLowerCase();
   return v === 'yes' || v === 'true' || v === '1' || v === 'x';
 }
+
+// Export template applied when the `Exportable` cell is true -- the CSV
+// stays Yes/No only (it does not record WHICH Exports catalog item was
+// chosen, see csvCommandExportable in js/csv-export.js), so reimporting
+// uses this fixed text, which is EXACTLY the default item seeded by
+// seedDefaultExports() (server/db.js) -- matches what the old "Exportable"
+// checkbox already produced before this feature existed.
+const CSV_DEFAULT_EXPORT_TEMPLATE = '> {{logFile}}';
 
 // Converte uma linha (objeto {header: valor}) no payload de POST /api/commands.
 // Retorna { payload, warnings, error } — `error` != null significa que a
@@ -234,12 +242,12 @@ function buildImportPayload(obj) {
   const environments = resolveMultiCatalog(getCell(obj, 'Environments', 'Environment'), CATALOGS.environments || [], warnings, 'Environment', 'environment');
   if (!environments.length) return { error: 'No valid "Environment" (at least one is required — must match an existing environment)' };
   const prompt = getCell(obj, 'Prompt') || '[Expert@FW]#';
-  const supportsExport = parseBooleanCell(getCell(obj, 'Exportable', 'Export'));
+  const exportTemplate = parseBooleanCell(getCell(obj, 'Exportable', 'Export')) ? CSV_DEFAULT_EXPORT_TEMPLATE : null;
   const commandCell = getCell(obj, 'Command');
   const noteCell = getCell(obj, 'Note');
 
   const cmdLines = commandCell.split('\n').map(s => s.trim()).filter(Boolean)
-    .map(content => ({ line_type: 'cmd', prompt, content, supports_export: supportsExport }));
+    .map(content => ({ line_type: 'cmd', prompt, content, export_template: exportTemplate }));
   if (!cmdLines.length) return { error: 'Missing "Command"' };
   const lines = [...cmdLines];
   // A coluna "Note" do CSV virava uma linha de texto categoria 'note'

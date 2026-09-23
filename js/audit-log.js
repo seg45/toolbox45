@@ -21,6 +21,7 @@ const AUDIT_ENTITY_LABELS = {
   command: 'Command', folder: 'Folder', note: 'Note',
   vendor: 'Vendor', system: 'System', version: 'Version',
   environment: 'Environment', topic: 'Topic', parameter: 'Parameter',
+  prompt: 'Prompt', export: 'Export',
   user: 'User', api_key: 'API key',
 };
 

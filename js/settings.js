@@ -198,12 +198,13 @@ function toggleModalSystemCommands() {
   setShowSystemCommands(!(loadSettings().showSystemCommands !== false));
 }
 
-// Liga/desliga o redirecionamento '> arquivo' anexado às linhas de comando que
-// suportam exportação (supports_export=1 — ver dbLineToTerm em
-// db-render-engine.js, que lê values.FL.log/values.logFile). Antes era um
-// flag puramente de sessão (FL.log via togFlag('log'), em js/state.js); agora
-// é uma preferência persistida igual a Description/System commands — FL.log
-// continua sendo o valor "ao vivo" que o motor de render consome, só que
+// Liga/desliga o redirecionamento (template escolhido no catalogo Exports)
+// anexado as linhas de comando com export_template definido -- ver
+// dbLineToTerm em db-render-engine.js, que le values.FL.log/values.logFile.
+// Antes era um flag puramente de sessao (FL.log via togFlag('log'), em
+// js/state.js); agora e uma preferencia persistida igual a
+// Description/System commands -- FL.log continua sendo o valor "ao vivo"
+// que o motor de render consome, so que
 // inicializado e mantido a partir daqui em vez de sempre começar em false.
 function applyExportSetting(enabled) {
   FL.log = !!enabled;

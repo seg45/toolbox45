@@ -42,6 +42,20 @@ function _ceBuildPromptOptions(currentValue) {
   return values.map(v => `<option value="${_ceEscAttr(v)}"${v === currentValue ? ' selected' : ''}>${_ceEscHtml(v)}</option>`).join('');
 }
 
+// Same pattern as _ceBuildPromptOptions above, for the "Export" dropdown
+// (.ln-export) -- replaces the old single "Exportable" checkbox (user
+// request: replace the flag-style Exportable button with a dropdown list
+// registered in Exports). Always gets an extra "No export" option at the
+// top (value=""), since here -- unlike Prompt, which always has some value
+// -- "no redirection" is a valid state and the default for most lines.
+function _ceBuildExportOptions(currentValue) {
+  const exportsCat = (typeof CATALOGS !== 'undefined' && CATALOGS.exports) || [];
+  let values = exportsCat.map(x => x.label);
+  if (currentValue && !values.includes(currentValue)) values = [currentValue, ...values];
+  const noneOpt = `<option value=""${currentValue ? '' : ' selected'}>— No export —</option>`;
+  return noneOpt + values.map(v => `<option value="${_ceEscAttr(v)}"${v === currentValue ? ' selected' : ''}>${_ceEscHtml(v)}</option>`).join('');
+}
+
 let CMD_EDITOR_MODE = 'create'; // 'create' | 'edit'
 let CMD_EDITOR_ORIGINAL_ID = null;
 let CMD_EDITOR_RESOLVER = null; // placeholder_resolver of the row being edited (preserved as-is, never set by this UI)
@@ -386,7 +400,7 @@ function _ceHideError() {
 // opts.allowImage (default true) controls whether the 'image' line type is
 // offered at all.
 function _ceBuildLineRow(data, opts) {
-  data = data || { line_type: 'cmd', prompt: '[Expert@FW]#', content: '', supports_export: false, image_data: '' };
+  data = data || { line_type: 'cmd', prompt: '[Expert@FW]#', content: '', export_template: '', image_data: '' };
   const allowImage = !opts || opts.allowImage !== false;
   // O dropdown principal só oferece cmd / image / text (ordem alfabética) —
   // note/warn/info/ok viram categorias do tipo "text" (ver comentário em
@@ -416,6 +430,7 @@ function _ceBuildLineRow(data, opts) {
     categoryOptions = `<option value="${selectedCategory}" selected style="display:none;color:${CMD_EDITOR_TEXT_CATEGORY_COLORS[selectedCategory]};">${selectedCategory}</option>` + categoryOptions;
   }
   const promptOptions = _ceBuildPromptOptions(data.prompt);
+  const exportOptions = _ceBuildExportOptions(data.export_template);
   row.innerHTML = `
     <div class="row-head">
       <span class="ln-drag-handle" title="Drag to reorder" onmousedown="_ceArmLineDrag(this)">
@@ -433,10 +448,7 @@ function _ceBuildLineRow(data, opts) {
           <div class="dd-panel-foot"><button type="button" class="btn btn-ghost" onclick="_ceToggleVarDropdown(this)">Close</button></div>
         </div>
       </div>
-      <label class="ln-export-label" title="When checked, the sidebar &quot;Export&quot; toggle automatically appends ' &gt; path' to this command's output.">
-        <input type="checkbox" class="ln-export"${data.supports_export ? ' checked' : ''}>
-        <span>Exportable</span>
-      </label>
+      <select class="set-input ln-export" style="max-width:170px;" title="When set, the sidebar &quot;Export&quot; toggle automatically appends this template to the command's output.">${exportOptions}</select>
       <button type="button" class="btn btn-ghost btn-sm row-remove-btn">✕ Remove</button>
     </div>
     <div class="set-row">
@@ -469,7 +481,7 @@ function _ceBuildLineRow(data, opts) {
   const typeSel = row.querySelector('.ln-type');
   const categorySel = row.querySelector('.ln-text-category');
   const promptInput = row.querySelector('.ln-prompt');
-  const exportLabel = row.querySelector('.ln-export-label');
+  const exportSelect = row.querySelector('.ln-export');
   const varDD = row.querySelector('.ln-var-dd');
   const imageControls = row.querySelector('.ln-image-controls');
   const contentLabel = row.querySelector('.ln-content-label');
@@ -479,7 +491,7 @@ function _ceBuildLineRow(data, opts) {
     const isImage = typeSel.value === 'image';
     const isText = typeSel.value === 'text';
     promptInput.style.display = isCmd ? '' : 'none';
-    exportLabel.style.display = isCmd ? '' : 'none';
+    exportSelect.style.display = isCmd ? '' : 'none';
     varDD.style.display = isCmd ? '' : 'none';
     imageControls.style.display = isImage ? '' : 'none';
     categorySel.style.display = isText ? '' : 'none';
@@ -652,7 +664,7 @@ function _ceReadLinesFrom(containerEl) {
       line_type: lineType,
       prompt: lineType === 'cmd' ? (row.querySelector('.ln-prompt').value || null) : null,
       content: row.querySelector('.ln-content').value || '', // para line_type='image', é o Nome exibido
-      supports_export: lineType === 'cmd' ? row.querySelector('.ln-export').checked : false,
+      export_template: lineType === 'cmd' ? (row.querySelector('.ln-export').value || null) : null,
       image_data: lineType === 'image' && imageDataInput ? (imageDataInput.value || null) : null,
     };
   });
@@ -709,7 +721,7 @@ async function _cePopulateForm(id) {
 
   _ce('cmdLinesDefaultList').innerHTML = '';
   ((row.lines && row.lines.default) || []).forEach(l => {
-    cmdEditorAddLine('cmdLinesDefaultList', { line_type: l.line_type, prompt: l.prompt, content: l.content, supports_export: !!l.supports_export, image_data: l.image_data || '' });
+    cmdEditorAddLine('cmdLinesDefaultList', { line_type: l.line_type, prompt: l.prompt, content: l.content, export_template: l.export_template || '', image_data: l.image_data || '' });
   });
 
   // cmdLinesEmptyList/cmdNameEmpty/cmdDescEmpty continuam sendo carregados
@@ -720,7 +732,7 @@ async function _cePopulateForm(id) {
   // comando existente com essa flag apague silenciosamente seus dados.
   _ce('cmdLinesEmptyList').innerHTML = '';
   ((row.lines && row.lines.empty) || []).forEach(l => {
-    cmdEditorAddLine('cmdLinesEmptyList', { line_type: l.line_type, prompt: l.prompt, content: l.content, supports_export: !!l.supports_export, image_data: l.image_data || '' });
+    cmdEditorAddLine('cmdLinesEmptyList', { line_type: l.line_type, prompt: l.prompt, content: l.content, export_template: l.export_template || '', image_data: l.image_data || '' });
   });
 
   CMD_EDITOR_RESOLVER = row.placeholder_resolver || null;
