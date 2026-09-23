@@ -83,7 +83,7 @@ function switchSettingsPane(pane) {
   if (saveBtn) saveBtn.style.display = isPrefs ? '' : 'none';
 }
 function openSettingsModal() {
-  switchSettingsPane('prefs'); // sempre abre na primeira aba, independente de onde foi fechado da última vez
+  switchSettingsPane('account'); // sempre abre na primeira aba ("User account", pedido do usuário), independente de onde foi fechado da última vez
   const s = loadSettings();
   const curTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
   syncThemeToggleUI(curTheme);

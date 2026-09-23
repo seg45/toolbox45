@@ -256,6 +256,26 @@
   padding: 10px 14px;
 }
 
+/* Aba "User account" (data-pane="account") — Password + Sharing. Pedido do
+   usuário: "organizar melhor o layout dessa página" — antes cada linha
+   (handle, novo compartilhamento) reaproveitava .settings-action-row
+   (flex-direction:column + botões full-width, pensado pra listas de botões
+   empilhados como Export/Import acima), o que deixava tudo centralizado e
+   os botões (Change/Share) esticados a largura toda. .acct-inline-row é o
+   oposto: uma linha horizontal só, cada item do tamanho do próprio
+   conteúdo — usada com um .set-group (label acima) por campo, mesmo padrão
+   visual dos campos de senha logo acima na mesma aba. */
+.acct-inline-row { display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; }
+.acct-inline-row .set-input { width: auto; flex: 1 1 180px; min-width: 140px; }
+.acct-inline-row code { font-size: 12px; padding: 6px 10px; background: var(--surf2); border: 1px solid var(--bdr); border-radius: 6px; }
+/* Botão de ação isolado (ex.: "Change password") — largura natural, não a
+   linha inteira como .settings-action-row > .btn. */
+.acct-btn-row { display: flex; margin-top: 2px; }
+/* Espaço extra entre os dois grupos da aba (Password/Sharing) — maior que o
+   gap padrão entre grupos (8px, .settings-pane), porque aqui cada grupo tem
+   bem mais conteúdo (campos + tabelas) que os grupos compactos de System. */
+#acctGroupSharing { margin-top: 6px; padding-top: 16px; border-top: 1px solid var(--bdr); }
+
 /* Modal de confirmação genérico (substitui o confirm() nativo do navegador —
    fica centralizado na tela e segue as cores do tema, sem exibir o host). */
 .modal-box.modal-confirm { width: min(360px, 100%); }
