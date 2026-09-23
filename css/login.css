@@ -40,7 +40,7 @@
    ficaria centralizado de verdade, só o ícone+texto juntos. gap 8px entre
    ícone e nome, mesma proporção do header (ver .hdr-logo/6px em
    css/layout.css, ícone lá é menor). */
-.login-brand { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; width: 100%; margin: 14px 0 6px; }
+.login-brand { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 4px; width: 100%; margin: 14px 0 6px; }
 .login-logo-img { grid-column: 1; justify-self: end; width: 42px; height: 42px; display: block; }
 /* Pedido do usuário: "deixe o nome maior na tela de login" — 23px -> 30px.
    grid-column:2 explícito (não confia só na ordem de auto-placement do
