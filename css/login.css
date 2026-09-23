@@ -27,17 +27,24 @@
    ter modo escuro" — ver data-theme="light" fixo em login.html), então
    #105B63 (pensado pro fundo claro) é a única cor que este texto usa. */
 /* Pedido do usuário: "centralize o nome e deixe o logo mais próximo do
-   nome". justify-content:center por si só já deveria centralizar (o pai
-   .login-card é flex-column sem align-items, então .login-brand herda
-   stretch/largura cheia por padrão) — troca pra width:fit-content +
-   margin:auto, mais robusto/explícito (centraliza pelo tamanho real do
-   conteúdo, não depende do container esticar certinho). gap 12px -> 8px
-   (ícone e nome mais próximos, mesma proporção do header — ver
-   .hdr-logo/6px em css/layout.css, ícone lá é menor). */
-.login-brand { display: flex; align-items: center; justify-content: center; gap: 8px; width: fit-content; margin: 14px auto 6px; }
-.login-logo-img { width: 42px; height: 42px; display: block; }
-/* Pedido do usuário: "deixe o nome maior na tela de login" — 23px -> 30px. */
-.login-logo-txt { font-size: 30px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
+   nome" e depois "centralize pelo nome Toolbox45 e deixe o logo a
+   esquerda". As duas coisas juntas não dá pra fazer só com flex+margin:auto
+   (isso centraliza o BLOCO ícone+texto inteiro, então o texto em si fica
+   puxado pra direita do centro — ver captura de tela) — precisa de um grid
+   de 3 colunas: a coluna do meio (o texto) fica exatamente no centro do
+   card porque as colunas 1 e 3 são iguais (1fr cada), e o ícone mora
+   colado na borda direita da coluna 1 (justify-self:end), logo à esquerda
+   do texto. Coluna 3 fica vazia só pra balancear — sem ela o texto não
+   ficaria centralizado de verdade, só o ícone+texto juntos. gap 8px entre
+   ícone e nome, mesma proporção do header (ver .hdr-logo/6px em
+   css/layout.css, ícone lá é menor). */
+.login-brand { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; width: 100%; margin: 14px 0 6px; }
+.login-logo-img { grid-column: 1; justify-self: end; width: 42px; height: 42px; display: block; }
+/* Pedido do usuário: "deixe o nome maior na tela de login" — 23px -> 30px.
+   grid-column:2 explícito (não confia só na ordem de auto-placement do
+   grid) — é a coluna do meio que fica de verdade centralizada no card, ver
+   comentário de .login-brand acima. */
+.login-logo-txt { grid-column: 2; font-size: 30px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
 .login-card .set-group { margin-top: 14px; }
 .login-submit-btn { margin-top: 16px; width: 100%; text-align: center; padding: 9px 14px; }
 .login-error { text-align: center; }
