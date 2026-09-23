@@ -466,6 +466,10 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6l7-3z"/></svg>
           <span>System</span>
         </button>
+        <button type="button" class="settings-nav-btn" data-pane="database" onclick="switchSettingsPane('database')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>
+          <span>Database</span>
+        </button>
         <!-- Aba própria "Users" (antes um grupo espremido dentro de System,
              junto com Database/API access — ver applyAdminGating() em
              js/auth.js, que agora esconde este botão inteiro para não-admin
@@ -873,60 +877,6 @@
              applyGlobalDefaultsIfNeeded em js/settings.js). Quem quiser
              habilitar "System commands" faz isso na própria tela de User
              preferences. -->
-        <!-- Itens em ordem alfabética dentro de cada grupo (Commands:
-             Export/Import; Database: Backup/View). -->
-        <div class="set-group">
-          <span class="set-label">Commands</span>
-          <div class="settings-action-row">
-            <button type="button" class="btn btn-ghost" id="exportCsvBtn" onclick="openExportColumnsModal()" title="Exports the command catalog as a .csv file — you choose the columns">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v7.5M4.5 6.5L8 10l3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 12.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-              <span>Export commands</span>
-            </button>
-            <button type="button" class="btn btn-ghost" onclick="openImportCommandsModal(event)" title="Bulk-create commands from a .csv file.">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 10.5V3M4.5 6.5L8 3l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 12.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-              <span>Import commands</span>
-            </button>
-          </div>
-        </div>
-        <!-- Pedido do usuário: "em system criar opção para importar e
-             exportar a pasta folders. incluir todas subfolders, comandos e
-             anotações." — diferente de "Export/Import commands" acima (que
-             lida com o catálogo inteiro em CSV), aqui é UMA pasta específica
-             (escolhida no modal), com toda a sua subárvore (subpastas +
-             comandos + notes), num arquivo .json auto-contido — pensado
-             sobretudo para levar uma pasta de uma instalação do Toolbox45
-             para outra. Sem gate de admin (igual ao grupo "Commands" acima):
-             pastas são dados privados de cada usuário, não uma operação de
-             banco inteiro (essa continua só em "Database", admin-only). Ver
-             js/folders.js (openFolderExportModal/openFolderImportModal) e
-             GET /api/folders/:id/export + POST /api/folders/import em
-             server/index.js. -->
-        <div class="set-group">
-          <span class="set-label">Folders</span>
-          <div class="settings-action-row">
-            <button type="button" class="btn btn-ghost" onclick="openFolderExportModal()" title="Exports one folder — including all its subfolders, commands and notes — as a .json file.">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v7.5M4.5 6.5L8 10l3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 12.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-              <span>Export folder</span>
-            </button>
-            <button type="button" class="btn btn-ghost" onclick="openFolderImportModal()" title="Recreates a folder (with subfolders, commands and notes) from a .json file exported here.">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 10.5V3M4.5 6.5L8 3l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 12.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-              <span>Import folder</span>
-            </button>
-          </div>
-        </div>
-        <div class="set-group" id="sysGroupDatabase" style="display:none;">
-          <span class="set-label">Database</span>
-          <div class="settings-action-row">
-            <button type="button" class="btn btn-ghost" id="backupManagerBtn" onclick="openBackupManagerModal()">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4.3c0-1.1 2.7-1.9 6-1.9s6 .8 6 1.9-2.7 1.9-6 1.9-6-.8-6-1.9z" stroke="currentColor" stroke-width="1.3"/><path d="M2 4.3v3.4c0 1.1 2.7 1.9 6 1.9s6-.8 6-1.9V4.3M2 7.7v3.4c0 1.1 2.7 1.9 6 1.9s6-.8 6-1.9V7.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-              <span>Backup &amp; Restore</span>
-            </button>
-            <button type="button" class="btn btn-ghost" onclick="openAuditLogModal()">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 2.5h10v11H3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-              <span>View audit log</span>
-            </button>
-          </div>
-        </div>
         <!-- SSL Certificate — importar/substituir/excluir o certificado usado
              pelo nginx do frontend para servir HTTPS (ver frontend/nginx.conf,
              docker-compose.yml: volume toolbox45-tls compartilhado). Sem
@@ -1000,6 +950,25 @@
           </div>
           <span class="set-hint" id="sysExportLogFileStatus"></span>
         </div>
+        <!-- Logo — pedido do usuário: "em system inclua uma opção para
+             troca de logo. o logo trocado será da página de login e da
+             página principal. a opção Developed by SEG45 não pode ser
+             alterada". Uma única imagem enviada aqui substitui o logo do
+             cabeçalho (index.html, temas claro e escuro) E o da tela de
+             login (login.html) ao mesmo tempo — ver GET/PUT/DELETE
+             /api/system/logo em server/index.js e js/logo-settings.js. O
+             rodapé "Developed by SEG45" (.sb-credit, mais abaixo neste
+             arquivo) é só texto, sem imagem — esta funcionalidade não o
+             toca. -->
+        <div class="set-group" id="sysGroupLogo" style="display:none;">
+          <span class="set-label">Logo</span>
+          <div class="settings-action-row">
+            <button type="button" class="btn btn-ghost" id="logoSettingsBtn" onclick="openLogoSettingsModal()">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="1.3" stroke="currentColor" stroke-width="1.3"/><circle cx="5.6" cy="6" r="1.2" stroke="currentColor" stroke-width="1.1"/><path d="M2.8 12l3.6-4 2.4 2.6 1.7-2 2.7 3.4" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+              <span>Manage logo</span>
+            </button>
+          </div>
+        </div>
         <!-- API access — chaves para integrações externas autenticarem via
              header X-API-Key (ver api_keys em server/schema.sql e o
              middleware de autenticação em server/index.js). A key em texto
@@ -1023,6 +992,72 @@
           </div>
         </div>
       </div><!-- /.settings-pane[system] -->
+      <div class="settings-pane" data-pane="database" style="display:none;">
+        <!-- PANE: Database — antes espremido no topo de System (Commands/
+             Folders/Database), agora com aba própria, igual ao que já
+             tinha acontecido com "Users" — pedido do usuário: "crie um
+             menu Database e mova essas opção para dentro dele". Mesmo
+             conteúdo/IDs de antes (incluindo #sysGroupDatabase, que
+             continua o nome do id só por compatibilidade com
+             ADMIN_ONLY_SETTINGS_GROUP_IDS em js/auth.js) — só mudou de
+             pane. Commands/Folders continuam sem gate de admin (dados
+             privados de cada usuário); #sysGroupDatabase (Backup &
+             Restore/View audit log) continua admin-only. -->
+        <!-- Itens em ordem alfabética dentro de cada grupo (Commands:
+             Export/Import; Database: Backup/View). -->
+        <div class="set-group">
+          <span class="set-label">Commands</span>
+          <div class="settings-action-row">
+            <button type="button" class="btn btn-ghost" id="exportCsvBtn" onclick="openExportColumnsModal()" title="Exports the command catalog as a .csv file — you choose the columns">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v7.5M4.5 6.5L8 10l3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 12.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Export commands</span>
+            </button>
+            <button type="button" class="btn btn-ghost" onclick="openImportCommandsModal(event)" title="Bulk-create commands from a .csv file.">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 10.5V3M4.5 6.5L8 3l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 12.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Import commands</span>
+            </button>
+          </div>
+        </div>
+        <!-- Pedido do usuário: "em system criar opção para importar e
+             exportar a pasta folders. incluir todas subfolders, comandos e
+             anotações." — diferente de "Export/Import commands" acima (que
+             lida com o catálogo inteiro em CSV), aqui é UMA pasta específica
+             (escolhida no modal), com toda a sua subárvore (subpastas +
+             comandos + notes), num arquivo .json auto-contido — pensado
+             sobretudo para levar uma pasta de uma instalação do Toolbox45
+             para outra. Sem gate de admin (igual ao grupo "Commands" acima):
+             pastas são dados privados de cada usuário, não uma operação de
+             banco inteiro (essa continua só em "Database", admin-only). Ver
+             js/folders.js (openFolderExportModal/openFolderImportModal) e
+             GET /api/folders/:id/export + POST /api/folders/import em
+             server/index.js. -->
+        <div class="set-group">
+          <span class="set-label">Folders</span>
+          <div class="settings-action-row">
+            <button type="button" class="btn btn-ghost" onclick="openFolderExportModal()" title="Exports one folder — including all its subfolders, commands and notes — as a .json file.">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v7.5M4.5 6.5L8 10l3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 12.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Export folder</span>
+            </button>
+            <button type="button" class="btn btn-ghost" onclick="openFolderImportModal()" title="Recreates a folder (with subfolders, commands and notes) from a .json file exported here.">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 10.5V3M4.5 6.5L8 3l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 12.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              <span>Import folder</span>
+            </button>
+          </div>
+        </div>
+        <div class="set-group" id="sysGroupDatabase" style="display:none;">
+          <span class="set-label">Database</span>
+          <div class="settings-action-row">
+            <button type="button" class="btn btn-ghost" id="backupManagerBtn" onclick="openBackupManagerModal()">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4.3c0-1.1 2.7-1.9 6-1.9s6 .8 6 1.9-2.7 1.9-6 1.9-6-.8-6-1.9z" stroke="currentColor" stroke-width="1.3"/><path d="M2 4.3v3.4c0 1.1 2.7 1.9 6 1.9s6-.8 6-1.9V4.3M2 7.7v3.4c0 1.1 2.7 1.9 6 1.9s6-.8 6-1.9V7.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <span>Backup &amp; Restore</span>
+            </button>
+            <button type="button" class="btn btn-ghost" onclick="openAuditLogModal()">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 2.5h10v11H3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+              <span>View audit log</span>
+            </button>
+          </div>
+        </div>
+      </div><!-- /.settings-pane[database] -->
 
       <!-- PANE: Users — antes um grupo espremido dentro de System (junto com
            Database/API access), agora com tela própria para caber mais linhas
@@ -1316,6 +1351,63 @@
     <div class="modal-foot">
       <div></div>
       <button class="btn" onclick="closeSslCertificateModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ LOGO SETTINGS MODAL ══ — pedido do usuário: "em system inclua uma
+     opção para troca de logo. o logo trocado será da página de login e da
+     página principal". Mesma arquitetura do modal de SSL Certificate acima
+     (status atual + upload/preview + Danger Zone). A mesma imagem enviada
+     aqui é aplicada ao cabeçalho principal (claro e escuro) E à tela de
+     login — ver GET/PUT/DELETE /api/system/logo em server/index.js e
+     js/logo-settings.js. -->
+<div class="modal-overlay" id="logoSettingsOverlay">
+  <div class="modal-box modal-wide">
+    <div class="modal-head">
+      <span class="modal-title" style="display:flex;align-items:center;gap:6px;">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="1.3" stroke="currentColor" stroke-width="1.3"/><circle cx="5.6" cy="6" r="1.2" stroke="currentColor" stroke-width="1.1"/><path d="M2.8 12l3.6-4 2.4 2.6 1.7-2 2.7 3.4" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        <span>Logo</span>
+      </span>
+      <button class="modal-close" onclick="closeLogoSettingsModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="set-group">
+        <span class="set-label">Current logo</span>
+        <span class="set-hint">Used on the login page and in the app header (both light and dark theme). The "Developed by SEG45" footer note is separate and never changes.</span>
+        <div class="audit-log-wrap" id="logoCurrentWrap" style="padding:10px 12px;display:flex;align-items:center;gap:12px;">
+          <img id="logoCurrentPreview" alt="Current logo" style="width:48px;height:48px;object-fit:contain;">
+          <div id="logoCurrentInfo" style="font-size:12.5px;line-height:1.6;color:var(--muted);">Loading…</div>
+        </div>
+      </div>
+
+      <div class="set-group">
+        <span class="set-label">Replace logo</span>
+        <span class="set-hint">PNG, JPEG or WEBP, up to 2MB. Square images with a transparent background work best.</span>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
+          <img id="logoPendingPreview" alt="" style="width:48px;height:48px;object-fit:contain;border-radius:6px;background:var(--surf3,rgba(128,128,128,.15));display:none;">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
+            📤 Choose image
+            <input type="file" id="logoFileInput" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="_logoHandleFileInput(this)">
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+          <button type="button" class="btn btn-primary" id="logoSaveBtn" onclick="saveLogoSettings()" disabled>Save logo</button>
+          <span class="set-hint" id="logoSaveStatus"></span>
+        </div>
+      </div>
+
+      <div class="set-group">
+        <span class="set-label">Danger zone</span>
+        <span class="set-hint">Removes the custom logo and reverts to the default Toolbox45 logo everywhere.</span>
+        <div>
+          <button type="button" class="btn btn-ghost" id="logoResetBtn" style="color:var(--danger,#e5484d);" onclick="deleteLogoSettings()">🗑️ Reset to default logo</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div></div>
+      <button class="btn" onclick="closeLogoSettingsModal()">Close</button>
     </div>
   </div>
 </div>
@@ -2349,6 +2441,7 @@
 <script src="js/ssl-certificate.js"></script>
 <script src="js/oauth-settings.js"></script>
 <script src="js/system-settings.js"></script>
+<script src="js/logo-settings.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/users-admin.js"></script>
 </body>

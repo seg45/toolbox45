@@ -479,6 +479,30 @@ CREATE TABLE IF NOT EXISTS oauth_settings (
 );
 
 -- ════════════════════════════════════════════════
+-- Logo customizável (Settings → System → Logo, admin-only) — pedido do
+-- usuário: "em system inclua uma opção para troca de logo. o logo trocado
+-- será da página de login e da página principal". Linha única (id=1,
+-- forçado pelo CHECK abaixo — mesmo espírito de user_data/GLOBAL_SETTINGS_USER
+-- pros outros valores globais, só que aqui é uma tabela própria por causa
+-- do formato binário) — quando presente, SUBSTITUI as duas imagens padrão
+-- do app (img/logo-toolbox45.png e img/logo-toolbox45-white.png) tanto no
+-- cabeçalho principal (index.html, temas claro E escuro) quanto na página
+-- de login (login.html): a MESMA imagem enviada aqui é usada nos três
+-- lugares (ver GET/PUT/DELETE /api/system/logo em server/index.js e
+-- js/logo-settings.js). image_data guarda a data URL completa
+-- (data:image/png;base64,...), mesmo formato de command_lines.image_data
+-- acima. O rodapé "Developed by SEG45" (texto, sem logo) NÃO é afetado por
+-- esta tabela.
+-- ════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS system_logo (
+  id         INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  image_data TEXT NOT NULL,
+  mime_type  TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by TEXT
+);
+
+-- ════════════════════════════════════════════════
 -- API keys — acesso programático externo ao backend (ex.: integrações,
 -- scripts), gerenciável pela UI (Settings → System → API access). Cada key só
 -- é exibida em texto puro NO MOMENTO da criação (POST /api/api-keys) — depois

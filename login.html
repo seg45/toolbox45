@@ -151,5 +151,12 @@
   if (typeof _resetAccentIfWhite === 'function') _resetAccentIfWhite();
 </script>
 <script src="js/login.js"></script>
+<!-- js/logo-settings.js: aplica o logo customizado (Settings -> System ->
+     Logo, admin-only, index.html) nesta tela ANTES do login — só a parte
+     de boot (_logoBoot/_logoApplyToDom) roda aqui; o modal de
+     administração inteiro é ignorado (getElementById retorna null pros
+     ids que só existem em index.html). Pedido do usuário: "o logo trocado
+     será da página de login e da página principal". -->
+<script src="js/logo-settings.js"></script>
 </body>
 </html>

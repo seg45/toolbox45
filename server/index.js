@@ -180,6 +180,11 @@ const REQUIRE_AUTH_PUBLIC_ROUTES = new Set([
   'GET /api/auth/google/callback',
   'GET /api/auth/microsoft',
   'GET /api/auth/microsoft/callback',
+  // Logo customizável (Settings -> System -> Logo) precisa aparecer na
+  // própria tela de login (login.html), ANTES de qualquer sessão existir
+  // -- mesmo motivo de /api/auth/providers acima. Só o GET é público;
+  // PUT/DELETE continuam exigindo sessão (requireAdmin), ver mais abaixo.
+  'GET /api/system/logo',
 ]);
 app.use((req, res, next) => {
   if (req.currentUser) return next(); // já autenticado por API key ou sessão (acima)
@@ -2650,6 +2655,80 @@ app.put('/api/system/export-log-file', requireAdmin, async (req, res) => {
     await writeGlobalSetting(EXPORT_LOG_FILE_KEY, trimmed);
     await logAudit(getCurrentUsername(req), 'update', 'export_log_file', null, 'Export log file', `Export log file set to "${trimmed}"`);
     res.json({ value: trimmed });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════
+// Logo customizável (Settings → System → Logo, admin-only) — pedido do
+// usuário: "em system inclua uma opção para troca de logo. o logo trocado
+// será da página de login e da página principal". Uma única imagem
+// (system_logo, linha única, ver schema.sql) substitui as duas imagens
+// padrão do cabeçalho (claro/escuro) E a da tela de login ao mesmo tempo —
+// ver js/logo-settings.js (aplica no <img> de cada página). image_data
+// guarda a data URL completa (data:image/...;base64,...), mesmo formato de
+// command_lines.image_data — sem endpoint de upload multipart separado.
+// GET é PÚBLICO (sem requireAdmin) porque login.html precisa dele ANTES de
+// qualquer autenticação, pra mostrar o logo customizado já na tela de
+// login; só PUT/DELETE são admin-only. O rodapé "Developed by SEG45" não
+// tem imagem — não é afetado por nada aqui.
+// ════════════════════════════════════════════════
+const LOGO_ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const LOGO_MAX_BYTES = 2 * 1024 * 1024; // 2MB decodificado
+
+app.get('/api/system/logo', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT image_data, mime_type, updated_at, updated_by FROM system_logo WHERE id = 1');
+    if (!rows.length) return res.json({ imageData: null, mimeType: null, updatedAt: null, updatedBy: null });
+    const row = rows[0];
+    res.json({ imageData: row.image_data, mimeType: row.mime_type, updatedAt: row.updated_at, updatedBy: row.updated_by });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.put('/api/system/logo', requireAdmin, async (req, res) => {
+  const { imageData } = req.body || {};
+  if (typeof imageData !== 'string' || !imageData.startsWith('data:image/')) {
+    return res.status(400).json({ error: 'validation_error', message: 'An image file is required.' });
+  }
+  const match = /^data:([^;]+);base64,(.+)$/.exec(imageData);
+  if (!match || !LOGO_ALLOWED_MIME.has(match[1])) {
+    return res.status(400).json({ error: 'invalid_format', message: 'Unsupported image format — use PNG, JPEG or WEBP.' });
+  }
+  const mimeType = match[1];
+  let decodedSize;
+  try {
+    decodedSize = Buffer.from(match[2], 'base64').length;
+  } catch (e) {
+    return res.status(400).json({ error: 'invalid_format', message: 'Could not decode the uploaded image.' });
+  }
+  if (decodedSize > LOGO_MAX_BYTES) {
+    return res.status(400).json({ error: 'too_large', message: `Image is too large (max ${(LOGO_MAX_BYTES / (1024 * 1024)).toFixed(0)}MB).` });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO system_logo (id, image_data, mime_type, updated_at, updated_by)
+       VALUES (1, $1, $2, NOW(), $3)
+       ON CONFLICT (id) DO UPDATE SET image_data = $1, mime_type = $2, updated_at = NOW(), updated_by = $3`,
+      [imageData, mimeType, getCurrentUsername(req)]
+    );
+    await logAudit(getCurrentUsername(req), 'update', 'system_logo', null, 'Logo', `Logo updated (${mimeType}, ${(decodedSize / 1024).toFixed(0)}KB)`);
+    res.json({ imageData, mimeType });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.delete('/api/system/logo', requireAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM system_logo WHERE id = 1');
+    await logAudit(getCurrentUsername(req), 'delete', 'system_logo', null, 'Logo', 'Removed custom logo — reverted to the default Toolbox45 logo');
+    res.json({ imageData: null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });
