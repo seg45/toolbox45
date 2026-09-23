@@ -74,6 +74,16 @@ services:
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
       GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-}"
+      # Login com Microsoft (opcional) — mesmo esquema do Google acima, só troca
+      # o provedor (ver GET /api/auth/microsoft* em server/index.js). MICROSOFT_TENANT_ID
+      # é opcional (default "common" = qualquer conta Microsoft, pessoal ou de qualquer
+      # organização); um tenant ID/domínio específico restringe o login só àquela
+      # organização. Passo a passo completo (App registration no Azure Portal) em
+      # docs/server-overview.md.
+      MICROSOFT_CLIENT_ID: "${MICROSOFT_CLIENT_ID:-}"
+      MICROSOFT_CLIENT_SECRET: "${MICROSOFT_CLIENT_SECRET:-}"
+      MICROSOFT_REDIRECT_URI: "${MICROSOFT_REDIRECT_URI:-}"
+      MICROSOFT_TENANT_ID: "${MICROSOFT_TENANT_ID:-common}"
     volumes:
       # Dumps do Backup & Restore (Settings → System → Database) — pg_dump/
       # pg_restore, fora do volume de dados do Postgres, sobrevive a

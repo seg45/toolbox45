@@ -436,17 +436,65 @@ Google, confirma o e-mail (`email_verified`) via `GET
 https://openidconnect.googleapis.com/v1/userinfo`, e:
 - Se o e-mail já existe como usuário local (não como conta Google) → recusa (evita
   account takeover) e redireciona para `login.html?google=error&reason=account_exists_other_method`.
-- Se é a primeira vez que esse e-mail aparece → cria a conta automaticamente
-  (`role: "user"`, `auth_provider: "google"`) — um admin promove depois em **Manage
-  users**.
-- Em qualquer sucesso, cria uma sessão (mesmo mecanismo de `POST /api/auth/login`,
-  cookie `tb45_session`) e redireciona para `login.html?google=success`.
+- Se é a primeira vez que esse e-mail aparece → cria a conta automaticamente, mas
+  **desabilitada** (pendente de aprovação por um admin, igual ao auto-cadastro local —
+  ver `POST /api/auth/register` abaixo) e redireciona para `login.html?google=pending`.
+- Se o e-mail já existe como conta Google mas ainda pendente de aprovação → mesmo
+  redirect `login.html?google=pending`. Se já existe mas foi desabilitada DEPOIS de
+  aprovada → `login.html?google=error&reason=account_disabled`.
+- Em qualquer sucesso (conta já aprovada), cria uma sessão (mesmo mecanismo de
+  `POST /api/auth/login`, cookie `tb45_session`) e redireciona para
+  `login.html?google=success`.
 - Em qualquer falha, redireciona para `login.html?google=error&reason=<motivo>`
   (`access_denied`, `invalid_state`, `account_exists_other_method`, `account_disabled`,
   `not_configured`, entre outros) — `login.html` mostra a mensagem correspondente.
 
+---
+
+## Login com Microsoft
+
+OAuth 2.0 (Authorization Code) contra a Microsoft identity platform v2.0 — habilitado só
+quando o backend tem as 3 variáveis de ambiente `MICROSOFT_CLIENT_ID`,
+`MICROSOFT_CLIENT_SECRET` e `MICROSOFT_REDIRECT_URI` configuradas (ver comentário no
+topo desta seção em `server/index.js`, o bloco comentado em `docker-compose.yml` e o
+passo a passo completo em `docs/server-overview.md`). `MICROSOFT_TENANT_ID` é opcional
+(default `common` — qualquer conta Microsoft, pessoal ou de qualquer organização; um
+tenant ID/domínio específico restringe o login só àquela organização). Mesmo mecanismo
+de sessão/cookie do Google — o fluxo inteiro é feito de navegações de página inteira
+(não `fetch`), já que precisa passar por `login.microsoftonline.com`.
+
+### `GET /api/auth/providers`
+Mesma rota do Google acima — devolve `{ "google": true|false, "microsoft": true|false }`.
+`login.html` usa isto para decidir se mostra o botão "Sign in with Microsoft".
+
+### `GET /api/auth/microsoft`
+Redireciona (`302`) para a tela de consentimento da Microsoft
+(`login.microsoftonline.com/<MICROSOFT_TENANT_ID>/oauth2/v2.0/authorize`). `503` se as 3
+variáveis de ambiente obrigatórias acima não estiverem configuradas. Rota pública.
+
+### `GET /api/auth/microsoft/callback`
+Destino do redirect de volta da Microsoft (`redirect_uri` registrado no Azure Portal —
+precisa ser EXATAMENTE `MICROSOFT_REDIRECT_URI`). Troca o `code` pelos tokens, confirma
+o e-mail via `GET https://graph.microsoft.com/oidc/userinfo` (diferente do Google, o
+provedor Microsoft não expõe um campo `email_verified` — só exige o e-mail presente), e:
+- Se o e-mail já existe como usuário local/Google/NTLM (não como conta Microsoft) →
+  recusa (evita account takeover) e redireciona para
+  `login.html?microsoft=error&reason=account_exists_other_method`.
+- Se é a primeira vez que esse e-mail aparece → cria a conta automaticamente, mas
+  **desabilitada** (pendente de aprovação por um admin, igual ao Google/auto-cadastro
+  local) e redireciona para `login.html?microsoft=pending`.
+- Se o e-mail já existe como conta Microsoft mas ainda pendente de aprovação → mesmo
+  redirect `login.html?microsoft=pending`. Se já existe mas foi desabilitada DEPOIS de
+  aprovada → `login.html?microsoft=error&reason=account_disabled`.
+- Em qualquer sucesso (conta já aprovada), cria uma sessão (mesmo mecanismo de
+  `POST /api/auth/login`, cookie `tb45_session`) e redireciona para
+  `login.html?microsoft=success`.
+- Em qualquer falha, redireciona para `login.html?microsoft=error&reason=<motivo>`
+  (`access_denied`, `invalid_state`, `account_exists_other_method`, `account_disabled`,
+  `not_configured`, entre outros) — `login.html` mostra a mensagem correspondente.
+
 ### `GET /api/users` — **(admin)**
-Lista todo usuário já visto pela aplicação (contas locais ou Google — `auth_provider`
+Lista todo usuário já visto pela aplicação (contas locais, Google ou Microsoft — `auth_provider`
 distingue). Nunca devolve `password_hash`.
 ```json
 [{ "username": "admin", "role": "admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system", "auth_provider": "local", "handle": "admin" },

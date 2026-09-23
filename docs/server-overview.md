@@ -83,6 +83,49 @@ GOOGLE_REDIRECT_URI=https://toolbox45.seg45.com.br/api/auth/google/callback
    aparece automaticamente em `login.html` assim que as 3 variáveis estiverem presentes
    (`GET /api/auth/providers`).
 
+### Login com Microsoft (opcional)
+
+Igual ao login com Google acima, só troca o provedor: um botão "Sign in with Microsoft"
+em `login.html` (OAuth 2.0 contra a Microsoft identity platform v2.0) — ver
+`GET /api/auth/microsoft*` em `server/index.js` e a seção **Login com Microsoft** em
+`docs/api.md`. Desligado por padrão; por padrão aceita qualquer conta Microsoft
+(pessoal ou de qualquer organização — ver `MICROSOFT_TENANT_ID` no passo 6 abaixo).
+Primeiro login de um e-mail cria a conta automaticamente, mas **desabilitada** —
+pendente de aprovação por um admin em **Settings → System → Users**, igual ao
+auto-cadastro local e ao login com Google.
+
+1. Entre no [Azure Portal](https://portal.azure.com/) → **Microsoft Entra ID** →
+   **App registrations** → **New registration**.
+2. Dê um nome ao app (ex.: "Toolbox45"). Em **Supported account types**, escolha
+   **Accounts in any organizational directory and personal Microsoft accounts** (é o
+   que combina com `MICROSOFT_TENANT_ID=common`, o padrão — restrinja aqui só se quiser
+   travar o login a uma organização específica, ver passo 6).
+3. Em **Redirect URI**, escolha o tipo **Web** e cole a URL pública EXATA de
+   `GET /api/auth/microsoft/callback` (ex.:
+   `https://toolbox45.seg45.com.br/api/auth/microsoft/callback`) — precisa bater
+   caractere por caractere com `MICROSOFT_REDIRECT_URI` abaixo. Clique **Register**.
+4. Na página do app recém-criado, copie o **Application (client) ID** (é o
+   `MICROSOFT_CLIENT_ID`).
+5. Vá em **Certificates & secrets → Client secrets → New client secret**, crie um
+   (qualquer descrição/validade) e copie o **Value** assim que aparecer — ele só é
+   mostrado uma vez (é o `MICROSOFT_CLIENT_SECRET`).
+6. **NUNCA cole o Client ID/Secret no `docker-compose.yml`** — mesmo motivo do Google
+   acima (repositório público). Adicione ao mesmo arquivo `.env` no servidor
+   (ex.: `/opt/toolbox45/.env`):
+
+```
+MICROSOFT_CLIENT_ID=<application (client) id>
+MICROSOFT_CLIENT_SECRET=<client secret value>
+MICROSOFT_REDIRECT_URI=https://toolbox45.seg45.com.br/api/auth/microsoft/callback
+# opcional — só se quiser restringir o login a uma organização específica em vez de
+# "common" (qualquer conta Microsoft, pessoal ou de qualquer organização):
+# MICROSOFT_TENANT_ID=<tenant id ou domínio da organização>
+```
+
+7. Recrie o container (`docker compose up -d --build`) — o botão "Sign in with
+   Microsoft" aparece automaticamente em `login.html` assim que as variáveis
+   obrigatórias estiverem presentes (`GET /api/auth/providers`).
+
 ## Compartilhamento entre usuários (handles + shares)
 
 Pastas e comandos de cada usuário são **privados por padrão** — ninguém mais vê o que
