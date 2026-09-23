@@ -15,7 +15,10 @@
    (diferente do logo antigo). Ver comentário em index.html. */
 .hdr-logo { gap: 9px; }
 .hdr-logo-img { width: 28px; height: 28px; display: block; }
-.hdr-logo-txt { font-size: 16px; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
+/* Pedido do usuário: aumentar um pouco a fonte (16px -> 18px) e trocar a
+   cor de --text pro verde do tema (var(--green) — escuro no tema claro,
+   #15803D; um verde claro no escuro, #4ADE80, ver css/theme.css). */
+.hdr-logo-txt { font-size: 18px; font-weight: 800; letter-spacing: -.3px; color: var(--green); }
 .hdr-gap { flex: 1; }
 /* Usuário identificado (login do Windows via NTLM, ou sessão local — ver
    js/auth.js) — mostrado à esquerda do botão de Configurações. É também o
