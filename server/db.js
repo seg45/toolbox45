@@ -73,6 +73,7 @@ async function initDb({ retries = 30, delayMs = 2000 } = {}) {
       await seedDefaultEnvironments();
       await seedDefaultParameters();
       await seedDefaultPrompts();
+      await seedDefaultExports();
       return;
     } catch (err) {
       if (attempt === retries) throw err;
