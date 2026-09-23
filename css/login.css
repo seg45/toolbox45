@@ -18,14 +18,16 @@
 /* Logo oficial (mesmo arquivo .png do header, ver .hdr-logo/.hdr-logo-img
    em css/layout.css) — regras duplicadas aqui (em vez de carregar
    layout.css inteiro, que traz a grade do app/sidebar que esta página não
-   usa). O mark (ícone) tem cor única (--teal), não depende de tema. O
-   texto "Toolbox45" usa a cor de marca #105B63, mesmo valor de
-   .hdr-logo-txt no header (ver css/layout.css) — pedido do usuário:
-   "ajuste o logo da tela de login" (com o header como referência).
+   usa). O mark (ícone) tem cor única (--teal), não depende de tema.
+   O texto "Toolbox45" usava a cor de marca #105B63 (mesmo valor de
+   .hdr-logo-txt no header) — trocado pra var(--teal) a pedido do usuário:
+   "deixe o nome Toolbox da mesma cor do botão login" (o botão "Log in"
+   usa .btn-primary, que é var(--teal) — ver css/components.css).
    Sem variante para tema escuro (diferente de .hdr-logo-txt): a tela de
    login é sempre clara agora (pedido do usuário: "a tela de login não deve
-   ter modo escuro" — ver data-theme="light" fixo em login.html), então
-   #105B63 (pensado pro fundo claro) é a única cor que este texto usa. */
+   ter modo escuro" — ver data-theme="light" fixo em login.html), mas
+   --teal não muda entre temas (ver comentário em css/theme.css), então não
+   precisa de override pra light aqui. */
 /* Pedido do usuário: "centralize o nome e deixe o logo mais próximo do
    nome" e depois "centralize pelo nome Toolbox45 e deixe o logo a
    esquerda". As duas coisas juntas não dá pra fazer só com flex+margin:auto
@@ -44,7 +46,7 @@
    grid-column:2 explícito (não confia só na ordem de auto-placement do
    grid) — é a coluna do meio que fica de verdade centralizada no card, ver
    comentário de .login-brand acima. */
-.login-logo-txt { grid-column: 2; font-size: 30px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
+.login-logo-txt { grid-column: 2; font-size: 30px; font-weight: 800; letter-spacing: -.3px; color: var(--teal); }
 .login-card .set-group { margin-top: 14px; }
 .login-submit-btn { margin-top: 16px; width: 100%; text-align: center; padding: 9px 14px; }
 .login-error { text-align: center; }
