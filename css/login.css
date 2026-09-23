@@ -37,9 +37,8 @@
    card porque as colunas 1 e 3 são iguais (1fr cada), e o ícone mora
    colado na borda direita da coluna 1 (justify-self:end), logo à esquerda
    do texto. Coluna 3 fica vazia só pra balancear — sem ela o texto não
-   ficaria centralizado de verdade, só o ícone+texto juntos. gap 8px entre
-   ícone e nome, mesma proporção do header (ver .hdr-logo/6px em
-   css/layout.css, ícone lá é menor). */
+   ficaria centralizado de verdade, só o ícone+texto juntos. gap 4px entre
+   ícone e nome — pedido do usuário: "aproxime o logo do nome" (era 8px). */
 .login-brand { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 4px; width: 100%; margin: 14px 0 6px; }
 .login-logo-img { grid-column: 1; justify-self: end; width: 42px; height: 42px; display: block; }
 /* Pedido do usuário: "deixe o nome maior na tela de login" — 23px -> 30px.
