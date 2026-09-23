@@ -22,7 +22,10 @@
    (mesmo pedido já feito na tela de login, ver .login-brand em
    css/login.css) — 6px -> 4px. */
 .hdr-logo { gap: 4px; }
-.hdr-logo-img { width: 32px; height: 32px; display: block; }
+/* object-fit:contain — o logo customizado (Settings -> System -> Logo,
+   ver js/logo-settings.js) pode não ser quadrado; sem isso uma imagem
+   retangular ficaria esticada dentro da caixa fixa de 32x32. */
+.hdr-logo-img { width: 32px; height: 32px; object-fit: contain; display: block; }
 /* Pedido do usuário: "no modo escuro utilize o logo branco" — o mark teal
    sólido (logo-toolbox45.png) ficava pouco visível em cima do fundo escuro
    do tema dark. Dois <img> (mesmo tamanho, mesma posição — só um visível

@@ -28,24 +28,27 @@
    ter modo escuro" — ver data-theme="light" fixo em login.html), mas
    --teal não muda entre temas (ver comentário em css/theme.css), então não
    precisa de override pra light aqui. */
-/* Pedido do usuário: "centralize o nome e deixe o logo mais próximo do
-   nome" e depois "centralize pelo nome Toolbox45 e deixe o logo a
-   esquerda". As duas coisas juntas não dá pra fazer só com flex+margin:auto
-   (isso centraliza o BLOCO ícone+texto inteiro, então o texto em si fica
-   puxado pra direita do centro — ver captura de tela) — precisa de um grid
-   de 3 colunas: a coluna do meio (o texto) fica exatamente no centro do
-   card porque as colunas 1 e 3 são iguais (1fr cada), e o ícone mora
-   colado na borda direita da coluna 1 (justify-self:end), logo à esquerda
-   do texto. Coluna 3 fica vazia só pra balancear — sem ela o texto não
-   ficaria centralizado de verdade, só o ícone+texto juntos. gap 4px entre
-   ícone e nome — pedido do usuário: "aproxime o logo do nome" (era 8px). */
-.login-brand { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 4px; width: 100%; margin: 14px 0 6px; }
-.login-logo-img { grid-column: 1; justify-self: end; width: 42px; height: 42px; display: block; }
-/* Pedido do usuário: "deixe o nome maior na tela de login" — 23px -> 30px.
-   grid-column:2 explícito (não confia só na ordem de auto-placement do
-   grid) — é a coluna do meio que fica de verdade centralizada no card, ver
-   comentário de .login-brand acima. */
-.login-logo-txt { grid-column: 2; font-size: 30px; font-weight: 800; letter-spacing: -.3px; color: var(--teal); }
+/* Histórico: "centralize o nome e deixe o logo mais próximo do nome" ->
+   depois "centralize pelo nome Toolbox45 e deixe o logo a esquerda" (virou
+   um grid de 3 colunas que centralizava só o TEXTO, com o ícone
+   "pendurado" à esquerda dele, largura própria sem afetar o centro).
+   Voltou pra flex simples (ícone+texto como UM bloco só, centralizado
+   inteiro) a pedido do usuário: "agora precisa centralizar para quando
+   trocar o logo ficar alinhado" — com o novo recurso de trocar o logo
+   (Settings -> System -> Logo, ver js/logo-settings.js), uma imagem mais
+   larga ou mais estreita que a atual deslocaria o texto (que ficava fixo
+   no centro do card) pra longe do ícone, ficando desbalanceado; com
+   flex+justify-content:center o par ícone+texto sempre viaja junto e
+   continua centralizado como grupo, não importa a largura do logo
+   escolhido. gap 4px entre ícone e nome — pedido do usuário: "aproxime o
+   logo do nome" (era 8px), mantido aqui. */
+.login-brand { display: flex; justify-content: center; align-items: center; gap: 4px; width: 100%; margin: 14px 0 6px; }
+/* object-fit:contain — o logo customizado (Settings -> System -> Logo)
+   pode não ser quadrado; sem isso uma imagem retangular ficaria esticada
+   dentro da caixa fixa de 42x42. */
+.login-logo-img { width: 42px; height: 42px; object-fit: contain; display: block; }
+/* Pedido do usuário: "deixe o nome maior na tela de login" — 23px -> 30px. */
+.login-logo-txt { font-size: 30px; font-weight: 800; letter-spacing: -.3px; color: var(--teal); }
 .login-card .set-group { margin-top: 14px; }
 .login-submit-btn { margin-top: 16px; width: 100%; text-align: center; padding: 9px 14px; }
 .login-error { text-align: center; }
