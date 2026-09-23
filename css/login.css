@@ -55,6 +55,10 @@
   width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 9px 14px;
 }
+/* Espaço entre os botões de provedor quando mais de um está visível
+   (Google + Microsoft, ver login.html) — seletor de irmão adjacente, não
+   depende de qual dos dois vem primeiro. */
+.login-google-btn + .login-google-btn { margin-top: 10px; }
 /* Link "Don't have an account? Register" / "Already have an account? Log
    in" / "← Back to log in" / e-mail de suporte — pedido do usuário: "na
    tela de login criar a opção para registro" + "poderá enviar email para
