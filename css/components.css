@@ -554,7 +554,7 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 
 
 
-/* Rodapé "Desenvolvido por SEG45" da sidebar (ver index.html, logo depois
+/* Rodapé "Developed by SEG45" da sidebar (ver index.html, logo depois
    do bloco de gerenciar catálogos) — mesma posição/estrutura que o antigo
    crédito "Developed by CG One" (removido no rebrand p/ Toolbox45), agora
    só com texto (sem logo/mark próprios da SEG45 no projeto — ver comentário
@@ -565,7 +565,10 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
   display: flex; text-decoration: none; color: inherit; transition: opacity .12s;
 }
 .sb-credit:hover { opacity: .8; }
-.sb-credit-txt { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: .3px; }
+/* Pedido do usuário: "em inglês com a cor da fonte verde no mesmo tom do
+   nome" — mesma cor fixa #105B63 do nome "Toolbox45" no header
+   (.hdr-logo-txt, css/layout.css), no lugar do var(--muted) padrão. */
+.sb-credit-txt { font-size: 10px; font-weight: 700; color: #105B63; letter-spacing: .3px; }
 
 
 /* ─── DROPDOWN (Versão / Ambiente / Tipo-Assunto) ─── */
