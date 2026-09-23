@@ -18,8 +18,10 @@
    perto do texto) e o mark 28px -> 32px (.hdr tem height:48px FIXO, ver
    acima, então crescer o mark aqui não muda a altura da linha do header —
    só sobra menos espaço vazio acima/abaixo dele, sempre centralizado por
-   align-items:center). */
-.hdr-logo { gap: 6px; }
+   align-items:center). Depois "ajuste na tela principal tb... distancia"
+   (mesmo pedido já feito na tela de login, ver .login-brand em
+   css/login.css) — 6px -> 4px. */
+.hdr-logo { gap: 4px; }
 .hdr-logo-img { width: 32px; height: 32px; display: block; }
 /* Pedido do usuário: "no modo escuro utilize o logo branco" — o mark teal
    sólido (logo-toolbox45.png) ficava pouco visível em cima do fundo escuro
@@ -47,8 +49,14 @@
    branco no modo escuro igual a cor do logo" — branco puro, a mesma cor do
    mark ao lado (img/logo-toolbox45-white.png, ver acima), no lugar do
    #2DD4BF intermediário testado antes. Mesmo tratamento em .sb-credit-txt
-   logo abaixo ("Developed by SEG45"). */
-.hdr-logo-txt { font-size: 22px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
+   logo abaixo ("Developed by SEG45").
+   #105B63 no modo claro foi trocado depois por var(--teal) — pedido do
+   usuário: "ajuste na tela principal tb. cor e distancia" (mesmo ajuste já
+   feito no nome da tela de login, ver .login-logo-txt em css/login.css,
+   pra bater com a cor do botão "Log in"). O branco fixo do modo escuro
+   continua como está (não é var(--teal), que muda com o accent picker —
+   ver comentário acima: aqui é intencionalmente uma cor fixa). */
+.hdr-logo-txt { font-size: 22px; font-weight: 800; letter-spacing: -.3px; color: var(--teal); }
 [data-theme="dark"] .hdr-logo-txt { color: #FFFFFF; }
 .hdr-gap { flex: 1; }
 /* Usuário identificado (login do Windows via NTLM, ou sessão local — ver
