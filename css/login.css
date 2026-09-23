@@ -28,7 +28,8 @@
    #105B63 (pensado pro fundo claro) é a única cor que este texto usa. */
 .login-brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 14px; margin-bottom: 6px; }
 .login-logo-img { width: 42px; height: 42px; display: block; }
-.login-logo-txt { font-size: 23px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
+/* Pedido do usuário: "deixe o nome maior na tela de login" — 23px -> 30px. */
+.login-logo-txt { font-size: 30px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
 .login-card .set-group { margin-top: 14px; }
 .login-submit-btn { margin-top: 16px; width: 100%; text-align: center; padding: 9px 14px; }
 .login-error { text-align: center; }
