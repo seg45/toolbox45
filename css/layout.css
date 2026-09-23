@@ -21,6 +21,17 @@
    align-items:center). */
 .hdr-logo { gap: 6px; }
 .hdr-logo-img { width: 32px; height: 32px; display: block; }
+/* Pedido do usuário: "no modo escuro utilize o logo branco" — o mark teal
+   sólido (logo-toolbox45.png) ficava pouco visível em cima do fundo escuro
+   do tema dark. Dois <img> (mesmo tamanho, mesma posição — só um visível
+   por vez via display:none, nunca os dois ocupando espaço no flex ao mesmo
+   tempo) trocados pelo atributo [data-theme] (sempre setado explicitamente
+   como 'dark'/'light', ver applyTheme() em js/theme.js) — mesmo mecanismo
+   já usado antes pro rodapé "Developed by CG One" (.for-dark/.for-light,
+   removido no rebrand, mas o padrão era esse). */
+.hdr-logo-img.for-dark { display: none; }
+[data-theme="dark"] .hdr-logo-img.for-dark { display: block; }
+[data-theme="dark"] .hdr-logo-img.for-light { display: none; }
 /* Pedido do usuário: aumentar a fonte (16px -> 18px -> 20px -> 22px, em
    pedidos separados) e trocar a cor de --text por um verde específico
    escolhido por ele (#105B63, via color picker) — fixo, igual em

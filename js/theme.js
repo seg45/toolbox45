@@ -16,6 +16,11 @@ function toggleModalTheme() {
   const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   applyTheme(next);
   syncThemeToggleUI(next);
+  // "white" só existe como opção no tema escuro (ver comentário no preset
+  // white, mais abaixo) — se o usuário troca pra claro com ele selecionado,
+  // volta sozinho pro padrão, senão a UI ficaria com o destaque invisível
+  // (branco em cima do fundo branco do tema claro).
+  if (next === 'light') _resetAccentIfWhite();
 }
 (function initTheme() {
   let saved = 'light';
@@ -44,6 +49,14 @@ const ACCENT_PRESETS = {
   purple: { teal: '#C084FC', tealBg: 'rgba(192,132,252,.08)' },
   orange: { teal: '#FB923C', tealBg: 'rgba(251,146,60,.08)' },
   red:    { teal: '#F87171', tealBg: 'rgba(248,113,113,.08)' },
+  // Pedido do usuário: "em preferência do usuário inclua a cor branca quando
+  // o modo escuro for habilitado" — branco só faz sentido em cima do fundo
+  // escuro do tema dark (no claro ficaria invisível: destaque branco em
+  // cima de fundo branco). O swatch (#accentSwatchWhite, index.html) só
+  // aparece com [data-theme="dark"] (ver css/components.css), e
+  // _resetAccentIfWhite() abaixo garante que a troca pra "white" nunca
+  // sobrevive a uma troca de volta pro tema claro.
+  white:  { teal: '#FFFFFF', tealBg: 'rgba(255,255,255,.12)' },
 };
 const DEFAULT_ACCENT = 'teal';
 function applyAccentColor(key) {
@@ -63,10 +76,20 @@ function setAccentColor(key) {
   syncAccentColorUI(key);
   try { localStorage.setItem('cpa-accent', key); } catch (e) {}
 }
+// Ver comentário no preset "white" acima — chamado ao trocar pro tema claro
+// (toggleModalTheme) e no boot (initAccentColor), pros dois caminhos em que
+// o tema pode passar a ser "light" com "white" ainda salvo.
+function _resetAccentIfWhite() {
+  let accent = null;
+  try { accent = localStorage.getItem('cpa-accent'); } catch (e) {}
+  if (accent === 'white') setAccentColor(DEFAULT_ACCENT);
+}
 (function initAccentColor() {
   let saved = null;
   try { saved = localStorage.getItem('cpa-accent'); } catch (e) {}
   applyAccentColor(saved || DEFAULT_ACCENT);
   syncAccentColorUI(saved || DEFAULT_ACCENT);
+  const theme = document.documentElement.getAttribute('data-theme'); // já setado por initTheme() acima
+  if (theme === 'light') _resetAccentIfWhite();
 })();
 

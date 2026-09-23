@@ -37,12 +37,18 @@
 
 <header class="hdr">
   <div class="hdr-logo" onclick="goHome()" title="Go to home page">
-    <!-- Logo Toolbox45: mark losangular + "45" (img/logo-toolbox45.png,
-         PNG com fundo transparente, cor sólida --teal #1695A3) ao lado do
-         nome em texto (não é mais um bitmap único como no logo antigo) —
-         mesma cor em claro/escuro, então não precisa mais de troca via
-         [data-theme] (ver css/layout.css). -->
-    <img class="hdr-logo-img" src="img/logo-toolbox45.png?v=1" alt="Toolbox45">
+    <!-- Logo Toolbox45: mark losangular + "45" ao lado do nome em texto
+         (não é mais um bitmap único como no logo antigo). Pedido do
+         usuário: "no modo escuro utilize o logo branco" — o mark teal sólido
+         (img/logo-toolbox45.png) some/fica pouco visível em cima do fundo
+         escuro do tema dark, então ganhou uma segunda versão, branca
+         (img/logo-toolbox45-white.png — mesmo arquivo, só recolorido pra
+         branco, alpha preservado). Troca via [data-theme] (ver
+         css/layout.css: .hdr-logo-img.for-dark/.for-light), mesmo padrão já
+         usado antes pro rodapé "Developed by CG One" (removido no rebrand,
+         mas o mecanismo era esse). -->
+    <img class="hdr-logo-img for-dark" src="img/logo-toolbox45-white.png?v=1" alt="Toolbox45">
+    <img class="hdr-logo-img for-light" src="img/logo-toolbox45.png?v=1" alt="Toolbox45">
     <span class="hdr-logo-txt">Toolbox45</span>
   </div>
   <div class="hdr-gap"></div>
@@ -611,6 +617,15 @@
               <button type="button" class="accent-swatch" data-accent="purple" style="background:#C084FC" onclick="setAccentColor('purple')" title="Purple"></button>
               <button type="button" class="accent-swatch" data-accent="orange" style="background:#FB923C" onclick="setAccentColor('orange')" title="Orange"></button>
               <button type="button" class="accent-swatch" data-accent="red" style="background:#F87171" onclick="setAccentColor('red')" title="Red"></button>
+              <!-- Pedido do usuário: "em preferência do usuário inclua a cor
+                   branca quando o modo escuro for habilitado" — branco só
+                   funciona como destaque em cima do fundo ESCURO (no claro
+                   fica invisível), então o swatch só aparece com
+                   [data-theme="dark"] (ver css/components.css); trocar de
+                   volta pro tema claro com "white" selecionado volta sozinho
+                   pro padrão (teal) — ver _resetAccentIfWhite() em
+                   js/theme.js. -->
+              <button type="button" class="accent-swatch" id="accentSwatchWhite" data-accent="white" style="background:#FFFFFF" onclick="setAccentColor('white')" title="White (dark mode only)"></button>
             </div>
           </div>
         </div>

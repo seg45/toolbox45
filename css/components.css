@@ -125,6 +125,11 @@
 }
 .accent-swatch:hover { transform: scale(1.15); }
 .accent-swatch.on { border-color: var(--text); }
+/* Swatch "white" (#accentSwatchWhite, index.html) — só faz sentido em cima
+   do fundo escuro do tema dark (ver comentário em js/theme.js), então some
+   por completo no tema claro. */
+#accentSwatchWhite { display: none; }
+[data-theme="dark"] #accentSwatchWhite { display: inline-block; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg-btn {
   padding: 6px 11px; border-radius: 6px; border: 1px solid var(--bdr);
