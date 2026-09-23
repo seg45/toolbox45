@@ -9,11 +9,16 @@
 // prioridade:
 //   1) Header `X-API-Key` — acesso programático externo (integrações,
 //      scripts). Ver api_keys em schema.sql e a seção "API keys" abaixo.
-//      Quando presente, o handshake NTLM é pulado inteiramente (um cliente
-//      HTTP simples como curl não sabe negociar NTLM).
-//   2) NTLM — login do Windows de quem está no navegador (silencioso, sem
-//      prompt de senha, desde que o site esteja na zona "Intranet local").
-//   3) Fallback dev: header x-dev-user / query __user / usuário do SO.
+//   2) Sessão (cookie `tb45_session`) — login local (usuário/senha) OU
+//      login com Google (OAuth) — ver "Login local e usuários" e "Login com
+//      Google" abaixo. `users.auth_provider` distingue os dois, mas ambos
+//      usam a MESMA sessão/cookie.
+// Sem API key nem sessão válida, a chamada é recusada (401 unauthorized) —
+// pedido do usuário: "deixar somente autenticação local e com Google" (o
+// login do Windows/NTLM que existia aqui foi removido; ver o middleware de
+// autenticação obrigatória logo abaixo do de sessão). Rotas públicas
+// (health check, as próprias telas/fluxos de login) estão explicitamente
+// isentas — ver REQUIRE_AUTH_PUBLIC_ROUTES abaixo.
 //
 // Regra de PERMISSÃO (atualizada — pedido do usuário):
 //   - EDITAR (PUT /api/commands/:id): qualquer usuário autenticado pode
@@ -58,8 +63,8 @@ app.get('/api/health', (req, res) => res.json({ ok: true }));
 
 // ════════════════════════════════════════════════
 // API keys — autenticação para acesso programático externo (ver api_keys em
-// schema.sql e a seção CRUD mais abaixo). Verificado ANTES do NTLM: uma
-// chamada com X-API-Key nunca deve travar num handshake NTLM.
+// schema.sql e a seção CRUD mais abaixo). Verificado ANTES de qualquer
+// sessão — uma chamada com X-API-Key nunca depende de cookie/login.
 // ════════════════════════════════════════════════
 function hashApiKey(rawKey) {
   return crypto.createHash('sha256').update(rawKey).digest('hex');
@@ -101,13 +106,10 @@ app.use(async (req, res, next) => {
 });
 
 // ════════════════════════════════════════════════
-// Login local (usuário/senha) — sessão via cookie `tb45_session`, ver users/
-// sessions em schema.sql e server/auth.js. Verificado ANTES do NTLM, com a
-// MESMA prioridade que API key (se já autenticado, pula o handshake NTLM
-// inteiramente) — isso é o que permite "logout" do usuário identificado pelo
-// Windows e login com outra credencial, sem fechar o navegador: enquanto o
-// cookie de sessão local for válido, ele manda, independente do que o NTLM
-// diria sobre quem está logado no Windows.
+// Sessão (cookie `tb45_session`) — login local (usuário/senha) OU login com
+// Google; ver users/sessions em schema.sql e server/auth.js. Mesma tabela/
+// cookie para os dois — só `users.auth_provider` diz qual foi (ver login
+// com Google mais abaixo).
 // ════════════════════════════════════════════════
 const SESSION_COOKIE_NAME = 'tb45_session';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12h
@@ -157,35 +159,35 @@ app.use(async (req, res, next) => {
 });
 
 // ════════════════════════════════════════════════
-// NTLM (identificação do login do Windows, navegador) — pulado inteiramente
-// quando a chamada já veio autenticada por API key OU sessão local (acima).
-// Definir NTLM_DISABLED=1 desliga isso (útil para desenvolvimento fora de um
-// domínio Windows) — nesse caso aceita um header/query de teste ou cai para
-// o usuário do sistema operacional rodando o processo Node.
+// Login obrigatório — pedido do usuário: "deixar somente autenticação local
+// e com Google" (removeu o login do Windows/NTLM que existia aqui, e o
+// fallback dev x-dev-user/usuário do SO que valia quando ele estava
+// desligado). Sem isso, uma chamada sem API key nem sessão válida seria
+// identificada como um usuário "convidado" qualquer e tratada como
+// legítima — o próprio buraco que "somente local e Google" pede pra
+// fechar. `REQUIRE_AUTH_PUBLIC_ROUTES` é a única exceção: as rotas que
+// PRECISAM funcionar sem sessão (senão ninguém conseguiria logar) — health
+// check e o fluxo de login em si (local e Google). Tudo o mais exige
+// req.currentUser já resolvido pelos middlewares acima (API key ou sessão).
 // ════════════════════════════════════════════════
-const NTLM_DISABLED = process.env.NTLM_DISABLED === '1';
-if (!NTLM_DISABLED) {
-  const ntlm = require('express-ntlm');
-  const ntlmMiddleware = ntlm({
-    domain: process.env.NTLM_DOMAIN || undefined,
-    // domaincontroller não configurado de propósito: identifica o usuário pelo
-    // handshake NTLM do próprio Windows, sem validar contra o Active Directory —
-    // suficiente aqui, já que isto é só identificação/conveniência (favoritos,
-    // preferências), não uma barreira de segurança.
-  });
-  app.use((req, res, next) => {
-    if (req.currentUser) return next(); // já autenticado por API key ou sessão local acima
-    return ntlmMiddleware(req, res, next);
-  });
-}
+const REQUIRE_AUTH_PUBLIC_ROUTES = new Set([
+  'GET /api/health',
+  'POST /api/auth/login',
+  'POST /api/auth/logout',
+  'GET /api/auth/providers',
+  'GET /api/auth/google',
+  'GET /api/auth/google/callback',
+]);
+app.use((req, res, next) => {
+  if (req.currentUser) return next(); // já autenticado por API key ou sessão (acima)
+  if (REQUIRE_AUTH_PUBLIC_ROUTES.has(`${req.method} ${req.path}`)) return next();
+  res.status(401).json({ error: 'unauthorized', message: 'Login required' });
+});
 function getCurrentUsername(req) {
-  if (req.currentUser) return req.currentUser; // API key (ver middleware acima)
-  if (req.ntlm && req.ntlm.UserName) {
-    return req.ntlm.DomainName ? `${req.ntlm.DomainName}\\${req.ntlm.UserName}` : req.ntlm.UserName;
-  }
-  const devUser = req.headers['x-dev-user'] || req.query.__user;
-  if (devUser) return String(devUser);
-  try { return os.userInfo().username; } catch (e) { return 'guest'; }
+  // req.currentUser está SEMPRE resolvido aqui (API key ou sessão local/
+  // Google) — o middleware de login obrigatório acima já barrou (401)
+  // qualquer chamada que chegasse até uma rota de negócio sem isso.
+  return req.currentUser;
 }
 // ════════════════════════════════════════════════
 // AUDIT LOG — uma linha por criação/edição/exclusão feita por um usuário, em
@@ -262,31 +264,25 @@ function summarizeChangedFields(before, after, fieldLabels) {
   return changed.length ? `Changed: ${changed.join(', ')}` : null;
 }
 
-// sAMAccountName "puro" (sem DOMÍNIO\), usado como chave de busca no Active
-// Directory — o NTLM já entrega isso separado do domínio (req.ntlm.UserName).
-function getCurrentSamAccountName(req) {
-  if (req.apiKey) return req.currentUser; // não há AD a consultar para uma API key
-  if (req.ntlm && req.ntlm.UserName) return req.ntlm.UserName;
-  const devUser = req.headers['x-dev-user'] || req.query.__user;
-  if (devUser) return String(devUser).split('\\').pop();
-  try { return os.userInfo().username; } catch (e) { return 'guest'; }
-}
-
 // ════════════════════════════════════════════════
-// Permissões (users.role) — ver users/sessions em schema.sql. Contas NTLM
-// são provisionadas na primeira vez que são VISTAS (não no login, já que não
-// existe "login" NTLM de verdade) — sempre com role='user'; só um admin pode
-// promover alguém depois (Settings → System → Manage users). API keys
-// continuam com acesso total (bypass deste gate) — são um canal de
-// integração externa separado, já protegido pela posse da própria key, sem
-// mudança de comportamento em relação ao que já existia antes deste recurso.
+// Permissões (users.role) — ver users/sessions em schema.sql. Toda conta
+// nova (local, criada por um admin, ou Google, provisionada sozinha no
+// primeiro login — ver login com Google mais abaixo) começa com
+// role='user'; só um admin promove depois (Settings → System → Manage
+// users). API keys continuam com acesso total (bypass deste gate) — são um
+// canal de integração externa separado, já protegido pela posse da própria
+// key. Instalações antigas podem ainda ter contas com auth_provider='ntlm'
+// (do login do Windows, removido — ver histórico) listadas em Manage
+// users; um admin pode desabilitá-las/excluí-las quando não forem mais
+// necessárias.
 // ════════════════════════════════════════════════
 // Garante que TODO usuário tenha uma pasta "Favorites" desde o primeiro
 // momento (pedido do usuário: "definir como padrão que todos usuários
 // tenham as pastas Favoritos") — chamada logo após criar a linha em `users`
-// pela primeira vez, tanto pra contas NTLM (vistas pela 1ª vez em
-// getOrCreateUserRole abaixo) quanto pra contas locais (criadas por um admin
-// em POST /api/users). `ON CONFLICT (username, name) DO NOTHING` (mesma
+// pela primeira vez, tanto pra contas locais (criadas por um admin em
+// POST /api/users) quanto pra contas Google (auto-provisionadas no 1º
+// login — ver login com Google mais abaixo). `ON CONFLICT (username, name)
+// DO NOTHING` (mesma
 // constraint única já usada pela migração legada de favoritos, ver
 // server/db.js) torna isto seguro mesmo sob corrida entre abas/instâncias —
 // nunca duplica a pasta, e não falha se ela já existir (ex.: usuário que já
@@ -304,24 +300,16 @@ async function ensureDefaultFolder(username) {
   }
 }
 
-async function getOrCreateUserRole(username) {
-  const { rows } = await pool.query('SELECT role, disabled FROM users WHERE username = $1', [username]);
-  if (rows.length) return rows[0].disabled ? null : rows[0].role;
-  await pool.query(
-    'INSERT INTO users (username, role, is_local) VALUES ($1, $2, 0) ON CONFLICT (username) DO NOTHING',
-    [username, 'user']
-  );
-  await ensureDefaultFolder(username);
-  return 'user';
-}
-
 async function getCurrentRole(req) {
   // Ver api_keys.role em schema.sql — keys criadas antes deste campo existir
   // ficam com o DEFAULT 'admin' (mesmo acesso total de sempre); keys novas
   // escolhem 'admin' ou 'user' na criação (ver POST /api/api-keys abaixo).
   if (req.apiKey) return req.apiKey.role || 'admin';
-  if (req.userRole) return req.userRole; // já resolvido pelo middleware de sessão local
-  return getOrCreateUserRole(getCurrentUsername(req));
+  // Sempre já resolvido pelo middleware de sessão local/Google acima — o
+  // gate de login obrigatório (ver comentário lá) garante que uma rota de
+  // negócio só é alcançada com API key OU sessão válida, nunca sem
+  // nenhuma das duas.
+  return req.userRole || 'user';
 }
 
 async function requireAdmin(req, res, next) {
@@ -347,9 +335,9 @@ async function countEnabledAdmins(excludeUsername) {
 
 // ════════════════════════════════════════════════
 // Login/logout local (usuário/senha) — ver seção de cookie/sessão acima.
-// Qualquer usuário identificado (por Windows/NTLM ou já em sessão local)
-// pode fazer login com uma conta local diferente a qualquer momento — isso
-// simplesmente troca qual sessão está ativa nesta aba/navegador.
+// Quem já tem uma sessão ativa (local ou Google) pode fazer login com uma
+// conta local diferente a qualquer momento — isso simplesmente troca qual
+// sessão está ativa nesta aba/navegador.
 // ════════════════════════════════════════════════
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body || {};
@@ -395,8 +383,7 @@ app.post('/api/auth/logout', async (req, res) => {
 // getAuthMethod()). Sem restrição de domínio Google Workspace (decisão do
 // usuário) — qualquer conta Google pode tentar entrar; a primeira vez que um
 // e-mail aparece, uma conta é criada automaticamente com role 'user'
-// (decisão do usuário) — um admin promove depois em Manage users, igual a
-// uma conta NTLM vista pela primeira vez.
+// (decisão do usuário) — um admin promove depois em Manage users.
 //
 // Só usa `fetch`/`crypto` nativos do Node (sem SDK do Google) — mesma
 // filosofia de server/auth.js (evitar dependência nova/binário nativo na
@@ -512,8 +499,8 @@ app.get('/api/auth/google/callback', async (req, res) => {
       if (user.disabled) return failure('account_disabled');
     } else {
       // Primeira vez que este e-mail Google aparece — provisiona
-      // automaticamente com role 'user' (decisão do usuário), igual ao que
-      // getOrCreateUserRole() já faz para contas NTLM vistas pela 1ª vez.
+      // automaticamente com role 'user' (decisão do usuário); um admin
+      // promove depois em Manage users.
       await pool.query(
         `INSERT INTO users (username, role, is_local, created_by, auth_provider)
          VALUES ($1, 'user', 0, 'google-oauth', 'google')
@@ -537,59 +524,6 @@ app.get('/api/auth/google/callback', async (req, res) => {
     failure('internal_error');
   }
 });
-
-// ════════════════════════════════════════════════
-// UPN (User Principal Name, ex.: rsilva@empresa.com) via Active Directory
-// O NTLM só entrega DOMÍNIO\usuario (sAMAccountName) — o UPN de verdade exige uma
-// consulta LDAP ao Active Directory. Configuração via variáveis de ambiente:
-//   AD_DOMAIN_CONTROLLER  ex.: ldap://dc01.empresa.local  (obrigatório p/ habilitar)
-//   AD_BASE_DN            ex.: DC=empresa,DC=local        (obrigatório p/ habilitar)
-//   AD_BIND_DN            conta de serviço p/ autenticar a busca (opcional se o AD aceitar bind anônimo)
-//   AD_BIND_PASSWORD      senha da conta de serviço (opcional, junto com AD_BIND_DN)
-// Sem essas variáveis, a busca é simplesmente pulada e a UI cai no formato
-// DOMÍNIO\usuario (comportamento atual) — nunca trava a aplicação.
-// ════════════════════════════════════════════════
-const AD_DOMAIN_CONTROLLER = process.env.AD_DOMAIN_CONTROLLER || null;
-const AD_BASE_DN = process.env.AD_BASE_DN || null;
-const AD_BIND_DN = process.env.AD_BIND_DN || null;
-const AD_BIND_PASSWORD = process.env.AD_BIND_PASSWORD || '';
-const AD_ENABLED = !!(AD_DOMAIN_CONTROLLER && AD_BASE_DN);
-const UPN_CACHE_TTL_MS = 60 * 60 * 1000; // 1h — UPN quase nunca muda; evita bater no AD a cada requisição
-const _upnCache = new Map(); // sAMAccountName -> { upn, ts }
-
-// Escapa caracteres especiais de filtro LDAP (RFC 4515) antes de embutir o
-// sAMAccountName no filtro de busca.
-function escapeLdapFilterValue(v) {
-  return String(v).replace(/[\\*()\0]/g, c => '\\' + c.charCodeAt(0).toString(16).padStart(2, '0'));
-}
-
-async function lookupUpnFromAD(samAccountName) {
-  if (!AD_ENABLED || !samAccountName) return null;
-  const cached = _upnCache.get(samAccountName);
-  if (cached && (Date.now() - cached.ts) < UPN_CACHE_TTL_MS) return cached.upn;
-
-  let client;
-  try {
-    const { Client } = require('ldapts');
-    client = new Client({ url: AD_DOMAIN_CONTROLLER, timeout: 5000, connectTimeout: 3000 });
-    if (AD_BIND_DN) await client.bind(AD_BIND_DN, AD_BIND_PASSWORD);
-    const { searchEntries } = await client.search(AD_BASE_DN, {
-      scope: 'sub',
-      filter: `(sAMAccountName=${escapeLdapFilterValue(samAccountName)})`,
-      attributes: ['userPrincipalName'],
-    });
-    const entry = searchEntries[0];
-    const upn = (entry && entry.userPrincipalName) ? String(entry.userPrincipalName) : null;
-    _upnCache.set(samAccountName, { upn, ts: Date.now() });
-    return upn;
-  } catch (err) {
-    console.warn(`[AD] Falha ao buscar UPN de '${samAccountName}':`, err.message);
-    _upnCache.set(samAccountName, { upn: null, ts: Date.now() }); // não martela o AD de novo por 1h se estiver fora do ar
-    return null;
-  } finally {
-    if (client) { try { await client.unbind(); } catch (e) {} }
-  }
-}
 
 // ════════════════════════════════════════════════
 // Helpers de leitura de comandos
@@ -857,35 +791,25 @@ app.get('/api/commands/:id', async (req, res) => {
 });
 
 // `authMethod` distingue como esta requisição foi identificada — usado pela
-// página de login (login.html/js/login.js) pra saber se o botão "Continue
-// with Windows authentication" realmente funcionou: 'ntlm' só quando o
-// handshake NTLM de verdade aconteceu (req.ntlm.UserName preenchido pelo
-// middleware express-ntlm). Antes desta função existir, tudo que não fosse
-// api_key/local caía em 'ntlm' por padrão — inclusive o fallback dev
-// (x-dev-user/__user/usuário do SO, usado quando NTLM_DISABLED=1 ou roda
-// fora de domínio Windows), o que fazia login.html achar que a autenticação
-// Windows tinha funcionado quando na verdade só caiu no fallback. Não muda
-// getCurrentUsername() nem nenhuma outra regra de identificação/permissão —
-// só refina o que /api/me REPORTA sobre o método usado.
+// página de login (login.html/js/login.js) e pelo header (js/auth.js) pra
+// saber se a sessão atual é local ou Google. Sob o gate de login
+// obrigatório (ver comentário acima), uma requisição só chega até aqui com
+// API key OU sessão válida — nunca "anônima".
 function getAuthMethod(req) {
   if (req.apiKey) return 'api_key';
-  if (req.authMethod === 'local' || req.authMethod === 'google') return req.authMethod;
-  if (req.ntlm && req.ntlm.UserName) return 'ntlm';
-  return 'anonymous';
+  return req.authMethod === 'google' ? 'google' : 'local';
 }
 
 // ════════════════════════════════════════════════
-// GET /api/me — usuário identificado (login do Windows via NTLM, API key, ou fallback dev)
+// GET /api/me — usuário identificado (sessão local/Google, ou API key)
 // ════════════════════════════════════════════════
 app.get('/api/me', async (req, res) => {
   const username = getCurrentUsername(req);
-  let upn = null;
-  try { upn = await lookupUpnFromAD(getCurrentSamAccountName(req)); } catch (e) { /* já logado em lookupUpnFromAD */ }
   let role = 'admin';
   try { role = await getCurrentRole(req); } catch (e) { console.error('getCurrentRole failed:', e); }
   res.json({
     username,
-    upn: upn || username,
+    upn: username, // mantido por compatibilidade com o front-end (js/user-sync.js) — sem NTLM/AD, username já é o identificador "de verdade" (e-mail, no caso do Google)
     role,
     isAdmin: role === 'admin',
     authMethod: getAuthMethod(req),
@@ -1999,7 +1923,7 @@ app.get('/api/api-keys', requireAdmin, async (req, res) => {
   }
 });
 
-// Mesmo modelo de permissões (admin|user) dos usuários locais/NTLM — ver
+// Mesmo modelo de permissões (admin|user) dos usuários locais/Google — ver
 // users.role em schema.sql e ADMIN_ROLES abaixo. Padrão 'user' (menor
 // privilégio) quando o campo não é enviado.
 const API_KEY_ROLES = ['admin', 'user'];
@@ -2078,10 +2002,12 @@ app.delete('/api/api-keys/:id', requireAdmin, async (req, res) => {
 
 // ════════════════════════════════════════════════
 // Usuários e permissões (Settings → System → Manage users) — ver users em
-// schema.sql. Só admin acessa (requireAdmin abaixo). Contas NTLM aparecem
-// aqui assim que forem vistas pela primeira vez (getOrCreateUserRole) — um
-// admin pode promovê-las, mas não pode dar/trocar senha nelas (só contas
-// locais, is_local=1, têm senha). Nunca devolve password_hash.
+// schema.sql. Só admin acessa (requireAdmin abaixo). Contas Google aparecem
+// aqui assim que forem vistas pela primeira vez (login com Google, mais
+// abaixo) — um admin pode promovê-las, mas não pode dar/trocar senha nelas
+// (só contas locais, is_local=1, têm senha). Instalações antigas ainda
+// podem ter contas auth_provider='ntlm' do login do Windows (removido) —
+// um admin pode desabilitá-las/excluí-las. Nunca devolve password_hash.
 // ════════════════════════════════════════════════
 const USERS_PUBLIC_COLUMNS = 'username, role, is_local, disabled, created_at, created_by, auth_provider';
 

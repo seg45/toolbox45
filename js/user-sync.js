@@ -1,9 +1,9 @@
 // ════════════════════════════════════════════════
 // SINCRONIZAÇÃO POR USUÁRIO (multiusuário)
-// Identifica o usuário atual (login do Windows, via NTLM no servidor — ver
-// server/index.js) e sincroniza suas preferências (tema, configurações,
-// históricos) com o servidor, para que a mesma pessoa tenha os mesmos dados em
-// qualquer navegador/máquina onde acesse a aplicação.
+// Identifica o usuário atual (sessão local ou Google — ver server/index.js)
+// e sincroniza suas preferências (tema, configurações, históricos) com o
+// servidor, para que a mesma pessoa tenha os mesmos dados em qualquer
+// navegador/máquina onde acesse a aplicação.
 //
 // Estratégia: localStorage continua sendo a fonte "instantânea" usada por
 // theme.js/settings.js/query-bar.js (evita a tela piscar enquanto a rede não
@@ -117,41 +117,37 @@ async function reapplyAfterUserSync() {
 // (initDb() tenta reconectar ao Postgres por até ~60s). Uma única
 // retentativa aqui, com um pequeno atraso, cobre esse caso sem precisar de
 // reload manual da página.
-// Estende a rede de segurança acima: além de repetir em caso de erro de
-// rede/HTTP (502/503 pós-rebuild, comentário original), agora TAMBÉM repete
-// quando a resposta vem OK (200) mas com authMethod==='anonymous' — bug
-// reportado: "continuo com problema de exibição do menu de admin. tenho que
-// ficar atualizando a página várias vezes para aparecer" (usuário admin
-// LOCAL, ou seja, não é o caso já conhecido de instabilidade do NTLM atrás
-// do proxy). Uma resposta "anonymous" bem-sucedida não lança exceção, então
-// sem isto o loop acima aceitava esse resultado de primeira e nunca tentava
-// de novo — se essa 1ª leitura pegar a sessão local ainda não plenamente
-// reconhecida (mesma janela de corrida que js/login.js agora também cobre
-// antes de navegar pra cá), o usuário ficava com o menu de admin faltando
-// pelo resto daquele carregamento de página, só resolvendo com F5 manual
-// (uma nova leitura de /api/me). Um usuário DE FATO deslogado só recebe
-// 'anonymous' consistentemente em todas as tentativas — o pior caso pra ele
-// é um atraso extra de ~1.5s antes do gate de login (index.html) atuar.
+//
+// (Havia aqui também um retry específico para authMethod==='anonymous',
+// ligado à instabilidade conhecida do login do Windows/NTLM atrás do proxy
+// reverso — removido junto com o NTLM: GET /api/me nunca mais devolve
+// 'anonymous' com 200, só 401, tratado à parte abaixo.)
 async function fetchMeWithRetry() {
-  const MAX_ATTEMPTS = 4;
-  let lastAnonymous = null;
+  const MAX_ATTEMPTS = 2;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       const meRes = await fetch('/api/me');
-      if (!meRes.ok) throw new Error(`/api/me respondeu ${meRes.status}`);
-      const data = await meRes.json();
-      if (data.authMethod === 'anonymous' && attempt < MAX_ATTEMPTS) {
-        lastAnonymous = data;
-        await new Promise(r => setTimeout(r, 400));
-        continue;
+      if (meRes.status === 401) {
+        // Sessão inválida/expirada no servidor (cookie tb45_session vencido
+        // ou nunca existiu) mas a marca 'cpa-authenticated' ainda estava no
+        // localStorage — ver LOGIN_FLAG_KEY em js/auth.js/js/login.js.
+        // GET /api/me agora EXIGE sessão local ou Google (removido o login
+        // do Windows/NTLM que antes sempre identificava "alguém" mesmo sem
+        // login algum — ver o gate de login obrigatório em
+        // server/index.js) — trata isso como "precisa logar de novo", não
+        // como erro transitório: limpa a marca e manda direto pra
+        // login.html, sem gastar a outra tentativa/retry abaixo.
+        try { localStorage.removeItem('cpa-authenticated'); } catch (e) { /* ver comentário equivalente no gate de index.html */ }
+        location.replace('login.html');
+        return new Promise(() => {}); // nunca resolve — a navegação acima já está em andamento
       }
-      return data;
+      if (!meRes.ok) throw new Error(`/api/me respondeu ${meRes.status}`);
+      return await meRes.json();
     } catch (e) {
       if (attempt === MAX_ATTEMPTS) throw e;
       await new Promise(r => setTimeout(r, 1200));
     }
   }
-  return lastAnonymous; // esgotou as tentativas ainda "anonymous" — resultado final genuíno
 }
 // Raiz do bug "continuo com problema de exibição do menu de admin. tenho
 // que ficar atualizando a página várias vezes para aparecer": confirmado

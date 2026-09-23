@@ -28,49 +28,31 @@ backend waits for `toolbox45-db` to become healthy before applying the schema.
 ## API keys (programmatic access)
 
 External scripts/integrations can call the API by sending a `X-API-Key` header — this skips
-NTLM entirely and is authenticated against the `api_keys` table (hash only; the raw key is
-shown once, at creation time). Manage keys in the app under **Settings → System → API
-access**, or directly via `GET/POST /api/api-keys` and `DELETE /api/api-keys/:id`.
+the session/login gate entirely and is authenticated against the `api_keys` table (hash
+only; the raw key is shown once, at creation time). Manage keys in the app under
+**Settings → System → API access**, or directly via `GET/POST /api/api-keys` and
+`DELETE /api/api-keys/:id`.
 
-## Multiusuário (identificação do usuário Windows)
+## Multiusuário (login obrigatório)
 
 Este servidor é pensado para rodar em UMA máquina central que toda a equipe acessa pelo
-navegador (ex.: `http://nome-do-servidor:3000`). Cada pessoa é identificada pelo próprio
-login do Windows via NTLM (pacote `express-ntlm`), sem prompt de senha — funciona de forma
-transparente quando o site está na zona "Intranet local" do navegador (padrão em máquinas
-de domínio Windows). Isso possibilita favoritos, tema, idioma e históricos por usuário
-(tabelas `user_favorites`/`user_data`), sem precisar de tela de login própria.
+navegador (ex.: `http://nome-do-servidor:3000`). Cada pessoa loga com uma conta local
+(usuário/senha) ou com a própria conta Google (ver seção abaixo) — não existe mais
+identificação automática por login do Windows (NTLM, removido a pedido do usuário:
+"deixar somente autenticação local e com Google") nem um fallback anônimo/dev. Toda
+chamada à API exige sessão (local ou Google) ou API key — sem uma das duas, `401
+unauthorized` (ver o gate de login obrigatório em `server/index.js`). Isso possibilita
+favoritos, tema, idioma e históricos por usuário, sem depender de domínio Windows.
 
-- Em produção, nada precisa ser configurado além de rodar `npm start` numa máquina no
-  domínio — o handshake NTLM já resolve o usuário sozinho.
-- Para desenvolvimento/teste FORA de um domínio Windows (ex.: sua própria máquina, ou
-  este ambiente), defina `NTLM_DISABLED=1` antes de rodar o servidor — nesse modo, o
-  usuário é lido de um header `x-dev-user` (ou `?__user=` na URL), com fallback para o
-  usuário do sistema operacional rodando o Node.
-- Variável opcional `NTLM_DOMAIN` define o domínio padrão usado quando o cliente NTLM não
-  informar um explicitamente (raro).
-
-```
-# desenvolvimento, sem domínio Windows disponível:
-NTLM_DISABLED=1 npm start
-```
-
-### UPN via Active Directory (opcional)
-
-O NTLM só entrega `DOMÍNIO\usuário` (sAMAccountName). Para exibir o UPN de verdade
-(ex.: `rsilva@empresa.com`) no header, configure a consulta LDAP ao Active Directory
-com as variáveis abaixo — sem elas, a UI continua funcionando normalmente, só que
-mostrando `DOMÍNIO\usuário` em vez do UPN.
-
-- `AD_DOMAIN_CONTROLLER` — ex.: `ldap://dc01.empresa.local` (obrigatório para habilitar)
-- `AD_BASE_DN` — ex.: `DC=empresa,DC=local` (obrigatório para habilitar)
-- `AD_BIND_DN` — conta de serviço para autenticar a busca (opcional se o AD aceitar bind anônimo)
-- `AD_BIND_PASSWORD` — senha da conta de serviço (junto com `AD_BIND_DN`)
+A conta local `admin`/`admin` já vem semeada em toda instalação nova (troque a senha
+assim que possível — ver `docs/api.md`, seção **Usuário local padrão**); um admin cria
+outras contas locais em **Settings → System → Users**, e contas Google se
+auto-provisionam no primeiro login (ver abaixo).
 
 ### Login com Google (opcional)
 
-Além de NTLM e login local (usuário/senha), a página de login (`login.html`) pode
-mostrar um botão "Sign in with Google" (OAuth 2.0) — ver `GET /api/auth/google*` em
+Além do login local (usuário/senha), a página de login (`login.html`) pode mostrar um
+botão "Sign in with Google" (OAuth 2.0) — ver `GET /api/auth/google*` em
 `server/index.js` e a seção **Login com Google** em `docs/api.md`. Desligado por
 padrão; sem restrição de domínio Google Workspace (qualquer conta Google pode entrar).
 Primeiro login de um e-mail cria a conta automaticamente com `role: "user"`.
@@ -112,9 +94,9 @@ e excluir esses itens.
   "Ambiente específico" — não aparece no filtro de Tópico, só no editor de comandos).
 - API: `GET /api/catalogs` (os 3 de uma vez) e `POST`/`PUT /:key`/`DELETE /:key` em
   `/api/versions`, `/api/environments` e `/api/topics`.
-- Assim como o resto da API hoje, não há autorização própria além da identificação NTLM
-  — qualquer pessoa com acesso à rede pode chamar esses endpoints diretamente (não só
-  quem ativou o Modo administrador na própria tela).
+- Assim como o resto da API hoje, não há autorização própria além de exigir login
+  (sessão local/Google) ou API key — qualquer pessoa autenticada pode chamar esses
+  endpoints diretamente (não só quem ativou o Modo administrador na própria tela).
 
 ## Catálogo administrável (Parâmetros)
 

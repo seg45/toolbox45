@@ -1,13 +1,15 @@
 // ════════════════════════════════════════════════
-// LOGIN — a partir de agora, a página inicial de verdade é login.html (ver
-// js/login.js): campos usuário/senha OU "Continue with Windows
-// authentication". O gate que força passar por lá primeiro é o script
-// inline no topo do <head> deste index.html; este arquivo cuida só do que
-// acontece DEPOIS de já estar dentro do app — o dropdown de conta no header
-// (role atual + botão Log out, único botão do dropdown) e o próprio Log out.
-// Ver server/index.js: POST /api/auth/login (chamado a partir de login.html,
-// não mais daqui), POST /api/auth/logout, GET /api/me (devolve role/
-// isAdmin/authMethod), e users/sessions em server/schema.sql.
+// LOGIN — a página inicial de verdade é login.html (ver js/login.js):
+// campos usuário/senha OU "Sign in with Google" (login do Windows/NTLM que
+// existia aqui foi removido — pedido do usuário: "deixar somente
+// autenticação local e com Google"). O gate que força passar por lá
+// primeiro é o script inline no topo do <head> deste index.html; este
+// arquivo cuida só do que acontece DEPOIS de já estar dentro do app — o
+// dropdown de conta no header (role atual + botão Log out, único botão do
+// dropdown) e o próprio Log out. Ver server/index.js: POST /api/auth/login
+// (chamado a partir de login.html, não mais daqui), POST /api/auth/logout,
+// GET /api/me (devolve role/isAdmin/authMethod), e users/sessions em
+// server/schema.sql.
 //
 // window.TB45_IS_ADMIN / window.TB45_AUTH_METHOD são preenchidos por
 // updateAccountUI(), chamada a partir de js/user-sync.js assim que /api/me
@@ -21,7 +23,7 @@
 // limpa.
 // ════════════════════════════════════════════════
 window.TB45_IS_ADMIN = false;
-window.TB45_AUTH_METHOD = 'ntlm';
+window.TB45_AUTH_METHOD = 'local';
 const LOGIN_FLAG_KEY = 'cpa-authenticated';
 
 // Atualiza o rótulo do usuário no header, o texto do dropdown de conta
@@ -30,22 +32,21 @@ const LOGIN_FLAG_KEY = 'cpa-authenticated';
 function updateAccountUI(me) {
   if (!me) return;
   window.TB45_IS_ADMIN = !!me.isAdmin;
-  window.TB45_AUTH_METHOD = me.authMethod || 'ntlm';
+  window.TB45_AUTH_METHOD = me.authMethod || 'local';
 
   const roleLine = document.getElementById('hdrUserRoleLine');
   if (roleLine) {
     const roleLabel = me.isAdmin ? 'Admin' : 'User';
-    const methodLabels = { local: 'local account', api_key: 'API key', ntlm: 'Windows login', google: 'Google account', anonymous: 'unidentified session' };
-    const methodLabel = methodLabels[me.authMethod] || 'Windows login';
+    const methodLabels = { local: 'local account', api_key: 'API key', google: 'Google account', anonymous: 'unidentified session' };
+    const methodLabel = methodLabels[me.authMethod] || 'local account';
     roleLine.textContent = `${roleLabel} — signed in via ${methodLabel}`;
   }
-  // Log out sempre visível pra todo mundo (pedido do usuário) — antes só
-  // aparecia pra quem tinha logado com conta local (authMethod === 'local'),
-  // escondido para sessões NTLM/API key. Clicar em Log out continua seguro
-  // pra esses casos: POST /api/auth/logout só apaga a sessão LOCAL se
-  // existir uma (ver server/index.js) — pra quem está em NTLM/API key vira
-  // um no-op inofensivo, só recarrega a página (volta a identificar via
-  // NTLM/API key normalmente).
+  // Log out sempre visível pra todo mundo (pedido do usuário). Clicar em
+  // Log out continua seguro mesmo pra uma chamada autenticada por API key
+  // (não usa cookie/sessão): POST /api/auth/logout só apaga a sessão local/
+  // Google se existir uma (ver server/index.js) — pra API key vira um
+  // no-op inofensivo, só recarrega a página e o gate de login manda de
+  // volta pra login.html (sem sessão de navegador, não há como continuar).
   const logoutBtn = document.getElementById('hdrLogoutBtn');
   if (logoutBtn) logoutBtn.style.display = '';
 

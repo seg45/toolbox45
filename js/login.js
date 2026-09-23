@@ -1,21 +1,12 @@
 // ════════════════════════════════════════════════
-// LOGIN PAGE (login.html) — página inicial da aplicação (pedido do usuário:
-// "criar uma página para login com os campos usuário e senha, e a opção de
-// windows authentication... essa deve ser a página inicial, e quando o
-// usuário fizer logout deverá ser direcionado para essa página").
-//
-// Duas formas de entrar, as MESMAS que o backend já suporta (nada novo do
-// lado do servidor além de authMethod ficar mais preciso — ver
-// getAuthMethod() em server/index.js):
-//   1) Local (usuário/senha) -> POST /api/auth/login (mesma rota de sempre)
-//      — cria uma sessão local via cookie httpOnly tb45_session.
-//   2) "Continue with Windows authentication" -> GET /api/me, que dispara o
-//      handshake NTLM do navegador (silencioso, sem prompt, desde que o
-//      site esteja na zona "Intranet local") através do middleware NTLM do
-//      backend. Só é aceito como login de verdade quando authMethod volta
-//      exatamente 'ntlm' (identificação NTLM genuína) — 'anonymous' (NTLM
-//      desligado no servidor, fora de domínio Windows, ou handshake sem
-//      sucesso) mostra um erro e sugere usar usuário/senha.
+// LOGIN PAGE (login.html) — página inicial da aplicação. Duas formas de
+// entrar (pedido do usuário: "deixar somente autenticação local e com
+// Google" — o login do Windows/NTLM que existia aqui foi removido):
+//   1) Local (usuário/senha) -> POST /api/auth/login — cria uma sessão via
+//      cookie httpOnly tb45_session.
+//   2) "Sign in with Google" -> navegação inteira pra GET /api/auth/google
+//      (OAuth) — ver startGoogleLogin()/_lpHandleGoogleRedirectResult()
+//      abaixo e o login com Google em server/index.js.
 //
 // Depois de qualquer login bem-sucedido, grava LOGIN_FLAG_KEY no
 // localStorage e manda pra index.html — o gate inline no topo do <head> de
@@ -137,25 +128,6 @@ async function submitLocalLogin() {
     _lpMarkAuthenticatedAndEnter();
   } catch (err) {
     _lpShowError(err.message || 'Login failed. Please try again.');
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function submitWindowsLogin() {
-  const btn = document.getElementById('lpWindowsBtn');
-  _lpClearError();
-  if (btn) btn.disabled = true;
-  try {
-    const res = await fetch('/api/me');
-    if (!res.ok) throw new Error('Windows authentication is not available right now.');
-    const me = await res.json();
-    if (me.authMethod !== 'ntlm') {
-      throw new Error('Windows authentication is not available. Please log in with your username and password instead.');
-    }
-    _lpMarkAuthenticatedAndEnter();
-  } catch (err) {
-    _lpShowError(err.message || 'Windows authentication failed.');
   } finally {
     if (btn) btn.disabled = false;
   }

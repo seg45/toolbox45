@@ -42,9 +42,6 @@ USER toolbox45
 ENV PORT=3000
 ENV BACKUP_DIR=/app/backups
 ENV TLS_DIR=/app/tls
-# Uncomment (or set at "docker run"/compose level) if this host is not on a
-# Windows domain — otherwise NTLM identification is attempted by default.
-# ENV NTLM_DISABLED=1
 
 EXPOSE 3000
 VOLUME ["/app/backups", "/app/tls"]

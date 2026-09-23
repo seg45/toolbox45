@@ -57,24 +57,13 @@ services:
       PGDATABASE: "${POSTGRES_DB:-toolbox45}"
       PGUSER: "${POSTGRES_USER:-toolbox45}"
       PGPASSWORD: "${POSTGRES_PASSWORD:-toolbox45}"
-      # Descomente se este host não estiver num domínio Windows — sem NTLM,
-      # os usuários são identificados por um header x-dev-user (ou caem no
-      # usuário do sistema operacional rodando o Node dentro do container),
-      # o que quebra favoritos por pessoa. Ver também a nota sobre NTLM
-      # através do proxy reverso em frontend/nginx.conf.
-      # NTLM_DISABLED: "1"
-      #
-      # Active Directory (opcional) — resolve o UPN (nome@dominio) exibido na
-      # UI a partir do login NTLM; sem isso, a UI mostra DOMÍNIO\usuario.
-      # AD_DOMAIN_CONTROLLER: "ldap://dc01.empresa.local"
-      # AD_BASE_DN: "DC=empresa,DC=local"
-      # AD_BIND_DN: ""
-      # AD_BIND_PASSWORD: 
-      #
       # Login com Google (opcional) — habilita o botão "Sign in with Google"
-      # em login.html (ver GET /api/auth/google* em server/index.js). Crie um
-      # Client ID OAuth no Google Cloud Console (tipo "Web application") com
-      # este redirect URI EXATO: https://toolbox45.seg45.com.br/api/auth/google/callback
+      # em login.html (ver GET /api/auth/google* em server/index.js). Sem
+      # login do Windows/NTLM (removido) nem sessão Google, só resta o login
+      # local (usuário/senha) — sempre disponível, não precisa de variável
+      # nenhuma. Crie um Client ID OAuth no Google Cloud Console (tipo "Web
+      # application") com este redirect URI EXATO:
+      # https://toolbox45.seg45.com.br/api/auth/google/callback
       # GOOGLE_CLIENT_ID: ""
       # GOOGLE_CLIENT_SECRET: ""
       # GOOGLE_REDIRECT_URI: "https://toolbox45.seg45.com.br/api/auth/google/callback"""

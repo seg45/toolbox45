@@ -8,11 +8,13 @@ de requisição em `POST`/`PUT` também devem ser JSON (`Content-Type: applicati
 ## Autenticação
 
 Toda a API usa uma identificação de "usuário atual" (`username`) para favoritos,
-auditoria (`created_by`/`modified_by`) e preferências. Três formas, nessa ordem de
-prioridade:
+auditoria (`created_by`/`modified_by`) e preferências. Duas formas, nessa ordem de
+prioridade — sem uma das duas, a chamada é recusada (`401 unauthorized`; algumas rotas
+são públicas por necessidade, ver **Login local e usuários**/**Login com Google**
+abaixo):
 
-1. **API key** (integrações externas, scripts) — header `X-API-Key: <key>`. Pula o NTLM
-   e a sessão local inteiramente. O usuário efetivo aparece como `api:<nome da key>`
+1. **API key** (integrações externas, scripts) — header `X-API-Key: <key>`. Pula a
+   sessão inteiramente. O usuário efetivo aparece como `api:<nome da key>`
    (ex.: `api:Zabbix`). Chaves são criadas/excluídas em **Settings → System → API
    access** na própria aplicação, ou via `/api/api-keys` (abaixo) — a key em texto puro
    só existe na resposta do `POST`, nunca mais depois disso. Assim como usuários, toda
@@ -25,21 +27,20 @@ prioridade:
    para de autenticar (`401 invalid_api_key`) mas continua listada até ser excluída
    manualmente. Excluir uma key (`DELETE /api/api-keys/:id`) é permanente — não existe
    mais "revogar" (soft-delete): a linha é removida da tabela e não pode ser recuperada.
-2. **Sessão local** (cookie `tb45_session`, `HttpOnly`) — login com usuário/senha via
-   `POST /api/auth/login` (ver **Login local e usuários** abaixo). Enquanto o cookie
-   for válido (12h), tem prioridade sobre a NTLM — é o que permite "sair" da
-   identificação automática do Windows e logar com outra credencial sem fechar o
-   navegador. **Login com Google** (ver **Login com Google** abaixo) usa exatamente
-   este mesmo cookie/sessão — só muda a FORMA de chegar até ele; `authMethod` reporta
-   `"google"` separado de `"local"` para essas contas.
-3. **NTLM** (navegador) — login do Windows resolvido automaticamente pelo
-   `express-ntlm`, sem prompt de senha (zona "Intranet local"). Se `NTLM_DISABLED=1`
-   estiver definido no backend, cai no header `x-dev-user` (ou `?__user=` na query
-   string), com fallback final para o usuário do sistema operacional do container.
+2. **Sessão** (cookie `tb45_session`, `HttpOnly`, 12h) — login com usuário/senha via
+   `POST /api/auth/login` (ver **Login local e usuários** abaixo) OU login com Google
+   (ver **Login com Google** abaixo); os dois usam exatamente o mesmo cookie/sessão — só
+   muda a FORMA de chegar até ele. `authMethod` reporta `"local"` ou `"google"`
+   separadamente para essas contas.
+
+Não existe mais identificação automática por login do Windows (NTLM) nem um fallback
+"anônimo" (dev/usuário do SO) — removidos a pedido do usuário ("deixar somente
+autenticação local e com Google"): sem API key nem sessão válida, toda rota que não seja
+pública (login/health) recebe `401 { "error": "unauthorized" }`.
 
 ### Permissões (role)
 
-Todo `username` identificado (por NTLM ou sessão local) tem um `role` — `user` ou
+Todo `username` identificado (por sessão local/Google) tem um `role` — `user` ou
 `admin` — guardado na tabela `users` e provisionado automaticamente (`role: "user"`) na
 primeira vez que é visto. `role: "admin"` é exigido para: excluir comando (`DELETE
 /api/commands/:id`), Backup & Restore (todos os endpoints `/api/backups*`), gerenciar o
@@ -203,8 +204,8 @@ não for admin.
 Substituiu a antiga feature "Favorites" — em vez de um único booleano marcado/
 desmarcado por comando, cada usuário cria suas próprias pastas (nome livre) e organiza
 comandos e **notes** (ver seção própria abaixo) nelas, podendo colocar o mesmo comando
-em várias pastas ao mesmo tempo. Tudo aqui é por usuário atual (independente de NTLM ou
-API key) e **privado**: o campo `folder_ids` no **Command** só reflete as pastas do
+em várias pastas ao mesmo tempo. Tudo aqui é por usuário atual (sessão ou API key) e
+**privado**: o campo `folder_ids` no **Command** só reflete as pastas do
 usuário que está fazendo a requisição.
 
 - `GET /api/folders` → array de pastas do usuário atual:
@@ -301,38 +302,37 @@ sempre forçando `target="_blank" rel="noopener noreferrer"`.
 ---
 
 ## `GET /api/me`
-Identifica o chamador atual, seu papel e como foi autenticado.
+Identifica o chamador atual, seu papel e como foi autenticado. Exige sessão ou API key
+(ver **Autenticação** acima) — sem uma das duas, `401 unauthorized`.
 ```json
 {
-  "username": "EMPRESA\\rsilva",
-  "upn": "rsilva@empresa.com",
+  "username": "rsilva@seg45.com.br",
+  "upn": "rsilva@seg45.com.br",
   "role": "admin",
   "isAdmin": true,
-  "authMethod": "ntlm"
+  "authMethod": "google"
 }
 ```
-`upn` vem de uma consulta LDAP ao Active Directory (se `AD_DOMAIN_CONTROLLER`/
-`AD_BASE_DN` estiverem configurados no backend) — cai em `username` se não configurado
-ou indisponível. `authMethod` é `"ntlm"` | `"local"` | `"google"` | `"api_key"` |
-`"anonymous"`. Para chamadas com API key, `username` é `api:<nome da key>`, `upn`
-espelha o mesmo valor e `role`/`isAdmin` sempre vêm como admin (ver seção Permissões
-acima).
+`upn` espelha `username` (mantido só por compatibilidade com respostas antigas — quando
+a identificação vinha do Windows/NTLM, `upn` era resolvido separadamente via Active
+Directory). `authMethod` é `"local"` | `"google"` | `"api_key"`. Para chamadas com API
+key, `username` é `api:<nome da key>`, `upn` espelha o mesmo valor e `role`/`isAdmin`
+sempre vêm como admin (ver seção Permissões acima).
 
 ---
 
 ## Login local e usuários
 
 ### `POST /api/auth/login`
-Loga com uma conta local (usuário/senha), substituindo a identificação NTLM nesta sessão
-do navegador. Corpo: `{ "username": "admin", "password": "admin" }`. Sucesso: `200`
-`{ "username": "admin", "role": "admin" }` + `Set-Cookie: tb45_session=...` (`HttpOnly`,
-12h). Falha: `401 invalid_credentials` (usuário local inexistente, senha errada, ou
-conta desabilitada).
+Loga com uma conta local (usuário/senha). Corpo: `{ "username": "admin", "password":
+"admin" }`. Sucesso: `200` `{ "username": "admin", "role": "admin" }` + `Set-Cookie:
+tb45_session=...` (`HttpOnly`, 12h). Falha: `401 invalid_credentials` (usuário local
+inexistente, senha errada, ou conta desabilitada). Rota pública (não exige sessão
+prévia — senão ninguém conseguiria logar).
 
 ### `POST /api/auth/logout`
-Encerra a sessão local ativa (limpa a linha em `sessions` e o cookie) — a identificação
-volta a ser resolvida por NTLM na próxima requisição. `204`, idempotente (funciona mesmo
-sem sessão ativa).
+Encerra a sessão ativa, local ou Google (limpa a linha em `sessions` e o cookie).
+`204`, idempotente (funciona mesmo sem sessão ativa). Rota pública.
 
 ### Usuário local padrão
 Toda instalação nova já vem com uma conta local `admin` / senha `admin`, role `admin`
@@ -358,18 +358,18 @@ mostra o botão "Sign in with Google".
 
 ### `GET /api/auth/google`
 Redireciona (`302`) para a tela de consentimento do Google. `503` se as 3 variáveis de
-ambiente acima não estiverem configuradas.
+ambiente acima não estiverem configuradas. Rota pública.
 
 ### `GET /api/auth/google/callback`
 Destino do redirect de volta do Google (`redirect_uri` registrado no Google Cloud
 Console — precisa ser EXATAMENTE `GOOGLE_REDIRECT_URI`). Troca o `code` pelos tokens do
 Google, confirma o e-mail (`email_verified`) via `GET
 https://openidconnect.googleapis.com/v1/userinfo`, e:
-- Se o e-mail já existe como usuário local/NTLM (não como conta Google) → recusa (evita
+- Se o e-mail já existe como usuário local (não como conta Google) → recusa (evita
   account takeover) e redireciona para `login.html?google=error&reason=account_exists_other_method`.
 - Se é a primeira vez que esse e-mail aparece → cria a conta automaticamente
   (`role: "user"`, `auth_provider: "google"`) — um admin promove depois em **Manage
-  users**, igual a uma conta NTLM vista pela primeira vez.
+  users**.
 - Em qualquer sucesso, cria uma sessão (mesmo mecanismo de `POST /api/auth/login`,
   cookie `tb45_session`) e redireciona para `login.html?google=success`.
 - Em qualquer falha, redireciona para `login.html?google=error&reason=<motivo>`
@@ -377,29 +377,30 @@ https://openidconnect.googleapis.com/v1/userinfo`, e:
   `not_configured`, entre outros) — `login.html` mostra a mensagem correspondente.
 
 ### `GET /api/users` — **(admin)**
-Lista todo usuário já visto pela aplicação (contas locais, identificadas via NTLM, ou
-via Google). Nunca devolve `password_hash`.
+Lista todo usuário já visto pela aplicação (contas locais ou Google — `auth_provider`
+distingue). Nunca devolve `password_hash`.
 ```json
 [{ "username": "admin", "role": "admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system", "auth_provider": "local" },
- { "username": "EMPRESA\\jsilva", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": null, "auth_provider": "ntlm" },
  { "username": "jsilva@gmail.com", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": "google-oauth", "auth_provider": "google" }]
 ```
+Instalações antigas (de antes do login do Windows/NTLM ser removido) podem ainda listar
+contas com `auth_provider: "ntlm"` — nunca fazem login (não têm senha nem vínculo com
+Google); um admin pode desabilitá-las/excluí-las quando não forem mais necessárias.
 
 ### `POST /api/users` — **(admin)**
 Cria uma conta **local** — corpo `{ "username", "password" (≥4 caracteres), "role"? }`
-(`role` é `"user"` por padrão) → `201`. `409 conflict` se o username já existir (inclusive
-se já existir como usuário NTLM — vira local a partir daqui).
+(`role` é `"user"` por padrão) → `201`. `409 conflict` se o username já existir.
 
 ### `PUT /api/users/:username` — **(admin)**
 Corpo parcial — qualquer combinação de `{ "role": "admin"|"user", "disabled": bool,
 "password": "..." }`. `password` só é aceito para contas locais (`400
-validation_error` para conta NTLM). Recusa com `409 conflict` qualquer mudança que
+validation_error` para conta Google). Recusa com `409 conflict` qualquer mudança que
 deixaria a aplicação **sem nenhum admin habilitado** (trava de segurança contra
 lockout).
 
 ### `DELETE /api/users/:username` — **(admin)**
-Remove a linha de usuário (e suas sessões, via `ON DELETE CASCADE`). Um usuário NTLM
-excluído é recriado automaticamente (role `user`) na próxima vez que for identificado.
+Remove a linha de usuário (e suas sessões, via `ON DELETE CASCADE`). Uma conta Google
+excluída é recriada automaticamente (role `user`) no próximo login com aquele e-mail.
 Mesma trava contra remover o último admin habilitado (`409 conflict`).
 
 ---

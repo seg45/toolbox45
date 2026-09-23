@@ -396,8 +396,9 @@ async function render() {
     const creatorGroups = creators.map(creator => {
       const subset = commandsByCreator.get(creator) || [];
       // Chave da seção precisa ser um identificador "seguro" (sem \, ', etc.) —
-      // usernames vêm no formato "DOMÍNIO\usuario" (ver NTLM em server/index.js),
-      // e um backslash dentro do onclick="toggleSection('...')" gerado por
+      // contas antigas do login do Windows/NTLM (removido, mas ainda podem
+      // existir na tabela users) vêm no formato "DOMÍNIO\usuario", e um
+      // backslash dentro do onclick="toggleSection('...')" gerado por
       // collapsibleGroup() quebraria a string JS (\u, \r etc. são sequências de
       // escape válidas). O nome de exibição continua o original (escAttr(creator)).
       const creatorKey = creator.replace(/[^a-zA-Z0-9_-]/g, '_');

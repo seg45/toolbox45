@@ -17,8 +17,8 @@
 .hdr-logo-img { width: 28px; height: 28px; display: block; }
 .hdr-logo-txt { font-size: 16px; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
 .hdr-gap { flex: 1; }
-/* Usuário identificado (login do Windows via NTLM, ou sessão local — ver
-   js/auth.js) — mostrado à esquerda do botão de Configurações. É também o
+/* Usuário identificado (sessão local ou Google — ver js/auth.js) —
+   mostrado à esquerda do botão de Configurações. É também o
    botão que abre o menu de conta (login local/logout), então NUNCA fica
    oculto (mesmo com o nome ainda vazio, antes de /api/me responder, ou se
    /api/me falhar) — esconder o botão deixaria o usuário sem nenhuma forma de

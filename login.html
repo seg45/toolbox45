@@ -11,9 +11,9 @@
 <!-- Reaproveita as mesmas variáveis de tema/cor de destaque e as classes
      .btn/.set-input/.set-label/.set-hint já usadas nos modais do app
      (css/components.css) — css/login.css só acrescenta o layout específico
-     desta página (card centralizado, divisor "or", botão de Windows
-     authentication). Não carrega css/layout.css (grade do app/sidebar) —
-     esta página não usa nada daquilo. -->
+     desta página (card centralizado, divisor "or", botão "Sign in with
+     Google"). Não carrega css/layout.css (grade do app/sidebar) — esta
+     página não usa nada daquilo. -->
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/theme.css">
 <link rel="stylesheet" href="css/components.css">
@@ -43,15 +43,6 @@
   <button type="button" class="btn btn-primary login-submit-btn" id="lpSubmitBtn" onclick="submitLocalLogin()">Log in</button>
 
   <div class="login-divider"><span>or</span></div>
-
-  <!-- "Windows authentication": reaproveita a MESMA identificação NTLM
-       silenciosa que o app já usa em segundo plano (ver server/index.js) —
-       clicar aqui só confirma/consulta se ela funcionou (GET /api/me) e, se
-       sim, marca a sessão do navegador como autenticada. Ver js/login.js. -->
-  <button type="button" class="btn login-windows-btn" id="lpWindowsBtn" onclick="submitWindowsLogin()">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="1.5"/><path d="M3 9h18"/><path d="M8 20h8"/><path d="M12 16v4"/></svg>
-    <span>Continue with Windows authentication</span>
-  </button>
 
   <!-- "Sign in with Google": só aparece quando o backend tem
        GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI configurados (ver GET

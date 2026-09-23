@@ -1,9 +1,10 @@
 // ════════════════════════════════════════════════
 // MANAGE USERS — Settings → System → Users (admin-only, ver
 // applyAdminGating() em js/auth.js). CRUD de usuários locais + promover/
-// rebaixar/desabilitar QUALQUER usuário (inclusive identificado via
-// Windows/NTLM) — ver users em server/schema.sql e /api/users em
-// server/index.js. Mesmo padrão visual/estrutural de js/api-keys.js.
+// rebaixar/desabilitar QUALQUER usuário (local, Google, ou uma conta antiga
+// do login do Windows/NTLM — removido, mas pode sobrar na tabela) — ver
+// users em server/schema.sql e /api/users em server/index.js. Mesmo padrão
+// visual/estrutural de js/api-keys.js.
 // ════════════════════════════════════════════════
 
 function _uaEscHtml(s) {
@@ -12,8 +13,9 @@ function _uaEscHtml(s) {
 // Escapa um valor para ser embutido como argumento de string dentro de um
 // onclick="...('VALOR')" — ou seja, precisa sobreviver a DUAS camadas:
 // 1) sintaxe de string JS (delimitada por aspas simples) e 2) atributo HTML
-// (delimitado por aspas duplas). Usernames Windows/NTLM vêm no formato
-// "DOMINIO\usuario" — sem escapar a barra invertida, '\r' dentro da string JS
+// (delimitado por aspas duplas). Contas antigas do login do Windows/NTLM
+// (removido) vêm no formato "DOMINIO\usuario" — sem escapar a barra
+// invertida, '\r' dentro da string JS
 // é interpretado como o caractere de carriage-return (\r), corrompendo o
 // valor enviado ao backend ("metalab\rsilva" virava "metalab" + CR + "silva",
 // daí o erro "User not found"). Por isso a barra invertida tem que ser

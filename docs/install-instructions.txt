@@ -64,18 +64,6 @@ antes do "docker compose up":
         # — mudar aqui já reflete nos dois). Troque a senha padrão em
         # produção.
 
-    NTLM_DISABLED=1   (definido em toolbox45-backend, docker-compose.yml)
-        # desliga a identificação automática de usuário via NTLM (login do
-        # Windows) — use se o servidor não estiver num domínio Windows, ou
-        # se notar problemas de autenticação através do proxy reverso (ver
-        # nota sobre NTLM em frontend/nginx.conf). Sem NTLM, favoritos/
-        # preferências/auditoria por usuário deixam de identificar cada
-        # pessoa (cai no header x-dev-user ou no usuário do container).
-
-    AD_DOMAIN_CONTROLLER / AD_BASE_DN / AD_BIND_DN / AD_BIND_PASSWORD
-        # opcional — resolve o UPN (nome@dominio) exibido na UI via consulta
-        # LDAP ao Active Directory. Sem isso, a UI mostra DOMÍNIO\usuario.
-
     GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI
         # opcional — habilita o botão "Sign in with Google" em login.html
         # (ver docs/api.md e docs/server-overview.md para o passo a passo
@@ -94,8 +82,9 @@ Depois de mudar variáveis, recrie os containers:
 5) API KEYS (acesso programático externo)
 ----------------------------------------------
 Scripts/integrações externas podem chamar a API enviando um header
-`X-API-Key` — isso pula o NTLM inteiramente. Crie/revogue chaves pela
-própria aplicação, em Configurações → System → "API access", ou direto:
+`X-API-Key` — isso pula a sessão/login inteiramente. Crie/revogue chaves
+pela própria aplicação, em Configurações → System → "API access", ou
+direto:
 
     curl -X POST http://<ip-do-servidor>/api/api-keys \
       -H "Content-Type: application/json" -d '{"name": "minha integração"}'
@@ -223,11 +212,13 @@ serviço toolbox45-backend quanto o toolbox45-frontend já usam
   sozinho (ver server/db.js); se persistir depois disso, confira
   "docker compose logs toolbox45-db".
 
-- Login do Windows (NTLM) parou de funcionar depois da migração para 3
-  containers: o handshake NTLM agora passa por um hop a mais (o proxy
-  reverso do nginx) e isso é conhecido por ser frágil — ver a nota em
-  frontend/nginx.conf. Considere NTLM_DISABLED=1 ou usar API keys para
-  integrações programáticas.
+- Login não funciona / usuário não consegue entrar: o Toolbox45 só aceita
+  login local (usuário/senha, Settings → System → Users) ou login com
+  Google (se GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI estiverem configurados —
+  ver seção 4 acima e docs/server-overview.md); não existe mais login
+  automático do Windows (NTLM, removido). Para acesso programático, use uma
+  API key (seção 5 acima) em vez de tentar autenticar como um usuário do
+  navegador.
 
 - Ver logs detalhados de um container específico:
       sudo docker compose logs -f toolbox45-backend

@@ -1,6 +1,6 @@
 # Documentação — Toolbox45
 
-- [`api.md`](api.md) — referência da API REST (endpoints, autenticação NTLM/API key, formatos de erro).
+- [`api.md`](api.md) — referência da API REST (endpoints, autenticação local/Google/API key, formatos de erro).
 - [`install-instructions.txt`](install-instructions.txt) — instalação/deploy (Docker Compose, 3 containers), variáveis de ambiente, backup/restore, atualização, troubleshooting.
 - [`server-overview.md`](server-overview.md) — visão geral do backend.
 - [`backlog-comandos-pendentes.md`](backlog-comandos-pendentes.md) — backlog de comandos a adicionar/revisar no catálogo.

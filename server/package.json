@@ -1,7 +1,7 @@
 {
   "name": "toolbox45-backend",
   "version": "2.0.0",
-  "description": "Backend (Express + PostgreSQL) for Toolbox45, the multi-vendor network support tool — pure REST API, no static file serving (see toolbox45-frontend for that). Supports both NTLM-based browser sessions and API-key authenticated external integrations.",
+  "description": "Backend (Express + PostgreSQL) for Toolbox45, the multi-vendor network support tool — pure REST API, no static file serving (see toolbox45-frontend for that). Supports local + Google (OAuth) browser sessions and API-key authenticated external integrations.",
   "private": true,
   "main": "index.js",
   "scripts": {
@@ -10,8 +10,6 @@
   },
   "dependencies": {
     "express": "^4.19.2",
-    "express-ntlm": "^2.7.0",
-    "ldapts": "^9.0.0",
     "pg": "^8.13.0"
   }
 }
