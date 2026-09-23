@@ -42,7 +42,7 @@ function updateAccountUI(me) {
     // Super Admin") — isSuperAdmin implica isAdmin (ver ROLE_RANK em
     // server/index.js), então checa a mais específica primeiro.
     const roleLabel = me.isSuperAdmin ? 'Super Admin' : (me.isAdmin ? 'Admin' : 'User');
-    const methodLabels = { local: 'local account', api_key: 'API key', google: 'Google account', anonymous: 'unidentified session' };
+    const methodLabels = { local: 'local account', api_key: 'API key', google: 'Google account', microsoft: 'Microsoft account', anonymous: 'unidentified session' };
     const methodLabel = methodLabels[me.authMethod] || 'local account';
     roleLine.textContent = `${roleLabel} — signed in via ${methodLabel}`;
   }

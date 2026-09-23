@@ -48,6 +48,9 @@
 .login-divider::before, .login-divider::after {
   content: ''; flex: 1; height: 1px; background: var(--bdr);
 }
+/* Layout genérico dos botões de provedor OAuth — compartilhado por
+   #lpGoogleBtn e #lpMicrosoftBtn (login.html); cada um traz seu próprio
+   ícone/texto, então não precisa de classe própria. */
 .login-google-btn {
   width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 9px 14px;

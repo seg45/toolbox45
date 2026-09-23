@@ -30,6 +30,7 @@
 // ════════════════════════════════════════════════
 const LOGIN_FLAG_KEY = 'cpa-authenticated';
 let _lpGoogleEnabled = false;
+let _lpMicrosoftEnabled = false;
 let _lpCurrentView = 'login';
 
 function _lpShowError(msg) {
@@ -69,9 +70,15 @@ function _lpShowView(view) {
   _lpClearRegisterError();
   const divider = document.getElementById('lpGoogleDivider');
   const googleBtn = document.getElementById('lpGoogleBtn');
-  const showGoogle = _lpGoogleEnabled && view !== 'pending';
-  if (divider) divider.style.display = showGoogle ? '' : 'none';
+  const microsoftBtn = document.getElementById('lpMicrosoftBtn');
+  const notPending = view !== 'pending';
+  const showGoogle = _lpGoogleEnabled && notPending;
+  const showMicrosoft = _lpMicrosoftEnabled && notPending;
+  // O divider ("ou") é compartilhado pelos 2 botões de provedor — aparece
+  // se pelo menos um estiver habilitado.
+  if (divider) divider.style.display = (showGoogle || showMicrosoft) ? '' : 'none';
   if (googleBtn) googleBtn.style.display = showGoogle ? '' : 'none';
+  if (microsoftBtn) microsoftBtn.style.display = showMicrosoft ? '' : 'none';
 }
 function _lpShowPending(message) {
   const box = document.getElementById('lpPendingMsg');
@@ -88,25 +95,36 @@ function startGoogleLogin() {
   location.href = '/api/auth/google';
 }
 
-// Só mostra o botão do Google quando o backend está configurado
-// (GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI) — GET /api/auth/providers é
-// público e nunca falha "de verdade" (backend sem essas variáveis só
-// devolve { google: false }), então um botão morto nunca aparece.
-async function _lpInitGoogleButton() {
-  const btn = document.getElementById('lpGoogleBtn');
-  if (!btn) return;
+// "Sign in with Microsoft" — mesmo mecanismo do Google acima, navegação de
+// página inteira pra GET /api/auth/microsoft (server/index.js), que
+// redireciona pro consentimento da Microsoft (Azure AD / login.microsoftonline.com)
+// e volta pra esta página via GET /api/auth/microsoft/callback (ver
+// _lpHandleMicrosoftRedirectResult() abaixo).
+function startMicrosoftLogin() {
+  location.href = '/api/auth/microsoft';
+}
+
+// Só mostra os botões de Google/Microsoft quando o backend está
+// configurado pra cada um (GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI e
+// MICROSOFT_CLIENT_ID/SECRET/REDIRECT_URI respectivamente) — GET
+// /api/auth/providers é público e nunca falha "de verdade" (backend sem
+// essas variáveis só devolve { google: false, microsoft: false }), então
+// um botão morto nunca aparece. Uma chamada só serve pros 2 provedores.
+async function _lpInitProviderButtons() {
   try {
     const res = await fetch('/api/auth/providers');
     const data = await res.json();
     _lpGoogleEnabled = !!data.google;
+    _lpMicrosoftEnabled = !!data.microsoft;
   } catch (e) {
     _lpGoogleEnabled = false;
+    _lpMicrosoftEnabled = false;
   }
   // Reaplica a visibilidade na view ATUAL (_lpCurrentView, não sniffada do
-  // DOM) sem trocar de view — esta função é async e _lpHandleGoogleRedirectResult()
-  // (chamada logo em seguida, no mesmo DOMContentLoaded) pode já ter
-  // mudado pra 'pending' antes do fetch acima resolver; sniffar o DOM
-  // acabaria voltando pro login por engano nesse caso.
+  // DOM) sem trocar de view — esta função é async e os handlers de
+  // redirect (chamados logo em seguida, no mesmo DOMContentLoaded) podem
+  // já ter mudado pra 'pending' antes do fetch acima resolver; sniffar o
+  // DOM acabaria voltando pro login por engano nesse caso.
   _lpShowView(_lpCurrentView);
 }
 
@@ -141,6 +159,36 @@ function _lpHandleGoogleRedirectResult() {
     not_configured: 'Google sign-in is not configured on this server.',
   };
   _lpShowError(reasons[reason] || 'Google sign-in failed. Please try again.');
+}
+
+// Espelho de _lpHandleGoogleRedirectResult() acima pro provedor Microsoft
+// (?microsoft=success|error|pending&reason=... — ver GET
+// /api/auth/microsoft/callback em server/index.js).
+function _lpHandleMicrosoftRedirectResult() {
+  const params = new URLSearchParams(location.search);
+  const microsoft = params.get('microsoft');
+  if (!microsoft) return;
+  const reason = params.get('reason');
+  history.replaceState(null, '', location.pathname);
+  if (microsoft === 'success') {
+    _lpMarkAuthenticatedAndEnter();
+    return;
+  }
+  // E-mail Microsoft novo (ou já cadastrado mas ainda não aprovado) — mesma
+  // UX de pendente do auto-cadastro local / Google (ver submitRegister()
+  // acima e GET /api/auth/microsoft/callback em server/index.js).
+  if (microsoft === 'pending') {
+    _lpShowPending('Your account was created with Microsoft sign-in and is pending administrator approval.');
+    return;
+  }
+  const reasons = {
+    access_denied: 'Microsoft sign-in was cancelled.',
+    invalid_state: 'Microsoft sign-in session expired. Please try again.',
+    account_exists_other_method: "This Microsoft account's e-mail matches an existing account that uses a different sign-in method. Please log in with your username and password instead.",
+    account_disabled: 'This account has been disabled. Contact an administrator.',
+    not_configured: 'Microsoft sign-in is not configured on this server.',
+  };
+  _lpShowError(reasons[reason] || 'Microsoft sign-in failed. Please try again.');
 }
 
 // Auto-cadastro local (login.html → "Register") — pedido do usuário: "na
@@ -241,6 +289,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (passInput) passInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') submitLocalLogin(); });
   const regPassInput = document.getElementById('lpRegPasswordInput');
   if (regPassInput) regPassInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') submitRegister(); });
-  _lpInitGoogleButton();
+  _lpInitProviderButtons();
   _lpHandleGoogleRedirectResult();
+  _lpHandleMicrosoftRedirectResult();
 });

@@ -549,7 +549,7 @@ CREATE TABLE IF NOT EXISTS users (
   disabled      INTEGER NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by    TEXT,
-  auth_provider TEXT NOT NULL DEFAULT 'ntlm',   -- 'ntlm' | 'local' | 'google' — só identifica a ORIGEM da conta (ver login com Google em server/index.js); não decide permissão (isso é role)
+  auth_provider TEXT NOT NULL DEFAULT 'ntlm',   -- 'ntlm' | 'local' | 'google' | 'microsoft' — só identifica a ORIGEM da conta (ver login com Google/Microsoft em server/index.js); não decide permissão (isso é role)
   -- handle: apelido único e ESCOLHIDO PELO USUÁRIO (gerado automaticamente
   -- na criação da conta, trocável depois em PUT /api/me/handle — ver
   -- server/index.js) usado para compartilhar pastas/comandos com outra

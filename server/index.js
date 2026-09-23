@@ -150,7 +150,7 @@ app.use(async (req, res, next) => {
       // Sessão local (usuário/senha) e sessão Google usam a MESMA tabela
       // sessions/o MESMO cookie tb45_session — só users.auth_provider diz
       // qual dos dois foi (ver login com Google abaixo e getAuthMethod()).
-      req.authMethod = rows[0].auth_provider === 'google' ? 'google' : 'local';
+      req.authMethod = (rows[0].auth_provider === 'google' || rows[0].auth_provider === 'microsoft') ? rows[0].auth_provider : 'local';
     }
   } catch (err) {
     console.error('Session lookup failed:', err);
@@ -178,6 +178,8 @@ const REQUIRE_AUTH_PUBLIC_ROUTES = new Set([
   'GET /api/auth/providers',
   'GET /api/auth/google',
   'GET /api/auth/google/callback',
+  'GET /api/auth/microsoft',
+  'GET /api/auth/microsoft/callback',
 ]);
 app.use((req, res, next) => {
   if (req.currentUser) return next(); // já autenticado por API key ou sessão (acima)
@@ -495,10 +497,49 @@ const GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_RED
 // gravado aqui antes do redirect pro Google). Nada sensível dentro dele.
 const OAUTH_STATE_COOKIE = 'tb45_oauth_state';
 
-// Público (sem auth) — login.html usa isto pra decidir se mostra o botão
-// "Sign in with Google" (ver js/login.js).
+// ════════════════════════════════════════════════
+// Login com Microsoft (OAuth 2.0 Authorization Code, Microsoft identity
+// platform v2.0) — pedido do usuário: "insira a opção para fazer login e
+// cadastro com conta da Microsoft". Exatamente o mesmo mecanismo do login
+// com Google acima (mesma sessão local via tb45_session, mesmo estado
+// "pendente de aprovação" pra e-mail novo — ver GET
+// /api/auth/microsoft/callback mais abaixo, logo depois do callback do
+// Google) — só troca o provedor. users.auth_provider='microsoft' distingue
+// esta conta de uma local/Google.
+//
+// Variáveis de ambiente (mesmo padrão do Google acima):
+//   MICROSOFT_CLIENT_ID       Application (client) ID do App registration
+//                             no Azure Portal (Entra ID)
+//   MICROSOFT_CLIENT_SECRET   Client secret correspondente
+//   MICROSOFT_REDIRECT_URI    URL pública EXATA de GET
+//                             /api/auth/microsoft/callback (ex.:
+//                             https://toolbox45.seg45.com.br/api/auth/microsoft/callback)
+//                             — precisa bater com o registrado no Azure
+//                             Portal, caractere por caractere.
+//   MICROSOFT_TENANT_ID       Opcional. 'common' (padrão) aceita qualquer
+//                             conta Microsoft — pessoal OU de qualquer
+//                             organização (mesma filosofia "sem restrição
+//                             de domínio" já usada no Google acima). Um
+//                             ID/domínio de tenant específico restringe o
+//                             login só àquela organização.
+// Sem as 2 obrigatórias (client id/secret) + redirect URI, o login com
+// Microsoft fica desligado (botão escondido no login.html via GET
+// /api/auth/providers) — nunca trava a aplicação.
+// ════════════════════════════════════════════════
+const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || null;
+const MICROSOFT_CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET || null;
+const MICROSOFT_REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI || null;
+const MICROSOFT_TENANT_ID = process.env.MICROSOFT_TENANT_ID || 'common';
+const MICROSOFT_ENABLED = !!(MICROSOFT_CLIENT_ID && MICROSOFT_CLIENT_SECRET && MICROSOFT_REDIRECT_URI);
+// Cookie de estado próprio (não reaproveita OAUTH_STATE_COOKIE do Google) —
+// evita qualquer colisão se o usuário tiver os dois fluxos abertos em abas
+// diferentes ao mesmo tempo.
+const OAUTH_STATE_COOKIE_MS = 'tb45_oauth_state_ms';
+
+// Público (sem auth) — login.html usa isto pra decidir se mostra os botões
+// "Sign in with Google"/"Sign in with Microsoft" (ver js/login.js).
 app.get('/api/auth/providers', (req, res) => {
-  res.json({ google: GOOGLE_ENABLED });
+  res.json({ google: GOOGLE_ENABLED, microsoft: MICROSOFT_ENABLED });
 });
 
 app.get('/api/auth/google', (req, res) => {
@@ -624,6 +665,133 @@ app.get('/api/auth/google/callback', async (req, res) => {
     res.redirect('/login.html?google=success');
   } catch (err) {
     console.error('[google-auth] callback failed:', err);
+    failure('internal_error');
+  }
+});
+
+app.get('/api/auth/microsoft', (req, res) => {
+  if (!MICROSOFT_ENABLED) {
+    return res.status(503).send('Microsoft login is not configured on this server.');
+  }
+  const state = crypto.randomBytes(24).toString('hex');
+  res.setHeader('Set-Cookie', `${OAUTH_STATE_COOKIE_MS}=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=300`);
+  const params = new URLSearchParams({
+    client_id: MICROSOFT_CLIENT_ID,
+    redirect_uri: MICROSOFT_REDIRECT_URI,
+    response_type: 'code',
+    response_mode: 'query',
+    scope: 'openid email profile',
+    state,
+    prompt: 'select_account',
+  });
+  res.redirect(`https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?${params.toString()}`);
+});
+
+app.get('/api/auth/microsoft/callback', async (req, res) => {
+  const clearOauthStateCookie = () => {
+    res.setHeader('Set-Cookie', `${OAUTH_STATE_COOKIE_MS}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  };
+  // Mesmo padrão do failure() do Google acima — login.html mostra o erro
+  // (ver _lpHandleGoogleRedirectResult() em js/login.js, reaproveitada
+  // tanto pro retorno do Google quanto do Microsoft).
+  const failure = (reason) => {
+    clearOauthStateCookie();
+    res.redirect(`/login.html?microsoft=error&reason=${encodeURIComponent(reason)}`);
+  };
+
+  if (!MICROSOFT_ENABLED) return failure('not_configured');
+  const { code, state, error: msError } = req.query;
+  if (msError) return failure('access_denied');
+  const cookieState = parseCookies(req)[OAUTH_STATE_COOKIE_MS];
+  if (!state || !cookieState || state !== cookieState) return failure('invalid_state');
+  if (!code) return failure('missing_code');
+
+  try {
+    const tokenRes = await fetch(`https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: String(code),
+        client_id: MICROSOFT_CLIENT_ID,
+        client_secret: MICROSOFT_CLIENT_SECRET,
+        redirect_uri: MICROSOFT_REDIRECT_URI,
+        grant_type: 'authorization_code',
+        scope: 'openid email profile',
+      }),
+    });
+    if (!tokenRes.ok) {
+      console.error('[microsoft-auth] token exchange failed:', tokenRes.status, await tokenRes.text().catch(() => ''));
+      return failure('token_exchange_failed');
+    }
+    const tokens = await tokenRes.json();
+
+    // Perfil confirmado com uma chamada autenticada direto ao Microsoft
+    // Graph (OIDC userinfo) com o access_token recém-obtido — mesmo
+    // raciocínio do comentário grande acima do login com Google (não
+    // precisa validar assinatura de ID token à parte, o e-mail já vem de
+    // uma chamada servidor-a-servidor confiável pela própria cadeia HTTPS).
+    const profileRes = await fetch('https://graph.microsoft.com/oidc/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    if (!profileRes.ok) return failure('profile_fetch_failed');
+    const profile = await profileRes.json();
+
+    // Diferente do Google, o userinfo do Microsoft não devolve um campo
+    // "email_verified" — só exige que o e-mail tenha vindo preenchido
+    // (contas Microsoft, pessoais ou de organização, já passam pelo
+    // próprio processo de verificação do provedor na criação).
+    if (!profile.email) return failure('email_not_verified');
+    const email = String(profile.email).toLowerCase();
+
+    const { rows: existingRows } = await pool.query('SELECT * FROM users WHERE username = $1', [email]);
+    let user = existingRows[0];
+    if (user) {
+      if (user.auth_provider !== 'microsoft') {
+        // Esse username (e-mail) já pertence a uma conta local, Google ou
+        // NTLM — recusa entrar "como" ela via Microsoft (evitaria um
+        // account takeover se alguém tiver/criar uma conta Microsoft com
+        // esse mesmo e-mail).
+        return failure('account_exists_other_method');
+      }
+      if (user.disabled) {
+        // Distingue "nunca aprovada" (pendente) de "foi aprovada e depois
+        // desabilitada por um super_admin" — mesma lógica do Google acima.
+        if (!user.approved_at) {
+          clearOauthStateCookie();
+          return res.redirect('/login.html?microsoft=pending');
+        }
+        return failure('account_disabled');
+      }
+    } else {
+      // Primeira vez que este e-mail Microsoft aparece — pedido do
+      // usuário: "insira a opção para fazer login e cadastro com conta da
+      // Microsoft" — mesmo tratamento do Google/auto-cadastro local:
+      // disabled=1, approved_at fica NULL (pendente) até um super_admin
+      // aprovar em Settings → Users. handle gerado a partir da parte local
+      // do e-mail (ver generateUniqueHandle em server/db.js).
+      const handle = await generateUniqueHandle(pool, email);
+      await pool.query(
+        `INSERT INTO users (username, role, is_local, disabled, created_by, auth_provider, handle)
+         VALUES ($1, 'user', 0, 1, 'microsoft-oauth', 'microsoft', $2)
+         ON CONFLICT (username) DO NOTHING`,
+        [email, handle]
+      );
+      await ensureDefaultFolder(email);
+      const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [email]);
+      user = rows[0];
+      if (!user) return failure('provisioning_failed');
+      clearOauthStateCookie();
+      return res.redirect('/login.html?microsoft=pending');
+    }
+
+    const token = generateSessionToken();
+    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+    await pool.query('INSERT INTO sessions (token, username, expires_at) VALUES ($1, $2, $3)', [token, user.username, expiresAt]);
+    clearOauthStateCookie();
+    setSessionCookie(res, token);
+    res.redirect('/login.html?microsoft=success');
+  } catch (err) {
+    console.error('[microsoft-auth] callback failed:', err);
     failure('internal_error');
   }
 });
@@ -958,12 +1126,12 @@ app.get('/api/commands/:id', async (req, res) => {
 
 // `authMethod` distingue como esta requisição foi identificada — usado pela
 // página de login (login.html/js/login.js) e pelo header (js/auth.js) pra
-// saber se a sessão atual é local ou Google. Sob o gate de login
+// saber se a sessão atual é local, Google ou Microsoft. Sob o gate de login
 // obrigatório (ver comentário acima), uma requisição só chega até aqui com
 // API key OU sessão válida — nunca "anônima".
 function getAuthMethod(req) {
   if (req.apiKey) return 'api_key';
-  return req.authMethod === 'google' ? 'google' : 'local';
+  return (req.authMethod === 'google' || req.authMethod === 'microsoft') ? req.authMethod : 'local';
 }
 
 // ════════════════════════════════════════════════
