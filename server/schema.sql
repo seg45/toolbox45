@@ -506,12 +506,18 @@ CREATE TABLE IF NOT EXISTS users (
   -- usuário na interface, SEM nunca expor o username real (que é o e-mail,
   -- no caso de contas Google) — pedido do usuário: "cada usuário deverá ter
   -- um nome de usuário no sistema... e o e-mail fique restrito". Único via
-  -- idx_users_handle (índice, não constraint inline — ver runMigrations()
-  -- em server/db.js, que faz o backfill de instalações já existentes antes
-  -- de criar o índice único).
+  -- idx_users_handle — criado só em runMigrations() (server/db.js), NUNCA
+  -- aqui: numa instalação já existente `CREATE TABLE IF NOT EXISTS` acima é
+  -- um no-op (a tabela já existe), então a coluna `handle` só passa a
+  -- existir de verdade pelo `ALTER TABLE ... ADD COLUMN` de
+  -- runMigrations() — um `CREATE UNIQUE INDEX` aqui, MESMO com IF NOT
+  -- EXISTS, rodaria antes disso e falharia com "column handle does not
+  -- exist" (42703) nessas instalações (foi exatamente o que aconteceu num
+  -- deploy real). runMigrations() só cria o índice DEPOIS de garantir/
+  -- fazer o backfill da coluna — mesmo padrão já usado por idx_folders_parent
+  -- (parent_id) logo abaixo neste arquivo.
   handle        TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle ON users(handle);
 
 -- ════════════════════════════════════════════════
 -- Shares — concessão de visibilidade de pastas e/ou comandos de UM usuário
