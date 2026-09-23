@@ -35,6 +35,25 @@ function _catEscHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;
 function _catSortByLabel(items) {
   return (items || []).slice().sort((a, b) => (a.label || a.key || '').localeCompare(b.label || b.key || '', undefined, { sensitivity: 'base' }));
 }
+// Mesma ideia acima, mas para catálogos com um pai (Systems -> Vendor,
+// Versions/Environments -> System): pedido do usuário: "ordena primeiro por
+// system, e depois por environment [...] faça o mesmo nos demais cadastros"
+// -- os itens ficam agrupados pelo LABEL do pai (não pela key, que pode não
+// bater com a ordem alfabética do label) e, dentro de cada grupo, alfabético
+// pelo próprio label. `parentKeyField` é o nome do campo do item que guarda
+// a key do pai (ex.: 'vendor' em systems, 'system' em versions/environments);
+// `parentItems` é a lista de onde vem o label do pai (ex.: CATALOGS.vendors).
+function _catSortByParentThenLabel(items, parentItems, parentKeyField) {
+  const parentLabelByKey = new Map((parentItems || []).map(p => [p.key, p.label]));
+  const cmp = (x, y) => String(x || '').localeCompare(String(y || ''), undefined, { sensitivity: 'base' });
+  return (items || []).slice().sort((a, b) => {
+    const pa = parentLabelByKey.get(a[parentKeyField]) || a[parentKeyField] || '';
+    const pb = parentLabelByKey.get(b[parentKeyField]) || b[parentKeyField] || '';
+    const byParent = cmp(pa, pb);
+    if (byParent !== 0) return byParent;
+    return cmp(a.label || a.key, b.label || b.key);
+  });
+}
 
 // `kind`: 'versions' | 'environments' | 'topics' | 'parameters' — each one is
 // its own screen now (no tabs). The corresponding sidebar button calls
@@ -390,7 +409,7 @@ async function catAdminAddVendor() {
 function renderCatAdminSystems() {
   const list = _cat('catSysList');
   if (!list) return;
-  const systems = _catSortByLabel(CATALOGS.systems);
+  const systems = _catSortByParentThenLabel(CATALOGS.systems, CATALOGS.vendors, 'vendor');
   list.innerHTML = systems.map(s => `
     <div class="cat-row" data-cat-search="${_catEscAttr((s.key + ' ' + s.label).toLowerCase())}">
       <select class="set-input" id="catSys_vendor_${_catEscAttr(s.key)}" style="max-width:140px;" onchange="catAdminMarkDirty('systems')"></select>
@@ -441,7 +460,7 @@ async function catAdminAddSystem() {
 function renderCatAdminVersions() {
   const list = _cat('catVersionsList');
   if (!list) return;
-  const versions = _catSortByLabel(CATALOGS.versions);
+  const versions = _catSortByParentThenLabel(CATALOGS.versions, CATALOGS.systems, 'system');
   list.innerHTML = versions.map(v => {
     const rid = _catEscAttr(v.system) + '::' + _catEscAttr(v.key);
     return `
@@ -492,7 +511,7 @@ async function catAdminAddVersion() {
 function renderCatAdminEnvironments() {
   const list = _cat('catEnvironmentsList');
   if (!list) return;
-  const environments = _catSortByLabel(CATALOGS.environments);
+  const environments = _catSortByParentThenLabel(CATALOGS.environments, CATALOGS.systems, 'system');
   list.innerHTML = environments.map(e => `
     <div class="cat-row" data-cat-search="${_catEscAttr((e.key + ' ' + e.label + ' ' + (e.system || '')).toLowerCase())}">
       <select class="set-input" id="catE_system_${_catEscAttr(e.key)}" style="max-width:130px;" onchange="catAdminMarkDirty('environments')"></select>
