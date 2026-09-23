@@ -57,7 +57,9 @@ seed inicial com os ~30 comandos de referência (opcional):
 4) VARIÁVEIS DE AMBIENTE (opcional)
 --------------------------------------
 Definidas num arquivo ".env" ao lado do docker-compose.yml, ou exportadas
-antes do "docker compose up":
+antes do "docker compose up". IMPORTANTE: este repositório é PÚBLICO no
+GitHub — o .env NUNCA deve ser adicionado ao git (já está no .gitignore);
+só existe localmente no servidor.
 
     POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD
         # credenciais do banco (usadas por toolbox45-db E toolbox45-backend

@@ -15,6 +15,14 @@ server/node_modules/
 server/backup/
 /backup/
 
+# Segredos (POSTGRES_PASSWORD, GOOGLE_CLIENT_SECRET etc. — ver
+# docker-compose.yml, que os lê via ${VAR} de um .env ao lado dele, nunca
+# com o valor escrito direto no próprio docker-compose.yml). Este repo é
+# PÚBLICO — um .env aqui nunca pode ser versionado.
+.env
+.env.*
+!.env.example
+
 # Lixo comum de SO/editor
 .DS_Store
 Thumbs.db

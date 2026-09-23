@@ -61,12 +61,19 @@ services:
       # em login.html (ver GET /api/auth/google* em server/index.js). Sem
       # login do Windows/NTLM (removido) nem sessão Google, só resta o login
       # local (usuário/senha) — sempre disponível, não precisa de variável
-      # nenhuma. Crie um Client ID OAuth no Google Cloud Console (tipo "Web
-      # application") com este redirect URI EXATO:
-      # https://toolbox45.seg45.com.br/api/auth/google/callback
-      # GOOGLE_CLIENT_ID: ""
-      # GOOGLE_CLIENT_SECRET: ""
-      # GOOGLE_REDIRECT_URI: "https://toolbox45.seg45.com.br/api/auth/google/callback"""
+      # nenhuma.
+      #
+      # IMPORTANTE — este repositório é PÚBLICO: NUNCA escreva o Client ID/
+      # Secret diretamente aqui neste arquivo (ficaria no histórico do git
+      # pra sempre, mesmo removendo depois). As 3 variáveis abaixo são só a
+      # REFERÊNCIA (${VAR}) — o valor de verdade vai num arquivo ".env" ao
+      # lado deste docker-compose.yml (mesmo padrão do POSTGRES_PASSWORD
+      # acima), que o .gitignore já exclui do versionamento. Ver o passo a
+      # passo completo (criar o Client ID no Google Cloud Console e o
+      # conteúdo do .env) em docs/server-overview.md.
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-}"
     volumes:
       # Dumps do Backup & Restore (Settings → System → Database) — pg_dump/
       # pg_restore, fora do volume de dados do Postgres, sobrevive a

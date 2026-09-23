@@ -66,7 +66,12 @@ Primeiro login de um e-mail cria a conta automaticamente com `role: "user"`.
    `GET /api/auth/google/callback` (ex.: `https://toolbox45.seg45.com.br/api/auth/google/callback`)
    — precisa bater caractere por caractere com `GOOGLE_REDIRECT_URI` abaixo.
 4. Copie o **Client ID** e o **Client secret** gerados.
-5. Defina no backend (`toolbox45-backend`, ver bloco comentado em `docker-compose.yml`):
+5. **NUNCA cole o Client ID/Secret no `docker-compose.yml`** — este repositório é
+   público no GitHub, e qualquer coisa commitada nele fica no histórico do git pra
+   sempre, mesmo removendo depois. `docker-compose.yml` já lê essas 3 variáveis de um
+   arquivo `.env` (`${GOOGLE_CLIENT_ID}` etc., mesmo padrão do `POSTGRES_PASSWORD`) —
+   o `.gitignore` já exclui `.env` do versionamento. Crie/edite esse arquivo **direto no
+   servidor**, ao lado do `docker-compose.yml` (ex.: `/opt/toolbox45/.env`):
 
 ```
 GOOGLE_CLIENT_ID=<client id>
