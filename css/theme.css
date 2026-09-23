@@ -9,6 +9,12 @@
      roda no boot com a preferência salva — este valor aqui é só o fallback
      antes do JS rodar. */
   --teal: #1695A3; --teal-bg: rgba(22,149,163,.08);
+  /* Cor do texto/ícone nos botões "pill sólido" com fundo var(--teal) cheio
+     (ver comentário completo em ACCENT_PRESETS, js/theme.js) — branco pro
+     preset padrão (teal), mas cada preset define a sua própria (o preset
+     "white" usa escuro, senão o texto fica branco em cima de fundo branco).
+     Fallback aqui é só o valor antes do JS rodar, igual --teal acima. */
+  --teal-text: #fff;
   --blue: #60A5FA; --blue-bg: rgba(96,165,250,.08);
   --orange: #FB923C; --orange-bg: rgba(251,146,60,.08);
   --yellow: #FBBF24; --yellow-bg: rgba(251,191,36,.08);

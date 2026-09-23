@@ -37,32 +37,46 @@ function toggleModalTheme() {
 // salva à parte (mesmo padrão simples de 'cpa-theme' acima — não passa pelo
 // SETTINGS/user-sync.js, é local ao navegador, igual ao tema).
 // ════════════════════════════════════════════════
+// `text` = cor do texto/ícone nos botões "pill sólido" que usam
+// background:var(--teal) cheio (ver var(--teal-text) abaixo) — ex.: o botão
+// "Add" da toolbar (.ctb-cmd-actions .btn.ctb-cmd-btn.admin-highlight, ver
+// css/layout.css), .ipc-calc-btn e .copy-btn.multi-on (css/components.css).
+// Todos os presets antigos são cores saturadas/médias onde texto branco
+// sempre teve bom contraste, por isso "text" não existia até agora — era
+// sempre branco, fixo, hardcoded em cada regra. Precisou virar variável
+// quando "white" (abaixo) quebrou esse pressuposto: texto branco em cima de
+// fundo branco fica invisível — foi exatamente o bug relatado pelo usuário
+// ("No modo escuro com a cor branca o botão ficou sem texto").
 const ACCENT_PRESETS = {
   // "teal" é a cor oficial da marca Toolbox45 (#1695A3) e é o padrão do app.
-  teal:   { teal: '#1695A3', tealBg: 'rgba(22,149,163,.08)' },
+  teal:   { teal: '#1695A3', tealBg: 'rgba(22,149,163,.08)', text: '#fff' },
   // "pink" é a cor oficial de marca da Check Point (#DA1572 — mesma usada como
   // msapplication-TileColor em checkpoint.com) — mantido como opção, não é
   // mais o padrão desde o rebranding para Toolbox45.
-  pink:   { teal: '#DA1572', tealBg: 'rgba(218,21,114,.08)' },
-  blue:   { teal: '#60A5FA', tealBg: 'rgba(96,165,250,.08)' },
-  green:  { teal: '#4ADE80', tealBg: 'rgba(74,222,128,.08)' },
-  purple: { teal: '#C084FC', tealBg: 'rgba(192,132,252,.08)' },
-  orange: { teal: '#FB923C', tealBg: 'rgba(251,146,60,.08)' },
-  red:    { teal: '#F87171', tealBg: 'rgba(248,113,113,.08)' },
+  pink:   { teal: '#DA1572', tealBg: 'rgba(218,21,114,.08)', text: '#fff' },
+  blue:   { teal: '#60A5FA', tealBg: 'rgba(96,165,250,.08)', text: '#fff' },
+  green:  { teal: '#4ADE80', tealBg: 'rgba(74,222,128,.08)', text: '#fff' },
+  purple: { teal: '#C084FC', tealBg: 'rgba(192,132,252,.08)', text: '#fff' },
+  orange: { teal: '#FB923C', tealBg: 'rgba(251,146,60,.08)', text: '#fff' },
+  red:    { teal: '#F87171', tealBg: 'rgba(248,113,113,.08)', text: '#fff' },
   // Pedido do usuário: "em preferência do usuário inclua a cor branca quando
   // o modo escuro for habilitado" — branco só faz sentido em cima do fundo
   // escuro do tema dark (no claro ficaria invisível: destaque branco em
   // cima de fundo branco). O swatch (#accentSwatchWhite, index.html) só
   // aparece com [data-theme="dark"] (ver css/components.css), e
   // _resetAccentIfWhite() abaixo garante que a troca pra "white" nunca
-  // sobrevive a uma troca de volta pro tema claro.
-  white:  { teal: '#FFFFFF', tealBg: 'rgba(255,255,255,.12)' },
+  // sobrevive a uma troca de volta pro tema claro. text:'#0D1117' (mesmo
+  // tom escuro fixo já usado em .btn-primary) em vez de branco, senão os
+  // botões de pill sólido citados acima ficam com texto branco em cima de
+  // fundo branco.
+  white:  { teal: '#FFFFFF', tealBg: 'rgba(255,255,255,.12)', text: '#0D1117' },
 };
 const DEFAULT_ACCENT = 'teal';
 function applyAccentColor(key) {
   const preset = ACCENT_PRESETS[key] || ACCENT_PRESETS[DEFAULT_ACCENT];
   document.documentElement.style.setProperty('--teal', preset.teal);
   document.documentElement.style.setProperty('--teal-bg', preset.tealBg);
+  document.documentElement.style.setProperty('--teal-text', preset.text);
 }
 // Marca o swatch selecionado (anel de destaque, ver .accent-swatch.on em
 // components.css) no grupo "Accent color" do modal de Configurações.

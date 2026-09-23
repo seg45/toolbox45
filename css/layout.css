@@ -34,12 +34,21 @@
 [data-theme="dark"] .hdr-logo-img.for-light { display: none; }
 /* Pedido do usuário: aumentar a fonte (16px -> 18px -> 20px -> 22px, em
    pedidos separados) e trocar a cor de --text por um verde específico
-   escolhido por ele (#105B63, via color picker) — fixo, igual em
-   claro/escuro (diferente de var(--green), que é theme-scoped, ver
-   css/theme.css; aqui o usuário pediu essa cor exata, não a semântica
-   "verde do tema"). .hdr tem height:48px fixo (ver acima), então continua
-   cabendo sem mudar a altura da linha do header. */
+   escolhido por ele (#105B63, via color picker) — fixo, não ligado a
+   var(--green)/var(--teal) (que são theme/accent-scoped; aqui o usuário
+   pediu essa cor exata, não uma semântica que mude sozinha). .hdr tem
+   height:48px fixo (ver acima), então continua cabendo sem mudar a altura
+   da linha do header.
+   #105B63 é um verde-petróleo ESCURO — ótimo contraste em cima do fundo
+   claro (--surf claro é quase branco), mas quase ilegível em cima do fundo
+   escuro (--surf escuro, #161B22 — contraste ~2.2:1, abaixo do mínimo
+   recomendado até pra texto grande/negrito, 3:1). Pedido do usuário: "mudar
+   também a cor do nome Toolbox45 ... em modo escuro" — #2DD4BF é a mesma
+   família de cor (verde-azulado/teal), só bem mais clara, com contraste
+   ~10:1 em cima do fundo escuro. Mesmo tratamento em .sb-credit-txt logo
+   abaixo ("Developed by SEG45"). */
 .hdr-logo-txt { font-size: 22px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
+[data-theme="dark"] .hdr-logo-txt { color: #2DD4BF; }
 .hdr-gap { flex: 1; }
 /* Usuário identificado (login do Windows via NTLM, ou sessão local — ver
    js/auth.js) — mostrado à esquerda do botão de Configurações. É também o
@@ -481,9 +490,13 @@
    ícone e texto por item). Só este botão usa o preenchimento sólido; os
    demais (.btn.admin-highlight usados em Configurações → Registration, por
    exemplo) continuam no estilo "tintado" de sempre — o seletor de 3 classes
-   (.ctb-cmd-btn.admin-highlight) restringe a mudança só ao Add da toolbar. */
+   (.ctb-cmd-btn.admin-highlight) restringe a mudança só ao Add da toolbar.
+   color: var(--teal-text), não #fff fixo (era assim até o preset "white" em
+   ACCENT_PRESETS, js/theme.js, quebrar o pressuposto de "texto sempre
+   branco" — ver comentário lá; texto branco em cima de fundo branco = botão
+   "sem texto", bug relatado pelo usuário). */
 .ctb-cmd-actions .btn.ctb-cmd-btn.admin-highlight {
-  background: var(--teal); border-color: var(--teal); color: #fff;
+  background: var(--teal); border-color: var(--teal); color: var(--teal-text);
   border-radius: 999px; font-weight: 700; letter-spacing: .2px;
   /* -25% da largura-padrão dos 3 botões (128px -> 96px), só neste botão —
      o seletor de 4 classes (mais específico que .ctb-cmd-actions .btn.ctb-cmd-btn,

@@ -572,8 +572,12 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 .sb-credit:hover { opacity: .8; }
 /* Pedido do usuário: "em inglês com a cor da fonte verde no mesmo tom do
    nome" — mesma cor fixa #105B63 do nome "Toolbox45" no header
-   (.hdr-logo-txt, css/layout.css), no lugar do var(--muted) padrão. */
+   (.hdr-logo-txt, css/layout.css), no lugar do var(--muted) padrão.
+   Mesmo problema de contraste no tema escuro que o nome no header (ver
+   comentário completo em .hdr-logo-txt) — mesma correção, #2DD4BF só no
+   dark. */
 .sb-credit-txt { font-size: 10px; font-weight: 700; color: #105B63; letter-spacing: .3px; }
+[data-theme="dark"] .sb-credit-txt { color: #2DD4BF; }
 
 
 /* ─── DROPDOWN (Versão / Ambiente / Tipo-Assunto) ─── */
@@ -950,7 +954,7 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
    como escolhida para a cópia em lote — cor de destaque cheia (diferente do
    verde/--teal do feedback ".ok" de "Copied", pra não confundir os dois
    estados) e continua marcada até a barra flutuante copiar/cancelar. */
-.copy-btn.multi-on { background: var(--teal); border-color: var(--teal); color: #fff; }
+.copy-btn.multi-on { background: var(--teal); border-color: var(--teal); color: var(--teal-text); }
 /* Enquanto o modo está ativo, o resto dos botões de copiar ganha um leve
    contorno tracejado pra deixar claro que qualquer um deles também pode ser
    clicado agora pra entrar na seleção (sem precisar de outro duplo clique). */
@@ -1563,7 +1567,7 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
    (.ctb-cmd-actions .btn.ctb-cmd-btn.admin-highlight em css/layout.css) —
    pill sólido rosa/magenta da marca, texto branco. */
 .ipc-calc-btn {
-  background: var(--teal); border-color: var(--teal); color: #fff;
+  background: var(--teal); border-color: var(--teal); color: var(--teal-text);
   border-radius: 999px; font-weight: 700; letter-spacing: .2px;
 }
 .ipc-calc-btn:hover { filter: brightness(1.08); border-color: var(--teal); }
