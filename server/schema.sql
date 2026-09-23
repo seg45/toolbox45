@@ -507,15 +507,44 @@ CREATE TABLE IF NOT EXISTS api_keys (
 -- 'admin'/'admin' é semeada automaticamente pelo backend (ver server/db.js)
 -- logo após este schema ser aplicado — TROQUE A SENHA em produção.
 --
--- role='admin' é exigido para: excluir comandos, Backup & Restore, ver o
--- audit log, gerenciar API keys e gerenciar usuários (ver requireAdmin() em
--- server/index.js). Toda outra operação (criar/editar comando, favoritos,
--- preferências) continua liberada para qualquer usuário identificado.
+-- role: três níveis ('user' | 'admin' | 'super_admin' — pedido do usuário:
+-- "três perfis de acesso: User, Admin e Super Admin"), ver ROLE_RANK/
+-- requireAdmin()/requireSuperAdmin() em server/index.js:
+--   'user'        — não acessa Settings → Register (catálogos) nem System →
+--                    Backup & Restore/View audit log/SSL Certificate/API
+--                    access; não gerencia usuários. Só cria/edita os
+--                    próprios comandos/pastas/favoritos/preferências.
+--   'admin'       — tudo do 'user' + Register + Backup & Restore/audit log/
+--                    SSL Certificate/API access + excluir comandos. NÃO
+--                    gerencia usuários (Settings → Users nem aparece).
+--   'super_admin' — acesso total, incluindo Settings → Users (único nível
+--                    que gerencia usuários). A conta local 'admin' (semeada
+--                    por seedDefaultAdmin() em server/db.js) é SEMPRE
+--                    super_admin e não pode ter role/disabled alterado por
+--                    ninguém (nem outro super_admin) — ver o guard em
+--                    PUT/DELETE /api/users/:username, garante que a
+--                    instalação nunca fica sem ninguém que acesse Users.
+--
+-- approved_at: NULL enquanto a conta está pendente de aprovação (pedido do
+-- usuário: "todo novo usuário deverá vir desabilitado... conta está
+-- pendente de aprovação") — só existe para contas criadas por
+-- auto-cadastro (POST /api/auth/register, ou 1º login Google de um e-mail
+-- novo): ambas nascem com disabled=1 e approved_at=NULL. Uma conta criada
+-- diretamente por um super_admin em Manage users (POST /api/users) já
+-- nasce aprovada (approved_at=NOW()) — quem cria já é a aprovação. Um
+-- super_admin "aprova" uma conta pendente simplesmente habilitando-a
+-- (PUT /api/users/:username {disabled:false}) — isso grava approved_at=NOW()
+-- na hora (ver server/index.js), então uma conta desabilitada de novo
+-- DEPOIS de já ter sido aprovada não volta a ser "pendente" (mostra
+-- "Disabled", não "Pending approval" — ver js/users-admin.js). Instalações
+-- existentes (antes deste recurso) são retroativamente marcadas como já
+-- aprovadas no migration de runMigrations() — ninguém que já tinha conta
+-- fica bloqueado.
 -- ════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS users (
   username      TEXT PRIMARY KEY,
   password_hash TEXT,                          -- scrypt "salt:hash" (hex) — NULL para contas NTLM (is_local=0)
-  role          TEXT NOT NULL DEFAULT 'user',   -- 'user' | 'admin'
+  role          TEXT NOT NULL DEFAULT 'user',   -- 'user' | 'admin' | 'super_admin'
   is_local      INTEGER NOT NULL DEFAULT 0,     -- 1 = conta local (login usuário/senha); 0 = identificada via Windows/NTLM ou Google
   disabled      INTEGER NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -538,7 +567,13 @@ CREATE TABLE IF NOT EXISTS users (
   -- deploy real). runMigrations() só cria o índice DEPOIS de garantir/
   -- fazer o backfill da coluna — mesmo padrão já usado por idx_folders_parent
   -- (parent_id) logo abaixo neste arquivo.
-  handle        TEXT
+  handle        TEXT,
+  -- Ver comentário grande acima da tabela (role/approved_at). NULL =
+  -- pendente de aprovação; coluna adicionada via ALTER TABLE em
+  -- runMigrations() (server/db.js) para instalações existentes — mesmo
+  -- padrão de `handle` acima (CREATE TABLE IF NOT EXISTS é no-op numa
+  -- instalação já existente).
+  approved_at   TIMESTAMPTZ
 );
 
 -- ════════════════════════════════════════════════

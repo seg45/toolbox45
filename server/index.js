@@ -174,6 +174,7 @@ const REQUIRE_AUTH_PUBLIC_ROUTES = new Set([
   'GET /api/health',
   'POST /api/auth/login',
   'POST /api/auth/logout',
+  'POST /api/auth/register',
   'GET /api/auth/providers',
   'GET /api/auth/google',
   'GET /api/auth/google/callback',
@@ -304,6 +305,8 @@ async function getCurrentRole(req) {
   // Ver api_keys.role em schema.sql — keys criadas antes deste campo existir
   // ficam com o DEFAULT 'admin' (mesmo acesso total de sempre); keys novas
   // escolhem 'admin' ou 'user' na criação (ver POST /api/api-keys abaixo).
+  // API keys nunca são 'super_admin' (não existe essa opção em
+  // #apiKeyRoleSelect) — uma integração externa nunca gerencia usuários.
   if (req.apiKey) return req.apiKey.role || 'admin';
   // Sempre já resolvido pelo middleware de sessão local/Google acima — o
   // gate de login obrigatório (ver comentário lá) garante que uma rota de
@@ -312,10 +315,23 @@ async function getCurrentRole(req) {
   return req.userRole || 'user';
 }
 
+// Hierarquia dos 3 perfis (pedido do usuário: "três perfis de acesso: User,
+// Admin e Super Admin") — cada nível seguinte inclui tudo do anterior.
+// requireAdmin() (rank>=1) protege tudo que hoje já exigia 'admin' (excluir
+// comandos, Backup & Restore, audit log, SSL Certificate, API access) MAIS
+// o catálogo/Register (vendors/systems/versions/environments/topics/
+// parameters/prompts/exports — pedido: "o perfil User não poderá acessar
+// cadastro de registros"). requireSuperAdmin() (rank>=2) protege só Manage
+// users — pedido: "o perfil de Admin só não pode gerenciar usuários".
+const ROLE_RANK = { user: 0, admin: 1, super_admin: 2 };
+function roleRank(role) {
+  return ROLE_RANK[role] !== undefined ? ROLE_RANK[role] : 0;
+}
+
 async function requireAdmin(req, res, next) {
   try {
     const role = await getCurrentRole(req);
-    if (role !== 'admin') return res.status(403).json({ error: 'forbidden', message: 'Admin role required for this action' });
+    if (roleRank(role) < 1) return res.status(403).json({ error: 'forbidden', message: 'Admin role required for this action' });
     next();
   } catch (err) {
     console.error(err);
@@ -323,12 +339,27 @@ async function requireAdmin(req, res, next) {
   }
 }
 
-// Impede que uma ação deixe a aplicação sem NENHUM admin habilitado (evita
-// lockout total — sem um admin, ninguém mais consegue acessar Manage users
-// para corrigir isso). `excludeUsername` é o usuário sendo rebaixado/
+async function requireSuperAdmin(req, res, next) {
+  try {
+    const role = await getCurrentRole(req);
+    if (roleRank(role) < 2) return res.status(403).json({ error: 'forbidden', message: 'Super Admin role required for this action' });
+    next();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+}
+
+// Impede que uma ação deixe a aplicação sem NENHUM admin (rank>=1) habilitado
+// — evita lockout total das rotas admin-gated (Backup, audit log, SSL
+// Certificate, API access, Register, excluir comandos). Não cobre Manage
+// users especificamente (isso exige super_admin, rank 2) porque a conta
+// 'admin' já é super_admin protegida e permanentemente habilitada (ver
+// guard em PUT/DELETE /api/users/:username) — Manage users nunca fica
+// inacessível de verdade. `excludeUsername` é o usuário sendo rebaixado/
 // desabilitado/excluído — não conta ele mesmo na checagem.
 async function countEnabledAdmins(excludeUsername) {
-  const sql = "SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND disabled = 0" + (excludeUsername ? ' AND username != $1' : '');
+  const sql = "SELECT COUNT(*) AS n FROM users WHERE role IN ('admin','super_admin') AND disabled = 0" + (excludeUsername ? ' AND username != $1' : '');
   const { rows } = await pool.query(sql, excludeUsername ? [excludeUsername] : []);
   return Number(rows[0].n);
 }
@@ -367,6 +398,58 @@ app.post('/api/auth/logout', async (req, res) => {
     if (token) await pool.query('DELETE FROM sessions WHERE token = $1', [token]);
     clearSessionCookie(res);
     res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════
+// Auto-cadastro (login.html → "Register") — pedido do usuário: "na tela de
+// login criar a opção para registro. todo novo usuário deverá vir
+// desabilitado. Exibir mensagem no cadastro dizendo que a conta está
+// pendente de aprovação pelo administrador. se o usuário tentar se
+// cadastrar novamente com o mesmo email informar que o cadastro está
+// pendente de aprovação." Diferente de POST /api/users (que só um
+// super_admin usa, em Manage users, e já cria a conta aprovada e
+// habilitada): esta rota é PÚBLICA (ver REQUIRE_AUTH_PUBLIC_ROUTES acima),
+// sempre cria role='user', sempre disabled=1/approved_at=NULL — nunca cria
+// sessão (o cadastro não entra automaticamente, só depois de um super_admin
+// aprovar em Settings → Users, ver PUT /api/users/:username acima). Mesmo
+// e-mail usado como username, igual às contas Google (ver login com Google
+// abaixo) — assim um mesmo e-mail nunca cria duas contas por caminhos
+// diferentes.
+// ════════════════════════════════════════════════
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+app.post('/api/auth/register', async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || typeof email !== 'string' || !EMAIL_RE.test(email.trim())) {
+    return res.status(400).json({ error: 'validation_error', message: 'A valid e-mail address is required' });
+  }
+  if (!password || typeof password !== 'string' || password.length < 4) {
+    return res.status(400).json({ error: 'validation_error', message: '"password" must be at least 4 characters' });
+  }
+  const normalizedEmail = email.trim().toLowerCase();
+  try {
+    const { rows: existingRows } = await pool.query('SELECT * FROM users WHERE username = $1', [normalizedEmail]);
+    const existing = existingRows[0];
+    if (existing) {
+      // Já cadastrado e ainda não aprovado: mesma mensagem, não conta se
+      // já existia antes ou se foi criado agora — pedido do usuário.
+      if (existing.disabled && !existing.approved_at) {
+        return res.status(409).json({ error: 'pending_approval', message: 'This e-mail is already registered and is pending administrator approval.' });
+      }
+      return res.status(409).json({ error: 'account_exists', message: 'An account with this e-mail already exists. Please log in instead.' });
+    }
+    const handle = await generateUniqueHandle(pool, normalizedEmail);
+    await pool.query(
+      `INSERT INTO users (username, password_hash, role, is_local, disabled, created_by, auth_provider, handle)
+       VALUES ($1, $2, 'user', 1, 1, 'self-registration', 'local', $3)`,
+      [normalizedEmail, hashPassword(password), handle]
+    );
+    await ensureDefaultFolder(normalizedEmail);
+    await logAudit(normalizedEmail, 'create', 'user', normalizedEmail, normalizedEmail, 'Self-registered, pending approval');
+    res.status(201).json({ status: 'pending_approval', message: 'Your account was created and is pending administrator approval.' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });
@@ -496,18 +579,30 @@ app.get('/api/auth/google/callback', async (req, res) => {
         // se alguém tiver/criar uma conta Google com esse mesmo e-mail).
         return failure('account_exists_other_method');
       }
-      if (user.disabled) return failure('account_disabled');
+      if (user.disabled) {
+        // Distingue "nunca aprovada" (pendente — mesma UX do auto-cadastro,
+        // ver POST /api/auth/register acima) de "foi aprovada e depois
+        // desabilitada por um super_admin" (mensagem genérica de sempre).
+        if (!user.approved_at) {
+          clearOauthStateCookie();
+          return res.redirect('/login.html?google=pending');
+        }
+        return failure('account_disabled');
+      }
     } else {
-      // Primeira vez que este e-mail Google aparece — provisiona
-      // automaticamente com role 'user' (decisão do usuário); um admin
-      // promove depois em Manage users. handle gerado a partir da parte
-      // local do e-mail (ver generateUniqueHandle em server/db.js) — é ele,
-      // não o e-mail, que fica visível para outros usuários daqui em
-      // diante (ver comentário acima de maskUsernameForViewer).
+      // Primeira vez que este e-mail Google aparece — pedido do usuário:
+      // "todo novo usuário deverá vir desabilitado... Ele poderá se
+      // registrar com a conta do Google" — mesmo tratamento do auto-
+      // cadastro local (POST /api/auth/register): disabled=1,
+      // approved_at fica NULL (pendente) até um super_admin aprovar em
+      // Settings → Users. handle gerado a partir da parte local do e-mail
+      // (ver generateUniqueHandle em server/db.js) — é ele, não o e-mail,
+      // que fica visível para outros usuários daqui em diante (ver
+      // comentário acima de maskUsernameForViewer).
       const handle = await generateUniqueHandle(pool, email);
       await pool.query(
-        `INSERT INTO users (username, role, is_local, created_by, auth_provider, handle)
-         VALUES ($1, 'user', 0, 'google-oauth', 'google', $2)
+        `INSERT INTO users (username, role, is_local, disabled, created_by, auth_provider, handle)
+         VALUES ($1, 'user', 0, 1, 'google-oauth', 'google', $2)
          ON CONFLICT (username) DO NOTHING`,
         [email, handle]
       );
@@ -515,6 +610,10 @@ app.get('/api/auth/google/callback', async (req, res) => {
       const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [email]);
       user = rows[0];
       if (!user) return failure('provisioning_failed');
+      // Conta nova, ainda pendente: nunca cria sessão/loga automaticamente
+      // — volta pro login com o aviso, igual ao auto-cadastro local.
+      clearOauthStateCookie();
+      return res.redirect('/login.html?google=pending');
     }
 
     const token = generateSessionToken();
@@ -757,7 +856,7 @@ app.get('/api/commands', async (req, res) => {
   try {
     const { topic, version, environment, vendor, system: systemParam, sort } = req.query;
     const username = getCurrentUsername(req);
-    const isAdmin = (await getCurrentRole(req)) === 'admin';
+    const isAdmin = roleRank(await getCurrentRole(req)) >= 1;
 
     let sql = 'SELECT * FROM commands WHERE 1=1';
     const params = [];
@@ -837,7 +936,7 @@ app.get('/api/commands/:id', async (req, res) => {
     const row = await findCommand(req.params.id);
     if (!row) return res.status(404).json({ error: 'not_found', message: `Command '${req.params.id}' not found` });
     const username = getCurrentUsername(req);
-    const isAdmin = (await getCurrentRole(req)) === 'admin';
+    const isAdmin = roleRank(await getCurrentRole(req)) >= 1;
     // Mesma regra de visibilidade de GET /api/commands (privado por
     // padrão) — 404 (não 403: "não vaza a distinção", mesma convenção do
     // resto da API) quando o comando é de outro usuário que não
@@ -888,7 +987,13 @@ app.get('/api/me', async (req, res) => {
     username,
     upn: username, // mantido por compatibilidade com o front-end (js/user-sync.js) — sem NTLM/AD, username já é o identificador "de verdade" (e-mail, no caso do Google)
     role,
-    isAdmin: role === 'admin',
+    // isAdmin cobre 'admin' E 'super_admin' (rank>=1 — ver ROLE_RANK acima):
+    // é o que decide mostrar Register/Backup/audit log/SSL
+    // Certificate/API access na UI (ver applyAdminGating() em js/auth.js).
+    // isSuperAdmin cobre só 'super_admin' (rank>=2) — decide mostrar a aba
+    // Users (pedido: "o perfil de Admin só não pode gerenciar usuários").
+    isAdmin: roleRank(role) >= 1,
+    isSuperAdmin: roleRank(role) >= 2,
     authMethod: getAuthMethod(req),
     handle,
   });
@@ -1158,7 +1263,7 @@ app.get('/api/folders', async (req, res) => {
 app.get('/api/folders/all', async (req, res) => {
   try {
     const username = getCurrentUsername(req);
-    const isAdmin = (await getCurrentRole(req)) === 'admin';
+    const isAdmin = roleRank(await getCurrentRole(req)) >= 1;
     const visibilityClause = isAdmin ? '' : `
        WHERE f.username = $1 OR EXISTS (
          SELECT 1 FROM shares sh WHERE sh.grantor_username = f.username AND sh.grantee_username = $1 AND sh.share_folders = true
@@ -1530,7 +1635,7 @@ app.post('/api/folders/:id/copy', async (req, res) => {
     // furava por completo o novo modelo de compartilhamento se não
     // corrigido aqui também.
     if (src.rows[0].username !== username) {
-      const isAdmin = (await getCurrentRole(req)) === 'admin';
+      const isAdmin = roleRank(await getCurrentRole(req)) >= 1;
       if (!isAdmin) {
         const { rows: shareRows } = await pool.query(
           'SELECT 1 FROM shares WHERE grantor_username = $1 AND grantee_username = $2 AND share_folders = true',
@@ -1661,7 +1766,7 @@ app.get('/api/folders/:id/export', async (req, res) => {
     const username = getCurrentUsername(req);
     const owned = await pool.query('SELECT id FROM folders WHERE id = $1 AND username = $2', [req.params.id, username]);
     if (!owned.rows.length) return res.status(404).json({ error: 'not_found', message: `Folder '${req.params.id}' not found` });
-    const isAdmin = (await getCurrentRole(req)) === 'admin';
+    const isAdmin = roleRank(await getCurrentRole(req)) >= 1;
     const handleMap = isAdmin ? null : await getHandleMap();
     const root = await buildFolderExportNode(Number(req.params.id), username, { username, isAdmin, handleMap });
     res.json({ type: 'toolbox45-folder-export', version: 1, exported_at: new Date().toISOString(), root });
@@ -2269,17 +2374,27 @@ app.delete('/api/api-keys/:id', requireAdmin, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════
-// Usuários e permissões (Settings → System → Manage users) — ver users em
-// schema.sql. Só admin acessa (requireAdmin abaixo). Contas Google aparecem
-// aqui assim que forem vistas pela primeira vez (login com Google, mais
-// abaixo) — um admin pode promovê-las, mas não pode dar/trocar senha nelas
-// (só contas locais, is_local=1, têm senha). Instalações antigas ainda
-// podem ter contas auth_provider='ntlm' do login do Windows (removido) —
-// um admin pode desabilitá-las/excluí-las. Nunca devolve password_hash.
+// Usuários e permissões (Settings → Users) — ver users em schema.sql. Só
+// super_admin acessa (requireSuperAdmin abaixo, rank 2 — pedido do usuário:
+// "o perfil de Admin só não pode gerenciar usuários", então nem um 'admin'
+// comum alcança estas rotas). Contas Google aparecem aqui assim que forem
+// vistas pela primeira vez (login com Google, mais abaixo) — um super_admin
+// pode promovê-las, mas não pode dar/trocar senha nelas (só contas locais,
+// is_local=1, têm senha). Instalações antigas ainda podem ter contas
+// auth_provider='ntlm' do login do Windows (removido) — um super_admin pode
+// desabilitá-las/excluí-las. Nunca devolve password_hash.
+//
+// A conta local 'admin' é protegida à parte (ver PROTECTED_ADMIN_USERNAME
+// abaixo): "Usuário admin terá o perfil de Super Admin que não pode ser
+// alterado por outro usuário" — nem role nem disabled dela podem mudar,
+// mesmo por outro super_admin, e ela nunca pode ser excluída. Isso garante
+// que a instalação NUNCA fica sem ninguém habilitado que acesse Users.
 // ════════════════════════════════════════════════
-const USERS_PUBLIC_COLUMNS = 'username, role, is_local, disabled, created_at, created_by, auth_provider, handle';
+const USERS_PUBLIC_COLUMNS = 'username, role, is_local, disabled, created_at, created_by, auth_provider, handle, approved_at';
+const PROTECTED_ADMIN_USERNAME = 'admin';
+const USER_ROLES = ['user', 'admin', 'super_admin'];
 
-app.get('/api/users', requireAdmin, async (req, res) => {
+app.get('/api/users', requireSuperAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(`SELECT ${USERS_PUBLIC_COLUMNS} FROM users ORDER BY is_local DESC, username`);
     res.json(rows);
@@ -2289,7 +2404,7 @@ app.get('/api/users', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/users', requireAdmin, async (req, res) => {
+app.post('/api/users', requireSuperAdmin, async (req, res) => {
   const { username, password, role } = req.body || {};
   if (!username || typeof username !== 'string' || !username.trim()) {
     return res.status(400).json({ error: 'validation_error', message: '"username" is required' });
@@ -2297,14 +2412,17 @@ app.post('/api/users', requireAdmin, async (req, res) => {
   if (!password || typeof password !== 'string' || password.length < 4) {
     return res.status(400).json({ error: 'validation_error', message: '"password" must be at least 4 characters' });
   }
-  const roleVal = role === 'admin' ? 'admin' : 'user';
+  const roleVal = USER_ROLES.includes(role) ? role : 'user';
   try {
     const trimmed = username.trim();
     const { rows: existing } = await pool.query('SELECT username FROM users WHERE username = $1', [trimmed]);
     if (existing.length) return res.status(409).json({ error: 'conflict', message: `User '${trimmed}' already exists` });
     const handle = await generateUniqueHandle(pool, trimmed);
+    // Criada diretamente por um super_admin: já nasce aprovada
+    // (approved_at=NOW()) — nunca passa pelo estado "pendente" do
+    // auto-cadastro (ver POST /api/auth/register mais abaixo).
     await pool.query(
-      "INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle) VALUES ($1, $2, $3, 1, $4, 'local', $5)",
+      "INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at) VALUES ($1, $2, $3, 1, $4, 'local', $5, NOW())",
       [trimmed, hashPassword(password), roleVal, getCurrentUsername(req), handle]
     );
     await ensureDefaultFolder(trimmed);
@@ -2318,20 +2436,29 @@ app.post('/api/users', requireAdmin, async (req, res) => {
   }
 });
 
-app.put('/api/users/:username', requireAdmin, async (req, res) => {
+app.put('/api/users/:username', requireSuperAdmin, async (req, res) => {
   const username = req.params.username;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     const existing = existingRows[0];
     if (!existing) return res.status(404).json({ error: 'not_found', message: `User '${username}' not found` });
 
-    const newRole = req.body.role != null ? (req.body.role === 'admin' ? 'admin' : 'user') : existing.role;
+    // Conta 'admin' protegida: role/disabled nunca mudam por esta rota,
+    // nem para outro super_admin (ver comentário acima do bloco Users) —
+    // reset de senha continua liberado (não é "role" nem "acesso").
+    const isProtectedAdmin = username === PROTECTED_ADMIN_USERNAME;
+    if (isProtectedAdmin && (req.body.role != null || req.body.disabled != null)) {
+      return res.status(409).json({ error: 'conflict', message: `The '${PROTECTED_ADMIN_USERNAME}' account's role and status are fixed and can't be changed.` });
+    }
+
+    const newRole = req.body.role != null && USER_ROLES.includes(req.body.role) ? req.body.role : existing.role;
     const newDisabled = req.body.disabled != null ? !!req.body.disabled : !!existing.disabled;
 
-    // Guarda contra lockout total: se esta mudança tiraria o role admin ou
-    // desabilitaria a última conta admin habilitada, recusa.
-    const wasEnabledAdmin = existing.role === 'admin' && !existing.disabled;
-    const willStillBeEnabledAdmin = newRole === 'admin' && !newDisabled;
+    // Guarda contra lockout total: se esta mudança tiraria o role admin/
+    // super_admin ou desabilitaria a última conta admin-rank habilitada,
+    // recusa (ver countEnabledAdmins acima).
+    const wasEnabledAdmin = roleRank(existing.role) >= 1 && !existing.disabled;
+    const willStillBeEnabledAdmin = roleRank(newRole) >= 1 && !newDisabled;
     if (wasEnabledAdmin && !willStillBeEnabledAdmin) {
       const remaining = await countEnabledAdmins(username);
       if (remaining < 1) return res.status(409).json({ error: 'conflict', message: 'At least one enabled admin must remain' });
@@ -2346,9 +2473,17 @@ app.put('/api/users/:username', requireAdmin, async (req, res) => {
       passwordHash = hashPassword(req.body.password);
     }
 
+    // Aprovando uma conta pendente (disabled: true -> false, primeira vez —
+    // ver comentário grande em CREATE TABLE users, schema.sql): grava
+    // approved_at agora. Não mexe se já estava aprovada (reabilitar depois
+    // de um disable normal não é uma "nova aprovação").
+    const wasDisabled = !!existing.disabled;
+    const approvingNow = wasDisabled && !newDisabled && !existing.approved_at;
+    const newApprovedAt = approvingNow ? new Date() : existing.approved_at;
+
     await pool.query(
-      'UPDATE users SET role = $1, disabled = $2, password_hash = $3 WHERE username = $4',
-      [newRole, newDisabled ? 1 : 0, passwordHash, username]
+      'UPDATE users SET role = $1, disabled = $2, password_hash = $3, approved_at = $4 WHERE username = $5',
+      [newRole, newDisabled ? 1 : 0, passwordHash, newApprovedAt, username]
     );
     const { rows } = await pool.query(`SELECT ${USERS_PUBLIC_COLUMNS} FROM users WHERE username = $1`, [username]);
     // Nunca grava senha/hash no audit_log — só sinaliza QUE ela mudou (sem o
@@ -2365,13 +2500,16 @@ app.put('/api/users/:username', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/users/:username', requireAdmin, async (req, res) => {
+app.delete('/api/users/:username', requireSuperAdmin, async (req, res) => {
   const username = req.params.username;
   try {
+    if (username === PROTECTED_ADMIN_USERNAME) {
+      return res.status(409).json({ error: 'conflict', message: `The '${PROTECTED_ADMIN_USERNAME}' account can't be deleted.` });
+    }
     const { rows: existingRows } = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
     const existing = existingRows[0];
     if (!existing) return res.status(404).json({ error: 'not_found', message: `User '${username}' not found` });
-    if (existing.role === 'admin' && !existing.disabled) {
+    if (roleRank(existing.role) >= 1 && !existing.disabled) {
       const remaining = await countEnabledAdmins(username);
       if (remaining < 1) return res.status(409).json({ error: 'conflict', message: 'At least one enabled admin must remain' });
     }
@@ -2504,7 +2642,7 @@ app.post('/api/commands', async (req, res) => {
     // privilégio seria inseguro sem essa checagem de role no servidor.
     const username = getCurrentUsername(req);
     const wantsSystem = req.headers['x-save-as-system'] === '1' || req.headers['x-save-as-system'] === 'true';
-    const isAdmin = wantsSystem && (await getCurrentRole(req)) === 'admin';
+    const isAdmin = wantsSystem && roleRank(await getCurrentRole(req)) >= 1;
     cols.created_by = isAdmin ? 'System' : username;
     cols.modified_by = isAdmin ? 'System' : username;
 
@@ -2565,7 +2703,7 @@ app.put('/api/commands/:id', async (req, res) => {
     // comando novo em nome dele) e editar a cópia. Admins não têm essa
     // restrição: podem alterar qualquer comando.
     const isSystemCommand = found.created_by === 'System';
-    if ((await getCurrentRole(req)) !== 'admin' && found.created_by !== currentUser && !isSystemCommand) {
+    if (roleRank(await getCurrentRole(req)) < 1 && found.created_by !== currentUser && !isSystemCommand) {
       return res.status(403).json({
         error: 'forbidden',
         message: 'You can only edit your own commands (or System commands). Duplicate it to create your own editable copy.',
@@ -2651,7 +2789,7 @@ app.delete('/api/commands/:id', async (req, res) => {
     // created_by = quem copiou, ver POST /api/commands). Comandos
     // 'System' e de outros usuários exigem admin. Admins não têm
     // restrição (pedido do usuário: "admins continuam podendo fazer tudo").
-    if ((await getCurrentRole(req)) !== 'admin' && found.created_by !== currentUser) {
+    if (roleRank(await getCurrentRole(req)) < 1 && found.created_by !== currentUser) {
       const message = found.created_by === 'System'
         ? 'Only admins can delete System commands.'
         : 'You can only delete your own commands.';
@@ -2753,7 +2891,7 @@ async function replaceScopeLinks(joinTable, childCol, childKey, parentCol, paren
 }
 
 // ── Fabricantes (Vendor) ──────────────────────────
-app.post('/api/vendors', async (req, res) => {
+app.post('/api/vendors', requireAdmin, async (req, res) => {
   const { label, color } = req.body || {};
   if (!label || typeof label !== 'string') return res.status(400).json({ error: 'validation_error', message: '"label" is required' });
   try {
@@ -2768,7 +2906,7 @@ app.post('/api/vendors', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.put('/api/vendors/:key', async (req, res) => {
+app.put('/api/vendors/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM vendors WHERE key = $1', [key]);
@@ -2788,7 +2926,7 @@ app.put('/api/vendors/:key', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.delete('/api/vendors/:key', async (req, res) => {
+app.delete('/api/vendors/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM vendors WHERE key = $1', [key]);
@@ -2806,7 +2944,7 @@ app.delete('/api/vendors/:key', async (req, res) => {
 
 // ── Sistemas ───────────────────────────────────────
 // Hierarquia estrita: um Sistema pertence a exatamente um Vendor.
-app.post('/api/systems', async (req, res) => {
+app.post('/api/systems', requireAdmin, async (req, res) => {
   const { label, color, vendor } = req.body || {};
   if (!label || typeof label !== 'string') return res.status(400).json({ error: 'validation_error', message: '"label" is required' });
   if (!vendor || typeof vendor !== 'string') return res.status(400).json({ error: 'validation_error', message: '"vendor" is required' });
@@ -2823,7 +2961,7 @@ app.post('/api/systems', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.put('/api/systems/:key', async (req, res) => {
+app.put('/api/systems/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM systems WHERE key = $1', [key]);
@@ -2848,7 +2986,7 @@ app.put('/api/systems/:key', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.delete('/api/systems/:key', async (req, res) => {
+app.delete('/api/systems/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM systems WHERE key = $1', [key]);
@@ -2865,7 +3003,7 @@ app.delete('/api/systems/:key', async (req, res) => {
 });
 
 // ── Vínculos N:N Versão ↔ Ambiente / Ambiente ↔ Tópico ──
-app.put('/api/environments/:key/versions', async (req, res) => {
+app.put('/api/environments/:key/versions', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: envRows } = await pool.query('SELECT * FROM environments WHERE key = $1', [key]);
@@ -2888,7 +3026,7 @@ app.put('/api/environments/:key/versions', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.put('/api/topics/:key/environments', async (req, res) => {
+app.put('/api/topics/:key/environments', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     if (!(await keyExists('topics', key))) return res.status(404).json({ error: 'not_found', message: `Topic '${key}' not found` });
@@ -2903,7 +3041,7 @@ app.put('/api/topics/:key/environments', async (req, res) => {
 
 // ── Versões ──────────────────────────────────────
 // `key` sozinho não é globalmente único — a PK real é composta (system, key).
-app.post('/api/versions', async (req, res) => {
+app.post('/api/versions', requireAdmin, async (req, res) => {
   const { label, color, system } = req.body || {};
   if (!label || typeof label !== 'string') return res.status(400).json({ error: 'validation_error', message: '"label" is required' });
   if (!system || typeof system !== 'string') return res.status(400).json({ error: 'validation_error', message: '"system" is required' });
@@ -2929,7 +3067,7 @@ app.post('/api/versions', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.put('/api/versions/:system/:key', async (req, res) => {
+app.put('/api/versions/:system/:key', requireAdmin, async (req, res) => {
   const { system, key } = req.params;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM versions WHERE system = $1 AND key = $2', [system, key]);
@@ -2964,7 +3102,7 @@ app.put('/api/versions/:system/:key', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.delete('/api/versions/:system/:key', async (req, res) => {
+app.delete('/api/versions/:system/:key', requireAdmin, async (req, res) => {
   const { system, key } = req.params;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM versions WHERE system = $1 AND key = $2', [system, key]);
@@ -2984,7 +3122,7 @@ app.delete('/api/versions/:system/:key', async (req, res) => {
 // `system` é obrigatório (mesmo padrão de POST /api/versions) — `vendor` é
 // sempre derivado do Sistema escolhido (denormalizado, mantido em sincronia
 // pelo backend, nunca aceito diretamente do body).
-app.post('/api/environments', async (req, res) => {
+app.post('/api/environments', requireAdmin, async (req, res) => {
   const { label, color, system } = req.body || {};
   if (!label || typeof label !== 'string') return res.status(400).json({ error: 'validation_error', message: '"label" is required' });
   if (!system || typeof system !== 'string') return res.status(400).json({ error: 'validation_error', message: '"system" is required' });
@@ -3006,7 +3144,7 @@ app.post('/api/environments', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.put('/api/environments/:key', async (req, res) => {
+app.put('/api/environments/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM environments WHERE key = $1', [key]);
@@ -3045,7 +3183,7 @@ app.put('/api/environments/:key', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.delete('/api/environments/:key', async (req, res) => {
+app.delete('/api/environments/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM environments WHERE key = $1', [key]);
@@ -3062,7 +3200,7 @@ app.delete('/api/environments/:key', async (req, res) => {
 });
 
 // ── Tópicos ──────────────────────────────────────
-app.post('/api/topics', async (req, res) => {
+app.post('/api/topics', requireAdmin, async (req, res) => {
   const { label, color } = req.body || {};
   if (!label || typeof label !== 'string') return res.status(400).json({ error: 'validation_error', message: '"label" is required' });
   try {
@@ -3080,7 +3218,7 @@ app.post('/api/topics', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.put('/api/topics/:key', async (req, res) => {
+app.put('/api/topics/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM topics WHERE key = $1', [key]);
@@ -3101,7 +3239,7 @@ app.put('/api/topics/:key', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.delete('/api/topics/:key', async (req, res) => {
+app.delete('/api/topics/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM topics WHERE key = $1', [key]);
@@ -3139,7 +3277,7 @@ async function parameterStructuralDependencyCount(key) {
   return 0;
 }
 
-app.post('/api/parameters', async (req, res) => {
+app.post('/api/parameters', requireAdmin, async (req, res) => {
   const { key, label, sort_order } = req.body || {};
   if (!key || !CATALOG_KEY_RE.test(key)) return res.status(400).json({ error: 'validation_error', message: '"key" is required (letters, numbers, dot, underscore, hyphen only)' });
   if (!label) return res.status(400).json({ error: 'validation_error', message: '"label" is required' });
@@ -3156,7 +3294,7 @@ app.post('/api/parameters', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.put('/api/parameters/:key', async (req, res) => {
+app.put('/api/parameters/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM parameters WHERE key = $1', [key]);
@@ -3176,7 +3314,7 @@ app.put('/api/parameters/:key', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.delete('/api/parameters/:key', async (req, res) => {
+app.delete('/api/parameters/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM parameters WHERE key = $1', [key]);
@@ -3208,7 +3346,7 @@ app.delete('/api/parameters/:key', async (req, res) => {
 // separada. Sem contagem de uso no DELETE: command_lines.prompt é só texto
 // solto (não uma FK) — excluir um prompt do catálogo nunca altera comandos
 // já salvos, só tira a opção do <select> do editor dali em diante.
-app.post('/api/prompts', async (req, res) => {
+app.post('/api/prompts', requireAdmin, async (req, res) => {
   const { label } = req.body || {};
   if (!label || typeof label !== 'string') return res.status(400).json({ error: 'validation_error', message: '"label" is required' });
   try {
@@ -3223,7 +3361,7 @@ app.post('/api/prompts', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.put('/api/prompts/:key', async (req, res) => {
+app.put('/api/prompts/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM prompts WHERE key = $1', [key]);
@@ -3243,7 +3381,7 @@ app.put('/api/prompts/:key', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.delete('/api/prompts/:key', async (req, res) => {
+app.delete('/api/prompts/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM prompts WHERE key = $1', [key]);
@@ -3257,7 +3395,7 @@ app.delete('/api/prompts/:key', async (req, res) => {
   }
 });
 
-app.post('/api/exports', async (req, res) => {
+app.post('/api/exports', requireAdmin, async (req, res) => {
   const { label } = req.body || {};
   if (!label || typeof label !== 'string') return res.status(400).json({ error: 'validation_error', message: '"label" is required' });
   try {
@@ -3272,7 +3410,7 @@ app.post('/api/exports', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.put('/api/exports/:key', async (req, res) => {
+app.put('/api/exports/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM exports WHERE key = $1', [key]);
@@ -3291,7 +3429,7 @@ app.put('/api/exports/:key', async (req, res) => {
     res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
-app.delete('/api/exports/:key', async (req, res) => {
+app.delete('/api/exports/:key', requireAdmin, async (req, res) => {
   const key = req.params.key;
   try {
     const { rows: existingRows } = await pool.query('SELECT * FROM exports WHERE key = $1', [key]);

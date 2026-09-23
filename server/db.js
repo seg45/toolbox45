@@ -340,6 +340,30 @@ async function runMigrations() {
         END IF;
       END $$;
     `);
+    // users.role: 3 niveis (user|admin|super_admin) + users.approved_at
+    // (pedido do usuario: "tres perfis de acesso: User, Admin e Super
+    // Admin" + registro pendente de aprovacao) -- ver comentario grande
+    // acima de CREATE TABLE users em schema.sql para a semantica completa.
+    // ADD COLUMN nullable (sem backfill de valor "aprovado" automatico
+    // aqui -- isso e feito explicitamente abaixo): instalacoes novas ja
+    // nascem com a coluna via CREATE TABLE em schema.sql.
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`);
+    // Toda conta que ja existia ANTES deste recurso (criada por um admin,
+    // ou auto-provisionada no 1o login Google -- os 2 unicos jeitos de uma
+    // conta existir antes de POST /api/auth/register/self-registro Google
+    // pendente passarem a existir) ja era, na pratica, uma conta aprovada
+    // -- nunca passou por um fluxo de "pendente". So marca approved_at pra
+    // quem ainda esta NULL (nunca sobrescreve uma aprovacao/rejeicao real
+    // que o fluxo novo ja tenha gravado depois do deploy).
+    await pool.query(`UPDATE users SET approved_at = COALESCE(approved_at, created_at, NOW()) WHERE approved_at IS NULL`);
+    // A conta local 'admin' semeada por seedDefaultAdmin() abaixo e SEMPRE
+    // Super Admin, e isto e reforcado aqui a cada boot (idempotente) alem
+    // do INSERT em si -- cobre instalacoes que ja tinham essa conta ANTES
+    // deste recurso existir (quando role='admin' era o nivel maximo).
+    // Defesa em profundidade: o guard de verdade que impede qualquer um
+    // (inclusive outro super_admin) de mudar isto fica em
+    // PUT/DELETE /api/users/:username (server/index.js).
+    await pool.query(`UPDATE users SET role = 'super_admin' WHERE username = 'admin' AND role != 'super_admin'`);
     await pool.query(`
       UPDATE folder_commands fc SET sort_order = ranked.rn
       FROM (
@@ -686,20 +710,25 @@ async function runMigrations() {
   }
 }
 
-// Garante que sempre existe pelo menos uma conta local com role='admin' —
-// sem isso, uma instalação nova ficaria sem ninguém que pudesse acessar
-// Manage users/Backup/Audit log/API keys. ON CONFLICT DO NOTHING: só roda na
-// primeira vez (se alguém já trocou a senha ou renomeou/rebaixou 'admin',
-// isto não mexe em nada depois).
+// Garante que sempre existe pelo menos uma conta local com role='super_admin'
+// — sem isso, uma instalação nova ficaria sem ninguém que pudesse acessar
+// Manage users/Backup/Audit log/API keys/Register. ON CONFLICT DO NOTHING:
+// só roda na primeira vez (se alguém já trocou a senha, isto não mexe em
+// nada depois — o role, porém, é sempre reforçado como super_admin, ver o
+// UPDATE em runMigrations() acima e o guard em PUT/DELETE
+// /api/users/:username em server/index.js: "Usuário admin terá o perfil de
+// Super Admin que não pode ser alterado por outro usuário", pedido do
+// usuário).
 async function seedDefaultAdmin() {
   try {
     // handle='admin' explícito (runMigrations(), que faz o backfill
     // automático de handle para linhas já existentes, roda ANTES desta
     // função — ver initDb() acima — então esta conta ainda não existia
-    // quando o backfill rodou; sem isso ficaria sem handle).
+    // quando o backfill rodou; sem isso ficaria sem handle). approved_at
+    // já nasce preenchido — a conta semente nunca passa por "pendente".
     await pool.query(
-      `INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle)
-       VALUES ('admin', $1, 'admin', 1, 'system', 'local', 'admin')
+      `INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at)
+       VALUES ('admin', $1, 'super_admin', 1, 'system', 'local', 'admin', NOW())
        ON CONFLICT (username) DO NOTHING`,
       [hashPassword('admin')]
     );

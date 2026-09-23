@@ -41,6 +41,13 @@ function _uaFormatDate(iso) {
 // dela sem precisar rebater na API a cada tecla (ver filterUserList()).
 let _uaAllUsers = [];
 
+// Conta local protegida (pedido do usuário: "Usuário admin terá o perfil
+// de Super Admin que não pode ser alterado por outro usuário") — mesmo
+// PROTECTED_ADMIN_USERNAME de server/index.js, duplicado aqui (front-end
+// não importa o back-end); role/disabled dela são só texto, sem controles.
+const PROTECTED_ADMIN_USERNAME = 'admin';
+const USER_ROLE_LABELS = { user: 'User', admin: 'Admin', super_admin: 'Super Admin' };
+
 function _uaRenderRows(rows) {
   const tbody = document.getElementById('userListTbody');
   const empty = document.getElementById('userListEmpty');
@@ -57,20 +64,35 @@ function _uaRenderRows(rows) {
   if (empty) empty.style.display = 'none';
   tbody.innerHTML = rows.map(u => {
     const uname = _uaEscJsAttr(u.username);
-    const isAdmin = u.role === 'admin';
     const isDisabled = !!u.disabled;
+    // Pendente de aprovação (pedido do usuário: "todo novo usuário deverá
+    // vir desabilitado... conta está pendente de aprovação") — só quando
+    // desabilitada E nunca aprovada (ver approved_at em schema.sql); uma
+    // conta desabilitada DEPOIS de já ter sido aprovada mostra "Disabled"
+    // normalmente, não "Pending approval".
+    const isPending = isDisabled && !u.approved_at;
+    const isProtected = u.username === PROTECTED_ADMIN_USERNAME;
+    const roleCell = isProtected
+      ? USER_ROLE_LABELS[u.role] || u.role
+      : `<select class="set-input" style="max-width:130px;padding:4px 6px;font-size:12px;" onchange="changeUserRole('${uname}', this.value)">
+          ${Object.entries(USER_ROLE_LABELS).map(([val, label]) => `<option value="${val}" ${u.role === val ? 'selected' : ''}>${label}</option>`).join('')}
+        </select>`;
+    const statusCell = isPending
+      ? '<span style="color:var(--yel, #E8A33D);">Pending approval</span>'
+      : (isDisabled ? 'Disabled' : 'Active');
+    const actionsCell = isProtected
+      ? (u.is_local ? `<button type="button" class="btn btn-sm" onclick="openResetPasswordPrompt('${uname}')">Reset password</button>` : '')
+      : `
+        <button type="button" class="btn btn-sm" onclick="toggleUserDisabled('${uname}', ${isDisabled})">${isPending ? 'Approve' : (isDisabled ? 'Enable' : 'Disable')}</button>
+        ${u.is_local ? `<button type="button" class="btn btn-sm" onclick="openResetPasswordPrompt('${uname}')">Reset password</button>` : ''}
+        <button type="button" class="btn btn-sm" onclick="deleteUserConfirm('${uname}')">Delete</button>`;
     return `
-    <tr style="${isDisabled ? 'opacity:.5;' : ''}">
+    <tr style="${isDisabled && !isPending ? 'opacity:.5;' : ''}">
       <td>${_uaEscHtml(u.username)}</td>
       <td>${u.auth_provider === 'google' ? 'Google' : (u.is_local ? 'Local' : 'Windows')}</td>
-      <td>${isAdmin ? 'Admin' : 'User'}</td>
-      <td>${isDisabled ? 'Disabled' : 'Active'}</td>
-      <td style="white-space:nowrap;">
-        <button type="button" class="btn btn-sm" onclick="toggleUserRole('${uname}', ${isAdmin})">${isAdmin ? 'Make user' : 'Make admin'}</button>
-        <button type="button" class="btn btn-sm" onclick="toggleUserDisabled('${uname}', ${isDisabled})">${isDisabled ? 'Enable' : 'Disable'}</button>
-        ${u.is_local ? `<button type="button" class="btn btn-sm" onclick="openResetPasswordPrompt('${uname}')">Reset password</button>` : ''}
-        <button type="button" class="btn btn-sm" onclick="deleteUserConfirm('${uname}')">Delete</button>
-      </td>
+      <td>${roleCell}</td>
+      <td>${statusCell}</td>
+      <td style="white-space:nowrap;">${actionsCell}</td>
     </tr>`;
   }).join('');
 }
@@ -100,12 +122,15 @@ async function renderUserList() {
   filterUserList();
 }
 
-async function toggleUserRole(username, isCurrentlyAdmin) {
+// Select de 3 níveis por linha (ver roleCell em _uaRenderRows) substitui o
+// antigo botão de toggle binário "Make user/Make admin" — pedido do
+// usuário: "três perfis de acesso: User, Admin e Super Admin".
+async function changeUserRole(username, newRole) {
   try {
     const res = await fetch(`/api/users/${encodeURIComponent(username)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role: isCurrentlyAdmin ? 'user' : 'admin' }),
+      body: JSON.stringify({ role: newRole }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -114,6 +139,7 @@ async function toggleUserRole(username, isCurrentlyAdmin) {
     renderUserList();
   } catch (err) {
     alert(err.message || 'Failed to update role.');
+    renderUserList(); // desfaz a seleção otimista do <select> no DOM
   }
 }
 

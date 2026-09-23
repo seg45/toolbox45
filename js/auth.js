@@ -23,6 +23,7 @@
 // limpa.
 // ════════════════════════════════════════════════
 window.TB45_IS_ADMIN = false;
+window.TB45_IS_SUPER_ADMIN = false;
 window.TB45_AUTH_METHOD = 'local';
 const LOGIN_FLAG_KEY = 'cpa-authenticated';
 
@@ -32,11 +33,15 @@ const LOGIN_FLAG_KEY = 'cpa-authenticated';
 function updateAccountUI(me) {
   if (!me) return;
   window.TB45_IS_ADMIN = !!me.isAdmin;
+  window.TB45_IS_SUPER_ADMIN = !!me.isSuperAdmin;
   window.TB45_AUTH_METHOD = me.authMethod || 'local';
 
   const roleLine = document.getElementById('hdrUserRoleLine');
   if (roleLine) {
-    const roleLabel = me.isAdmin ? 'Admin' : 'User';
+    // 3 níveis (pedido do usuário: "três perfis de acesso: User, Admin e
+    // Super Admin") — isSuperAdmin implica isAdmin (ver ROLE_RANK em
+    // server/index.js), então checa a mais específica primeiro.
+    const roleLabel = me.isSuperAdmin ? 'Super Admin' : (me.isAdmin ? 'Admin' : 'User');
     const methodLabels = { local: 'local account', api_key: 'API key', google: 'Google account', anonymous: 'unidentified session' };
     const methodLabel = methodLabels[me.authMethod] || 'local account';
     roleLine.textContent = `${roleLabel} — signed in via ${methodLabel}`;
@@ -53,18 +58,23 @@ function updateAccountUI(me) {
   if (typeof applyAdminGating === 'function') applyAdminGating();
 }
 
-// Esconde por completo os grupos/abas admin-only de Settings (Database:
-// Backup & Restore/View audit log; API access — dentro de System; e a aba
-// própria "Users", ver #usersNavBtn em index.html) para quem não é admin — a
-// API já recusa essas chamadas com 403 de qualquer forma (ver requireAdmin()
-// em server/index.js), isto é só para não mostrar controles que vão falhar.
-// "Export/Import commands" fica de fora de propósito — não é admin-only (ver
-// escopo do pedido original). Exceção dentro do próprio Import: o checkbox
-// "Import as System commands" (importAsSystemRow) — ver js/csv-import.js —
-// que aparece só para admins.
+// Esconde por completo os grupos/abas admin-rank-only de Settings (Database:
+// Backup & Restore/View audit log; SSL Certificate; API access; Register —
+// dentro de System/Register) para quem não é Admin nem Super Admin — a API
+// já recusa essas chamadas com 403 de qualquer forma (ver requireAdmin() em
+// server/index.js), isto é só para não mostrar controles que vão falhar. A
+// aba própria "Users" (#usersNavBtn) é a exceção: super_admin-only (pedido
+// do usuário: "o perfil de Admin só não pode gerenciar usuários" — nem um
+// Admin comum a vê), por isso mora na lista separada
+// SUPER_ADMIN_ONLY_SETTINGS_GROUP_IDS. "Export/Import commands" fica de
+// fora de propósito — não é admin-only (ver escopo do pedido original).
+// Exceção dentro do próprio Import: o checkbox "Import as System commands"
+// (importAsSystemRow) — ver js/csv-import.js — que aparece só para
+// admin-rank.
 //
-// FAIL CLOSED: os 4 elementos abaixo já nascem com style="display:none" no
-// próprio index.html (não só escondidos por esta função em runtime) — bug
+// FAIL CLOSED: os elementos das 2 listas abaixo já nascem com
+// style="display:none" no próprio index.html (não só escondidos por esta
+// função em runtime) — bug
 // relatado pelo usuário (com screenshots): um usuário não-admin via essas
 // seções completas por um instante (ou indefinidamente, se GET /api/me
 // falhar e cair no catch de initUserSync() em js/user-sync.js, que nunca
@@ -72,11 +82,24 @@ function updateAccountUI(me) {
 // estático não tinha nenhum display:none — ficava visível "por padrão" até
 // prova de admin ("fail open"). Agora só fica visível depois que
 // applyAdminGating() confirma isAdmin:true — nunca visível por omissão.
-const ADMIN_ONLY_SETTINGS_GROUP_IDS = ['sysGroupDatabase', 'sysGroupSslCertificate', 'sysGroupApiAccess', 'usersNavBtn', 'importAsSystemRow'];
+// registerNavBtn (aba Settings → Register/catálogos) entrou aqui — pedido do
+// usuário: "o perfil User não poderá acessar cadastro de registros". Antes
+// desse pedido Register não tinha gate nenhum (qualquer usuário logado
+// acessava); agora é admin-rank (Admin OU Super Admin), igual ao resto
+// desta lista.
+const ADMIN_ONLY_SETTINGS_GROUP_IDS = ['sysGroupDatabase', 'sysGroupSslCertificate', 'sysGroupApiAccess', 'registerNavBtn', 'importAsSystemRow'];
+// usersNavBtn saiu da lista acima e virou super_admin-only — pedido do
+// usuário: "o perfil de Admin só não pode gerenciar usuários" (um Admin
+// comum não vê nem a aba Users existir).
+const SUPER_ADMIN_ONLY_SETTINGS_GROUP_IDS = ['usersNavBtn'];
 function applyAdminGating() {
   ADMIN_ONLY_SETTINGS_GROUP_IDS.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = window.TB45_IS_ADMIN ? '' : 'none';
+  });
+  SUPER_ADMIN_ONLY_SETTINGS_GROUP_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = window.TB45_IS_SUPER_ADMIN ? '' : 'none';
   });
 }
 

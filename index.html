@@ -453,7 +453,12 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
           <span>User preferences</span>
         </button>
-        <button type="button" class="settings-nav-btn" data-pane="catalog" onclick="switchSettingsPane('catalog')">
+        <!-- id="registerNavBtn" + display:none inline (fail-closed, mesmo
+             padrão de #usersNavBtn/#sysGroup* abaixo) — pedido do usuário:
+             "o perfil User não poderá acessar cadastro de registros". Antes
+             deste pedido não havia gate nenhum aqui. Ver
+             ADMIN_ONLY_SETTINGS_GROUP_IDS em js/auth.js. -->
+        <button type="button" class="settings-nav-btn" id="registerNavBtn" data-pane="catalog" onclick="switchSettingsPane('catalog')" style="display:none;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
           <span>Register</span>
         </button>
@@ -1955,6 +1960,7 @@
         <select class="set-input" id="newUserRoleSelect">
           <option value="user" selected>User</option>
           <option value="admin">Admin</option>
+          <option value="super_admin">Super Admin</option>
         </select>
       </div>
       <div class="set-hint" id="newUserErrorMsg" style="color:var(--red); display:none;"></div>

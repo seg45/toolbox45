@@ -36,3 +36,20 @@
   width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 9px 14px;
 }
+/* Link "Don't have an account? Register" / "Already have an account? Log
+   in" / "← Back to log in" / e-mail de suporte — pedido do usuário: "na
+   tela de login criar a opção para registro" + "poderá enviar email para
+   suporte@seg45.com.br". */
+.login-toggle-mode {
+  margin-top: 14px; text-align: center; font-size: 12.5px; color: var(--dim);
+}
+.login-toggle-mode a { color: var(--teal); text-decoration: none; font-weight: 600; }
+.login-toggle-mode a:hover { text-decoration: underline; }
+/* Caixa de "conta pendente de aprovação" (pedido do usuário: "Exibir
+   mensagem no cadastro dizendo que a conta está pendente de aprovação
+   pelo administrador") — mesmo verde de sucesso usado no resto do app
+   (--green/--green-bg, ver css/theme.css), não é um erro. */
+.login-pending-box {
+  color: var(--green); background: var(--green-bg); border: 1px solid var(--green);
+  border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.5; text-align: center;
+}

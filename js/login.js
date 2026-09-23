@@ -1,18 +1,26 @@
 // ════════════════════════════════════════════════
-// LOGIN PAGE (login.html) — página inicial da aplicação. Duas formas de
-// entrar (pedido do usuário: "deixar somente autenticação local e com
-// Google" — o login do Windows/NTLM que existia aqui foi removido):
+// LOGIN PAGE (login.html) — página inicial da aplicação. 3 "views" dentro
+// do mesmo card (#lpLoginView/#lpRegisterView/#lpPendingView — ver
+// _lpShowView() abaixo), formas de entrar/criar conta (pedido do usuário:
+// "deixar somente autenticação local e com Google" — o login do Windows/
+// NTLM que existia aqui foi removido — e depois "na tela de login criar a
+// opção para registro"):
 //   1) Local (usuário/senha) -> POST /api/auth/login — cria uma sessão via
 //      cookie httpOnly tb45_session.
-//   2) "Sign in with Google" -> navegação inteira pra GET /api/auth/google
+//   2) Auto-cadastro local (e-mail/senha) -> POST /api/auth/register — NÃO
+//      cria sessão; a conta nasce desabilitada/pendente de aprovação (ver
+//      submitRegister() abaixo e server/index.js).
+//   3) "Sign in with Google" -> navegação inteira pra GET /api/auth/google
 //      (OAuth) — ver startGoogleLogin()/_lpHandleGoogleRedirectResult()
-//      abaixo e o login com Google em server/index.js.
+//      abaixo e o login com Google em server/index.js. Serve tanto pra
+//      entrar (e-mail já aprovado) quanto pra se cadastrar (e-mail novo —
+//      também nasce pendente, mesma UX da opção 2).
 //
-// Depois de qualquer login bem-sucedido, grava LOGIN_FLAG_KEY no
-// localStorage e manda pra index.html — o gate inline no topo do <head> de
-// index.html é quem lê essa marca pra decidir se deixa entrar direto ou
-// redireciona de volta pra cá. js/auth.js::authLogout() é quem apaga a
-// marca no logout.
+// Depois de um login bem-sucedido (opções 1 ou 3, só quando já aprovada),
+// grava LOGIN_FLAG_KEY no localStorage e manda pra index.html — o gate
+// inline no topo do <head> de index.html é quem lê essa marca pra decidir
+// se deixa entrar direto ou redireciona de volta pra cá. js/auth.js::
+// authLogout() é quem apaga a marca no logout.
 //
 // Mesma chave usada nos 2 outros pontos (comentário duplicado de propósito
 // — são 3 arquivos carregados em páginas diferentes, sem runtime
@@ -21,6 +29,8 @@
 //   - js/auth.js (authLogout)
 // ════════════════════════════════════════════════
 const LOGIN_FLAG_KEY = 'cpa-authenticated';
+let _lpGoogleEnabled = false;
+let _lpCurrentView = 'login';
 
 function _lpShowError(msg) {
   const box = document.getElementById('loginPageErrorMsg');
@@ -30,9 +40,43 @@ function _lpClearError() {
   const box = document.getElementById('loginPageErrorMsg');
   if (box) { box.style.display = 'none'; box.textContent = ''; }
 }
+function _lpShowRegisterError(msg) {
+  const box = document.getElementById('lpRegisterErrorMsg');
+  if (box) { box.textContent = msg; box.style.display = ''; }
+}
+function _lpClearRegisterError() {
+  const box = document.getElementById('lpRegisterErrorMsg');
+  if (box) { box.style.display = 'none'; box.textContent = ''; }
+}
 function _lpMarkAuthenticatedAndEnter() {
   try { localStorage.setItem(LOGIN_FLAG_KEY, '1'); } catch (e) { /* localStorage indisponível — entra mesmo assim, só não persiste entre reloads */ }
   location.href = 'index.html';
+}
+
+// Alterna entre as 3 views do card (ver comentário grande acima e
+// login.html) — 'login' (padrão), 'register', 'pending'. O botão/divider
+// "Sign in with Google" só aparece nas 2 primeiras (pedido do usuário: "Ele
+// poderá se registrar com a conta do Google" — não faz sentido na view de
+// "pendente", que já não tem formulário nenhum).
+function _lpShowView(view) {
+  const views = { login: 'lpLoginView', register: 'lpRegisterView', pending: 'lpPendingView' };
+  Object.entries(views).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = key === view ? '' : 'none';
+  });
+  _lpCurrentView = view;
+  _lpClearError();
+  _lpClearRegisterError();
+  const divider = document.getElementById('lpGoogleDivider');
+  const googleBtn = document.getElementById('lpGoogleBtn');
+  const showGoogle = _lpGoogleEnabled && view !== 'pending';
+  if (divider) divider.style.display = showGoogle ? '' : 'none';
+  if (googleBtn) googleBtn.style.display = showGoogle ? '' : 'none';
+}
+function _lpShowPending(message) {
+  const box = document.getElementById('lpPendingMsg');
+  if (box) box.textContent = message;
+  _lpShowView('pending');
 }
 
 // "Sign in with Google" — navegação de página inteira pra GET
@@ -54,10 +98,16 @@ async function _lpInitGoogleButton() {
   try {
     const res = await fetch('/api/auth/providers');
     const data = await res.json();
-    btn.style.display = data.google ? '' : 'none';
+    _lpGoogleEnabled = !!data.google;
   } catch (e) {
-    btn.style.display = 'none';
+    _lpGoogleEnabled = false;
   }
+  // Reaplica a visibilidade na view ATUAL (_lpCurrentView, não sniffada do
+  // DOM) sem trocar de view — esta função é async e _lpHandleGoogleRedirectResult()
+  // (chamada logo em seguida, no mesmo DOMContentLoaded) pode já ter
+  // mudado pra 'pending' antes do fetch acima resolver; sniffar o DOM
+  // acabaria voltando pro login por engano nesse caso.
+  _lpShowView(_lpCurrentView);
 }
 
 // Depois da ida-e-volta pelo Google, o resultado chega como querystring
@@ -76,6 +126,13 @@ function _lpHandleGoogleRedirectResult() {
     _lpMarkAuthenticatedAndEnter();
     return;
   }
+  // E-mail Google novo (ou já cadastrado mas ainda não aprovado) — mesma
+  // UX de pendente do auto-cadastro local (ver submitRegister() abaixo e
+  // GET /api/auth/google/callback em server/index.js).
+  if (google === 'pending') {
+    _lpShowPending('Your account was created with Google sign-in and is pending administrator approval.');
+    return;
+  }
   const reasons = {
     access_denied: 'Google sign-in was cancelled.',
     invalid_state: 'Google sign-in session expired. Please try again.',
@@ -84,6 +141,50 @@ function _lpHandleGoogleRedirectResult() {
     not_configured: 'Google sign-in is not configured on this server.',
   };
   _lpShowError(reasons[reason] || 'Google sign-in failed. Please try again.');
+}
+
+// Auto-cadastro local (login.html → "Register") — pedido do usuário: "na
+// tela de login criar a opção para registro. todo novo usuário deverá vir
+// desabilitado. Exibir mensagem no cadastro dizendo que a conta está
+// pendente de aprovação pelo administrador. se o usuário tentar se
+// cadastrar novamente com o mesmo email informar que o cadastro está
+// pendente de aprovação." POST /api/auth/register nunca cria sessão — só
+// depois de um super_admin aprovar em Settings → Users é que o login local
+// funciona (ver server/index.js).
+async function submitRegister() {
+  const email = (document.getElementById('lpRegEmailInput') || {}).value || '';
+  const password = (document.getElementById('lpRegPasswordInput') || {}).value || '';
+  const btn = document.getElementById('lpRegisterSubmitBtn');
+  _lpClearRegisterError();
+  if (!email.trim() || !password) {
+    _lpShowRegisterError('Enter both e-mail and password.');
+    return;
+  }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      _lpShowPending(data.message || 'Your account was created and is pending administrator approval.');
+      return;
+    }
+    // pending_approval (mesmo e-mail já cadastrado, ainda não aprovado) usa
+    // a MESMA view de sucesso — pedido do usuário: "informar que o
+    // cadastro está pendente de aprovação", não é tratado como erro.
+    if (data.error === 'pending_approval') {
+      _lpShowPending(data.message || 'This e-mail is already registered and is pending administrator approval.');
+      return;
+    }
+    _lpShowRegisterError(data.message || 'Failed to create account.');
+  } catch (err) {
+    _lpShowRegisterError('Failed to create account. Please try again.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function submitLocalLogin() {
@@ -138,6 +239,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (userInput) userInput.focus();
   const passInput = document.getElementById('lpPasswordInput');
   if (passInput) passInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') submitLocalLogin(); });
+  const regPassInput = document.getElementById('lpRegPasswordInput');
+  if (regPassInput) regPassInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') submitRegister(); });
   _lpInitGoogleButton();
   _lpHandleGoogleRedirectResult();
 });
