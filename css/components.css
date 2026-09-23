@@ -622,9 +622,19 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 .dd-search-input:focus { border-color: var(--teal); }
 .dd-search-input::placeholder { color: var(--muted); }
 
-/* ─── Editor de comandos: dropdown "Inserir variável" (na linha de cabeçalho, entre Exportável e Remover) ─── */
+/* ─── Editor de comandos: dropdown "Inserir variável" (na linha de cabeçalho, entre Prompt e Export) ─── */
 .row-head .ln-var-dd { flex-shrink: 0; min-width: 0; }
-.ln-var-dd .dd-btn { width: auto; padding: 4px 8px; font-size: 10.5px; gap: 6px; }
+/* Pedido do usuário: "deixe o Insert variable no padrão de estilo dos
+   outros campos" -- mesmo box model dos <select> vizinhos (.set-input:
+   padding 7px 10px, font-size 12px, font-family mono), em vez do botao
+   pequeno/fundo transparente que tinha antes (por isso o markup em
+   js/command-editor.js não usa mais as classes .btn.btn-ghost.btn-sm, só
+   .dd-btn puro -- background/border/border-radius iguais ao .set-input já
+   vêm do .dd-btn base). */
+.ln-var-dd .dd-btn {
+  width: auto; padding: 7px 10px; font-size: 12px; font-weight: 400;
+  font-family: var(--mono); gap: 8px;
+}
 .ln-var-dd .dd-panel { left: 0; right: auto; min-width: 200px; width: max-content; max-width: 280px; }
 
 /* flag toggles */

@@ -440,7 +440,7 @@ function _ceBuildLineRow(data, opts) {
       <select class="set-input ln-text-category" style="max-width:90px;display:none;">${categoryOptions}</select>
       <select class="set-input ln-prompt" style="max-width:180px;">${promptOptions}</select>
       <div class="dd ln-var-dd">
-        <button type="button" class="dd-btn btn btn-ghost btn-sm" onclick="_ceToggleVarDropdown(this)">
+        <button type="button" class="dd-btn" onclick="_ceToggleVarDropdown(this)">
           <span class="dd-label">Insert variable</span><span class="dd-arrow">▾</span>
         </button>
         <div class="dd-panel seg ln-var-panel">
