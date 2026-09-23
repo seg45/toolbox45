@@ -456,6 +456,29 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_log_ts ON audit_log(ts);
 
 -- ════════════════════════════════════════════════
+-- Login com Google/Microsoft — configuração feita pela própria UI
+-- (Settings → System → OAuth Integrations, admin-only) em vez de só pelas
+-- variáveis de ambiente GOOGLE_*/MICROSOFT_* (ver server/index.js e
+-- docs/server-overview.md). Uma linha nesta tabela, quando existe, TEM
+-- PRIORIDADE sobre a variável de ambiente correspondente (ver
+-- reloadOAuthConfig() em server/index.js) — assim quem já configurou via
+-- .env continua funcionando sem mudar nada, e quem prefere configurar pela
+-- tela não precisa de acesso SSH ao servidor. client_secret fica em texto
+-- puro (mesmo nível de proteção do .env — quem tem acesso ao banco já tem
+-- acesso ao container inteiro) e NUNCA é devolvido pela API depois de
+-- salvo (GET /api/system/oauth só informa se está preenchido).
+-- ════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS oauth_settings (
+  provider      TEXT PRIMARY KEY,   -- 'google' | 'microsoft'
+  client_id     TEXT,
+  client_secret TEXT,
+  redirect_uri  TEXT,
+  tenant_id     TEXT,               -- só usado pelo 'microsoft'; NULL no 'google'
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by    TEXT
+);
+
+-- ════════════════════════════════════════════════
 -- API keys — acesso programático externo ao backend (ex.: integrações,
 -- scripts), gerenciável pela UI (Settings → System → API access). Cada key só
 -- é exibida em texto puro NO MOMENTO da criação (POST /api/api-keys) — depois

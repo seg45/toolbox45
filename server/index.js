@@ -488,10 +488,26 @@ app.post('/api/auth/register', async (req, res) => {
 // Sem as 3, o login com Google fica desligado (botão escondido no
 // login.html via GET /api/auth/providers) — nunca trava a aplicação.
 // ════════════════════════════════════════════════
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || null;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || null;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || null;
-const GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_REDIRECT_URI);
+// Pedido do usuário: "coloque em system a opção para integrar o login e
+// registro com o Google e Microsoft" — as 3 (Google) / 4 (Microsoft)
+// variáveis abaixo continuam funcionando como estão (deploy via .env, ver
+// docs/server-overview.md), mas agora são só o FALLBACK: uma configuração
+// salva pela tela (Settings → System → OAuth Integrations, admin-only —
+// tabela oauth_settings, ver server/schema.sql) tem prioridade. Por isso
+// GOOGLE_CLIENT_ID etc. abaixo viraram `let` (recalculadas por
+// reloadOAuthConfig(), mais abaixo) em vez de `const` — o resto das rotas
+// de login com Google/Microsoft neste arquivo não muda NADA, continuam
+// lendo essas mesmas variáveis.
+const GOOGLE_CLIENT_ID_ENV = process.env.GOOGLE_CLIENT_ID || null;
+const GOOGLE_CLIENT_SECRET_ENV = process.env.GOOGLE_CLIENT_SECRET || null;
+const GOOGLE_REDIRECT_URI_ENV = process.env.GOOGLE_REDIRECT_URI || null;
+let GOOGLE_CLIENT_ID = GOOGLE_CLIENT_ID_ENV;
+let GOOGLE_CLIENT_SECRET = GOOGLE_CLIENT_SECRET_ENV;
+let GOOGLE_REDIRECT_URI = GOOGLE_REDIRECT_URI_ENV;
+let GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_REDIRECT_URI);
+// 'db' | 'env' | 'none' — só informativo, pra tela mostrar de onde veio a
+// configuração ativa (ver GET /api/system/oauth mais abaixo).
+let GOOGLE_CONFIG_SOURCE = GOOGLE_ENABLED ? 'env' : 'none';
 // Cookie curto (5min), só durante a ida-e-volta do consentimento do Google —
 // protege contra CSRF no callback (state precisa bater com o que foi
 // gravado aqui antes do redirect pro Google). Nada sensível dentro dele.
@@ -526,11 +542,44 @@ const OAUTH_STATE_COOKIE = 'tb45_oauth_state';
 // Microsoft fica desligado (botão escondido no login.html via GET
 // /api/auth/providers) — nunca trava a aplicação.
 // ════════════════════════════════════════════════
-const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || null;
-const MICROSOFT_CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET || null;
-const MICROSOFT_REDIRECT_URI = process.env.MICROSOFT_REDIRECT_URI || null;
-const MICROSOFT_TENANT_ID = process.env.MICROSOFT_TENANT_ID || 'common';
-const MICROSOFT_ENABLED = !!(MICROSOFT_CLIENT_ID && MICROSOFT_CLIENT_SECRET && MICROSOFT_REDIRECT_URI);
+const MICROSOFT_CLIENT_ID_ENV = process.env.MICROSOFT_CLIENT_ID || null;
+const MICROSOFT_CLIENT_SECRET_ENV = process.env.MICROSOFT_CLIENT_SECRET || null;
+const MICROSOFT_REDIRECT_URI_ENV = process.env.MICROSOFT_REDIRECT_URI || null;
+const MICROSOFT_TENANT_ID_ENV = process.env.MICROSOFT_TENANT_ID || 'common';
+let MICROSOFT_CLIENT_ID = MICROSOFT_CLIENT_ID_ENV;
+let MICROSOFT_CLIENT_SECRET = MICROSOFT_CLIENT_SECRET_ENV;
+let MICROSOFT_REDIRECT_URI = MICROSOFT_REDIRECT_URI_ENV;
+let MICROSOFT_TENANT_ID = MICROSOFT_TENANT_ID_ENV;
+let MICROSOFT_ENABLED = !!(MICROSOFT_CLIENT_ID && MICROSOFT_CLIENT_SECRET && MICROSOFT_REDIRECT_URI);
+let MICROSOFT_CONFIG_SOURCE = MICROSOFT_ENABLED ? 'env' : 'none';
+
+// Recarrega a config efetiva de Google/Microsoft a partir de oauth_settings
+// — chamada uma vez no boot (ver o startup IIFE no final deste arquivo) e
+// de novo sempre que o admin salva/remove uma config em Settings → System →
+// OAuth Integrations (ver PUT/DELETE /api/system/oauth/:provider mais
+// abaixo). Uma linha na tabela tem prioridade sobre a variável de ambiente
+// correspondente; sem linha, cai pro valor de ambiente (*_ENV acima) —
+// exatamente como funcionava antes desta tela existir.
+async function reloadOAuthConfig() {
+  const { rows } = await pool.query('SELECT * FROM oauth_settings');
+  const byProvider = {};
+  for (const row of rows) byProvider[row.provider] = row;
+
+  const g = byProvider.google;
+  GOOGLE_CLIENT_ID = (g && g.client_id) || GOOGLE_CLIENT_ID_ENV;
+  GOOGLE_CLIENT_SECRET = (g && g.client_secret) || GOOGLE_CLIENT_SECRET_ENV;
+  GOOGLE_REDIRECT_URI = (g && g.redirect_uri) || GOOGLE_REDIRECT_URI_ENV;
+  GOOGLE_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET && GOOGLE_REDIRECT_URI);
+  GOOGLE_CONFIG_SOURCE = g ? 'db' : (GOOGLE_ENABLED ? 'env' : 'none');
+
+  const m = byProvider.microsoft;
+  MICROSOFT_CLIENT_ID = (m && m.client_id) || MICROSOFT_CLIENT_ID_ENV;
+  MICROSOFT_CLIENT_SECRET = (m && m.client_secret) || MICROSOFT_CLIENT_SECRET_ENV;
+  MICROSOFT_REDIRECT_URI = (m && m.redirect_uri) || MICROSOFT_REDIRECT_URI_ENV;
+  MICROSOFT_TENANT_ID = (m && m.tenant_id) || MICROSOFT_TENANT_ID_ENV;
+  MICROSOFT_ENABLED = !!(MICROSOFT_CLIENT_ID && MICROSOFT_CLIENT_SECRET && MICROSOFT_REDIRECT_URI);
+  MICROSOFT_CONFIG_SOURCE = m ? 'db' : (MICROSOFT_ENABLED ? 'env' : 'none');
+}
 // Cookie de estado próprio (não reaproveita OAUTH_STATE_COOKIE do Google) —
 // evita qualquer colisão se o usuário tiver os dois fluxos abertos em abas
 // diferentes ao mesmo tempo.
@@ -793,6 +842,123 @@ app.get('/api/auth/microsoft/callback', async (req, res) => {
   } catch (err) {
     console.error('[microsoft-auth] callback failed:', err);
     failure('internal_error');
+  }
+});
+
+// ════════════════════════════════════════════════
+// Configuração de login Google/Microsoft pela UI — Settings → System →
+// OAuth Integrations (admin-only, ver ADMIN_ONLY_SETTINGS_GROUP_IDS em
+// js/auth.js e js/oauth-settings.js). Pedido do usuário: "coloque em
+// system a opção para integrar o login e registro com o Google e
+// Microsoft". Grava em oauth_settings (server/schema.sql) — tem
+// prioridade sobre as variáveis de ambiente GOOGLE_*/MICROSOFT_*, que
+// continuam funcionando como fallback (ver reloadOAuthConfig() acima).
+// client_secret nunca é devolvido pela API depois de salvo — só um
+// booleano "clientSecretSet" (mesmo princípio das API keys, que só
+// mostram o valor em texto puro na hora da criação).
+// ════════════════════════════════════════════════
+const OAUTH_PROVIDERS = ['google', 'microsoft'];
+
+app.get('/api/system/oauth', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM oauth_settings');
+    const byProvider = {};
+    for (const row of rows) byProvider[row.provider] = row;
+
+    const buildStatus = (provider, envClientId, envClientSecret, envRedirectUri, enabled, source, extra) => {
+      const db = byProvider[provider];
+      return {
+        configured: enabled,
+        source, // 'db' | 'env' | 'none' — de onde vem a config ATIVA agora
+        clientId: (db && db.client_id) || envClientId || null,
+        clientSecretSet: !!((db && db.client_secret) || envClientSecret),
+        redirectUri: (db && db.redirect_uri) || envRedirectUri || null,
+        updatedAt: (db && db.updated_at) || null,
+        updatedBy: (db && db.updated_by) || null,
+        ...extra,
+      };
+    };
+
+    res.json({
+      google: buildStatus('google', GOOGLE_CLIENT_ID_ENV, GOOGLE_CLIENT_SECRET_ENV, GOOGLE_REDIRECT_URI_ENV, GOOGLE_ENABLED, GOOGLE_CONFIG_SOURCE),
+      microsoft: buildStatus('microsoft', MICROSOFT_CLIENT_ID_ENV, MICROSOFT_CLIENT_SECRET_ENV, MICROSOFT_REDIRECT_URI_ENV, MICROSOFT_ENABLED, MICROSOFT_CONFIG_SOURCE, {
+        tenantId: MICROSOFT_TENANT_ID,
+      }),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.put('/api/system/oauth/:provider', requireAdmin, async (req, res) => {
+  const provider = req.params.provider;
+  if (!OAUTH_PROVIDERS.includes(provider)) {
+    return res.status(404).json({ error: 'not_found', message: 'Unknown provider.' });
+  }
+  const { clientId, clientSecret, redirectUri, tenantId } = req.body || {};
+  const trimmedClientId = typeof clientId === 'string' ? clientId.trim() : '';
+  const trimmedRedirectUri = typeof redirectUri === 'string' ? redirectUri.trim() : '';
+  const trimmedClientSecret = typeof clientSecret === 'string' ? clientSecret.trim() : '';
+  const trimmedTenantId = typeof tenantId === 'string' ? tenantId.trim() : '';
+
+  if (!trimmedClientId || !trimmedRedirectUri) {
+    return res.status(400).json({ error: 'validation_error', message: 'Client ID and Redirect URI are required.' });
+  }
+  if (!/^https:\/\//i.test(trimmedRedirectUri)) {
+    return res.status(400).json({ error: 'validation_error', message: 'Redirect URI must start with https://.' });
+  }
+
+  try {
+    const { rows: existingRows } = await pool.query('SELECT client_secret FROM oauth_settings WHERE provider = $1', [provider]);
+    const existingSecret = existingRows[0] && existingRows[0].client_secret;
+    // Client secret só é obrigatório na primeira vez que este provedor é
+    // salvo pela tela — deixar o campo em branco numa edição posterior
+    // mantém o secret já salvo (mesmo princípio de "não reexibir segredo
+    // depois de salvo" das API keys, ver js/api-keys.js).
+    const finalSecret = trimmedClientSecret || existingSecret;
+    if (!finalSecret) {
+      return res.status(400).json({ error: 'validation_error', message: 'Client Secret is required.' });
+    }
+
+    await pool.query(
+      `INSERT INTO oauth_settings (provider, client_id, client_secret, redirect_uri, tenant_id, updated_at, updated_by)
+       VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+       ON CONFLICT (provider) DO UPDATE SET
+         client_id = EXCLUDED.client_id,
+         client_secret = EXCLUDED.client_secret,
+         redirect_uri = EXCLUDED.redirect_uri,
+         tenant_id = EXCLUDED.tenant_id,
+         updated_at = NOW(),
+         updated_by = EXCLUDED.updated_by`,
+      [provider, trimmedClientId, finalSecret, trimmedRedirectUri, provider === 'microsoft' ? (trimmedTenantId || 'common') : null, getCurrentUsername(req)]
+    );
+    await reloadOAuthConfig();
+    const providerLabel = provider === 'google' ? 'Google' : 'Microsoft';
+    await logAudit(getCurrentUsername(req), 'update', 'oauth_settings', provider, providerLabel, `${providerLabel} sign-in configured via Settings → System → OAuth Integrations`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.delete('/api/system/oauth/:provider', requireAdmin, async (req, res) => {
+  const provider = req.params.provider;
+  if (!OAUTH_PROVIDERS.includes(provider)) {
+    return res.status(404).json({ error: 'not_found', message: 'Unknown provider.' });
+  }
+  try {
+    await pool.query('DELETE FROM oauth_settings WHERE provider = $1', [provider]);
+    await reloadOAuthConfig();
+    const providerLabel = provider === 'google' ? 'Google' : 'Microsoft';
+    const newSource = provider === 'google' ? GOOGLE_CONFIG_SOURCE : MICROSOFT_CONFIG_SOURCE;
+    const revertNote = newSource === 'env' ? ' (reverted to server environment variables)' : (newSource === 'none' ? ' (sign-in now disabled — no environment variables configured either)' : '');
+    await logAudit(getCurrentUsername(req), 'delete', 'oauth_settings', provider, providerLabel, `${providerLabel} sign-in configuration removed via Settings → System → OAuth Integrations${revertNote}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
   }
 });
 
@@ -3967,6 +4133,7 @@ app.delete('/api/system/ssl-certificate', requireAdmin, async (req, res) => {
 (async () => {
   try {
     await initDb();
+    await reloadOAuthConfig();
     await ensureTlsBootstrap();
     setInterval(checkScheduledBackup, 60 * 1000);
     checkScheduledBackup();

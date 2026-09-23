@@ -87,7 +87,7 @@ function updateAccountUI(me) {
 // desse pedido Register não tinha gate nenhum (qualquer usuário logado
 // acessava); agora é admin-rank (Admin OU Super Admin), igual ao resto
 // desta lista.
-const ADMIN_ONLY_SETTINGS_GROUP_IDS = ['sysGroupDatabase', 'sysGroupSslCertificate', 'sysGroupApiAccess', 'registerNavBtn', 'importAsSystemRow'];
+const ADMIN_ONLY_SETTINGS_GROUP_IDS = ['sysGroupDatabase', 'sysGroupSslCertificate', 'sysGroupApiAccess', 'sysGroupOAuth', 'registerNavBtn', 'importAsSystemRow'];
 // usersNavBtn saiu da lista acima e virou super_admin-only — pedido do
 // usuário: "o perfil de Admin só não pode gerenciar usuários" (um Admin
 // comum não vê nem a aba Users existir).

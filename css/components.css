@@ -461,6 +461,36 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
   background: var(--surf); border: 1px solid var(--bdr); border-radius: 10px;
   padding: 3px 7px; flex-shrink: 0; white-space: nowrap;
 }
+/* Settings → System → OAuth Integrations (ver js/oauth-settings.js) — uma
+   linha por provedor (Google/Microsoft), com ícone + nome + status +
+   botão "Configure". */
+.oauth-provider-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  font-size: 12.5px;
+}
+.oauth-provider-row + .oauth-provider-row { border-top: 1px solid var(--bdr); }
+.oauth-provider-icon { display: flex; flex-shrink: 0; }
+.oauth-provider-name { font-weight: 600; flex-shrink: 0; }
+.oauth-provider-status { color: var(--dim); flex: 1; min-width: 0; }
+.oauth-provider-status.is-on { color: var(--green, #2fae5c); }
+/* Passo a passo (Google Cloud Console / Azure Portal) dentro do modal de
+   configuração — mesmo conteúdo de docs/server-overview.md, só que direto
+   na tela, pra quem configura pela UI não precisar abrir a documentação
+   (pedido do usuário: "inclua a instrução de como realizar a integração
+   tb"). Conteúdo é preenchido por JS (_oauthStepsHtml() em
+   js/oauth-settings.js) conforme o provedor. */
+.oauth-steps-box {
+  background: var(--surf); border: 1px solid var(--bdr); border-radius: 8px;
+  padding: 10px 12px; font-size: 12px; line-height: 1.7;
+}
+.oauth-steps-box ol { margin: 0; padding-left: 18px; }
+.oauth-steps-box li { margin-bottom: 4px; }
+.oauth-steps-box li:last-child { margin-bottom: 0; }
+.oauth-steps-box a { color: var(--teal); }
+.oauth-steps-box code {
+  font-family: var(--mono); font-size: 11px; background: var(--surf2, rgba(128,128,128,.15));
+  border-radius: 4px; padding: 1px 4px;
+}
 /* Linha de cada item nas telas de Register (Vendors/Systems/Versions/
    Environments/Topics/Parameters) — usada tanto pelas linhas existentes
    (js/catalog-admin.js) quanto pela linha "+ Add ..." (index.html). Layout
