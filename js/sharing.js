@@ -1,6 +1,12 @@
 // ════════════════════════════════════════════════
-// SHARING — seção "Sharing" na aba System do modal de Configurações (ver
-// #sysGroupSharing em index.html). Pedido do usuário:
+// USER ACCOUNT — aba "User account" do modal de Configurações (ver
+// data-pane="account" em index.html): handle + Sharing (#acctGroupSharing,
+// antes em "System") e troca de senha self-service (#acctGroupPassword,
+// novo). Pedido do usuário: "crie um menu User account e deixe os campos
+// nome do usuário, e compartilhamento nessa tela. Coloque também a opção
+// para o usuário trocar de senha".
+//
+// Handle + Sharing:
 //   1) cada usuário tem um HANDLE único (nunca o username/e-mail) para
 //      compartilhar com outros — "e-mail fique restrito".
 //   2) o handle é gerado automaticamente na criação da conta; o próprio
@@ -15,6 +21,14 @@
 // tela (e o próprio mecanismo de shares) só existe para usuários comuns se
 // verem entre si; um admin também pode usá-la para gerenciar o PRÓPRIO
 // compartilhamento normalmente.
+//
+// Password:
+//   Só contas locais (username/senha) têm o que trocar — contas Google
+//   (authMethod === 'google', ver GET /api/me) não têm senha local, então
+//   os campos ficam escondidos e aparece uma nota no lugar (ver
+//   toggleAccountPasswordUI() abaixo). Exige a senha atual, verificada no
+//   backend (verifyPassword, server/auth.js) — ver PUT /api/me/password em
+//   server/index.js.
 // ════════════════════════════════════════════════
 
 function _shEscHtml(s) {
@@ -37,17 +51,79 @@ function _shCheckIcon(on) {
 let _shMyHandle = null;
 
 async function _shLoadMyHandle() {
+  let authMethod = null;
   try {
     const res = await fetch('/api/me');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const me = await res.json();
     _shMyHandle = me.handle || null;
+    authMethod = me.authMethod || null;
   } catch (err) {
     console.error('Failed to load current handle', err);
     _shMyHandle = null;
   }
   const display = document.getElementById('myHandleDisplay');
   if (display) display.textContent = _shMyHandle || '—';
+  toggleAccountPasswordUI(authMethod);
+}
+
+// ── Senha (self-service) ────────────────────────────────────────────────
+// Contas Google (authMethod !== 'local') não têm senha local — mostra a
+// nota no lugar dos campos. Também usado como fallback antes do primeiro
+// GET /api/me responder (window.TB45_AUTH_METHOD, setado em
+// updateAccountUI(), js/auth.js) para evitar um "flash" dos campos.
+function toggleAccountPasswordUI(authMethod) {
+  const method = authMethod || (typeof TB45_AUTH_METHOD !== 'undefined' ? TB45_AUTH_METHOD : null);
+  const fields = document.getElementById('acctPasswordFields');
+  const note = document.getElementById('acctPasswordGoogleNote');
+  const isLocal = method === 'local';
+  if (fields) fields.style.display = isLocal ? '' : 'none';
+  if (note) note.style.display = isLocal ? 'none' : '';
+}
+
+async function submitPasswordChange() {
+  const currentInput = document.getElementById('acctCurrentPasswordInput');
+  const newInput = document.getElementById('acctNewPasswordInput');
+  const confirmInput = document.getElementById('acctConfirmPasswordInput');
+  const errorMsg = document.getElementById('acctPasswordErrorMsg');
+  const successMsg = document.getElementById('acctPasswordSuccessMsg');
+  if (errorMsg) errorMsg.style.display = 'none';
+  if (successMsg) successMsg.style.display = 'none';
+  const currentPassword = currentInput ? currentInput.value : '';
+  const newPassword = newInput ? newInput.value : '';
+  const confirmPassword = confirmInput ? confirmInput.value : '';
+  if (!currentPassword) {
+    if (errorMsg) { errorMsg.textContent = 'Enter your current password.'; errorMsg.style.display = ''; }
+    if (currentInput) currentInput.focus();
+    return;
+  }
+  if (!newPassword || newPassword.length < 4) {
+    if (errorMsg) { errorMsg.textContent = 'New password must be at least 4 characters.'; errorMsg.style.display = ''; }
+    if (newInput) newInput.focus();
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    if (errorMsg) { errorMsg.textContent = 'New password and confirmation do not match.'; errorMsg.style.display = ''; }
+    if (confirmInput) confirmInput.focus();
+    return;
+  }
+  try {
+    const res = await fetch('/api/me/password', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || `HTTP ${res.status}`);
+    }
+    if (currentInput) currentInput.value = '';
+    if (newInput) newInput.value = '';
+    if (confirmInput) confirmInput.value = '';
+    if (successMsg) { successMsg.textContent = 'Password changed.'; successMsg.style.display = ''; }
+  } catch (err) {
+    if (errorMsg) { errorMsg.textContent = err.message || 'Failed to change password.'; errorMsg.style.display = ''; }
+  }
 }
 
 function startEditMyHandle() {
@@ -224,6 +300,11 @@ async function renderSharesReceived() {
 // deixa cada tabela se recarregar sozinha depois de uma ação (ex.: só
 // "Shared by you" precisa recarregar depois de um Revoke).
 function renderSharingPanel() {
+  // Aplica window.TB45_AUTH_METHOD (já disponível desde o login, ver
+  // updateAccountUI() em js/auth.js) de cara, pra não "piscar" os campos de
+  // senha antes do GET /api/me de _shLoadMyHandle() responder — que então
+  // confirma/corrige com o valor vindo do servidor.
+  toggleAccountPasswordUI(typeof TB45_AUTH_METHOD !== 'undefined' ? TB45_AUTH_METHOD : null);
   _shLoadMyHandle();
   renderSharesGiven();
   renderSharesReceived();
@@ -234,16 +315,20 @@ document.addEventListener('DOMContentLoaded', () => {
   if (handleInput) handleInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') saveMyHandle(); else if (ev.key === 'Escape') cancelEditMyHandle(); });
   const shareHandleInput = document.getElementById('shareHandleInput');
   if (shareHandleInput) shareHandleInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') submitNewShare(); });
+  const confirmPasswordInput = document.getElementById('acctConfirmPasswordInput');
+  if (confirmPasswordInput) confirmPasswordInput.addEventListener('keydown', ev => { if (ev.key === 'Enter') submitPasswordChange(); });
 });
 
-// Carrega a seção quando a aba "System" do modal de Configurações é aberta —
-// mesmo padrão de encadeamento de js/api-keys.js (que já envolve
-// switchSettingsPane uma vez; isto envolve de novo por cima, então as duas
-// listas recarregam juntas ao abrir "System").
+// Carrega a seção quando a aba "User account" do modal de Configurações é
+// aberta — mesmo padrão de encadeamento de js/api-keys.js (que já envolve
+// switchSettingsPane uma vez; isto envolve de novo por cima, então handle,
+// senha e as duas listas de shares recarregam juntos ao abrir "User
+// account"). Antes disparava em pane === 'system' — a seção morou lá até
+// ganhar tela própria (data-pane="account").
 if (typeof switchSettingsPane === 'function') {
   const _shOrigSwitchSettingsPane = switchSettingsPane;
   switchSettingsPane = function (pane) {
     _shOrigSwitchSettingsPane(pane);
-    if (pane === 'system') renderSharingPanel();
+    if (pane === 'account') renderSharingPanel();
   };
 }

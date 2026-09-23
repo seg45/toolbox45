@@ -919,6 +919,46 @@ app.put('/api/me/handle', async (req, res) => {
   }
 });
 
+// Troca a PRÓPRIA senha — pedido do usuário: "coloque também a opção para
+// o usuário trocar a senha" (em Settings → User account, ver js/sharing.js
+// e #acctPasswordFields em index.html). Diferente de PUT /api/users/:username
+// (admin-only, redefine a senha de QUALQUER conta local sem confirmar a
+// atual — ver mais abaixo), aqui é self-service: exige a senha ATUAL
+// correta antes de aceitar a nova (evita que alguém com acesso físico a
+// uma sessão já aberta troque a senha sem saber a original). Só contas
+// locais têm senha — contas Google (`is_local = 0`) recebem 400 (o
+// front-end já esconde os campos pra elas, mas o backend confirma de
+// qualquer forma, mesma disciplina do resto da API).
+app.put('/api/me/password', async (req, res) => {
+  try {
+    if (req.apiKey) {
+      return res.status(400).json({ error: 'validation_error', message: 'Not applicable to API key requests' });
+    }
+    const username = getCurrentUsername(req);
+    const { current_password: currentPassword, new_password: newPassword } = req.body || {};
+    const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    const user = rows[0];
+    if (!user) return res.status(404).json({ error: 'not_found', message: `User '${username}' not found` });
+    if (!user.is_local) {
+      return res.status(400).json({ error: 'validation_error', message: 'This account signs in with Google — there is no local password to change.' });
+    }
+    if (!currentPassword || !verifyPassword(currentPassword, user.password_hash)) {
+      return res.status(401).json({ error: 'unauthorized', message: 'Current password is incorrect' });
+    }
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 4) {
+      return res.status(400).json({ error: 'validation_error', message: '"new_password" must be at least 4 characters' });
+    }
+    await pool.query('UPDATE users SET password_hash = $1 WHERE username = $2', [hashPassword(newPassword), username]);
+    // Nunca grava a senha (nem o hash) no audit_log — mesma disciplina de
+    // PUT /api/users/:username abaixo.
+    await logAudit(username, 'update', 'user', username, username, 'Changed: password (self-service)');
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
 // ════════════════════════════════════════════════
 // Shares — compartilhamento de pastas e/ou comandos com outro usuário
 // específico, identificado pelo HANDLE dele (nunca o username/e-mail — ver

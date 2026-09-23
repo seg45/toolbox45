@@ -17,8 +17,8 @@
 .hdr-logo-img { width: 28px; height: 28px; display: block; }
 .hdr-logo-txt { font-size: 16px; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
 .hdr-gap { flex: 1; }
-/* Usuário identificado (sessão local ou Google — ver js/auth.js) —
-   mostrado à esquerda do botão de Configurações. É também o
+/* Usuário identificado (login do Windows via NTLM, ou sessão local — ver
+   js/auth.js) — mostrado à esquerda do botão de Configurações. É também o
    botão que abre o menu de conta (login local/logout), então NUNCA fica
    oculto (mesmo com o nome ainda vazio, antes de /api/me responder, ou se
    /api/me falhar) — esconder o botão deixaria o usuário sem nenhuma forma de
@@ -243,6 +243,10 @@
 /* "Clear filters" não tem ícone próprio — some inteiro (não faz sentido
    virar só um ícone). */
 .app.sidebar-collapsed .sidebar .sb-block-clearfilters { display: none; }
+/* Rodapé "Desenvolvido por SEG45" — mesmo motivo do "Clear filters" acima:
+   só texto, sem ícone/mark próprio pra virar versão compacta, então some
+   inteiro na barra colapsada. */
+.app.sidebar-collapsed .sidebar .sb-credit { display: none; }
 /* ─── MAIN ─── */
 /* position: relative + z-index: 1 (bem abaixo do z-index: 10 da .sidebar,
    ver acima) — garante que dropdowns internos (.dd, .cpq-panel etc., todos

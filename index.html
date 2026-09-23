@@ -249,6 +249,21 @@
        .settings-pane[data-pane="catalog"]) — no longer gated behind Admin
        mode, which was removed entirely. -->
 
+  <!-- Rodapé "Desenvolvido por SEG45" — pedido do usuário: "adicione a
+       informação 'Desenvolvido por SEG45' igual estava no projeto inicial
+       pela CG One", ou seja, o mesmo rodapé-crédito da sidebar que existia
+       para a CG One (.sb-credit, removido no rebrand p/ Toolbox45), agora
+       com a marca da SEG45 e linkando pro site dela. Sem logo (não há um
+       arquivo de logo da SEG45 no projeto, diferente do antigo .sb-credit-img
+       com cg-one-navy.png/cg-one-white.png) — só texto por enquanto; se um
+       logo for enviado depois, dá pra encaixar um <img> aqui do mesmo jeito.
+       Na sidebar colapsada some por completo (mesmo padrão de
+       .sb-block-clearfilters, css/layout.css: sem uma versão compacta em
+       ícone que faça sentido, o elemento inteiro só desaparece). -->
+  <a class="sb-credit" href="https://seg45.com.br" target="_blank" rel="noopener noreferrer">
+    <span class="sb-credit-txt">Desenvolvido por SEG45</span>
+  </a>
+
 </div>
 
 <!-- Botão único de fixar/colapsar a sidebar (preferência 'showSidebar' — ver
@@ -413,6 +428,19 @@
         <button type="button" class="settings-nav-btn on" data-pane="prefs" onclick="switchSettingsPane('prefs')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
           <span>User preferences</span>
+        </button>
+        <!-- "User account" — identidade/segurança da PRÓPRIA conta: senha
+             (só contas locais), handle e compartilhamento (ver `shares` em
+             server/schema.sql) — pedido do usuário: "crie um menu User
+             account e deixe os campos nome do usuário, e compartilhamento
+             nessa tela... também a opção para o usuário trocar a senha".
+             Antes o handle/Sharing morava dentro de "System" (ver
+             #acctGroupSharing abaixo) — mudou de aba, não de comportamento.
+             Sem gate de admin: é sobre a PRÓPRIA conta de quem estiver
+             logado. Ver js/sharing.js. -->
+        <button type="button" class="settings-nav-btn" data-pane="account" onclick="switchSettingsPane('account')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6.5 18.5a6 6 0 0 1 11 0"/></svg>
+          <span>User account</span>
         </button>
         <button type="button" class="settings-nav-btn" data-pane="catalog" onclick="switchSettingsPane('catalog')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
@@ -651,6 +679,102 @@
       </div>
       </div><!-- /.settings-pane[prefs] -->
 
+      <!-- PANE: User account — pedido do usuário: "crie um menu User
+           account e deixe os campos nome do usuário, e compartilhamento
+           nessa tela. Coloque também a opção para o usuário trocar de
+           senha" — reúne numa tela só o que antes ficava espalhado: o
+           grupo Sharing (com o handle, ver users.handle em
+           server/schema.sql), movido pra cá de dentro da pane "System",
+           mais a troca de senha self-service, nova. Sem gate de admin —
+           cada usuário só mexe na PRÓPRIA conta. -->
+      <div class="settings-pane" data-pane="account" style="display:none;">
+        <!-- Password — só para contas locais (username/senha); contas
+             Google (users.is_local = false) não têm senha local pra
+             trocar, então mostram uma nota no lugar dos campos (ver
+             toggleAccountPasswordUI() em js/sharing.js, decidido a partir
+             de GET /api/me). Exige a senha atual, verificada no backend
+             (verifyPassword, server/auth.js) antes de trocar — ver PUT
+             /api/me/password em server/index.js. -->
+        <div class="set-group" id="acctGroupPassword">
+          <span class="set-label">Password</span>
+          <div class="set-hint" id="acctPasswordGoogleNote" style="display:none;">This account signs in with Google — there's no local password to change.</div>
+          <div id="acctPasswordFields">
+            <div class="set-group" style="margin-top:8px;">
+              <span class="set-label">Current password</span>
+              <input class="set-input" type="password" id="acctCurrentPasswordInput" autocomplete="current-password">
+            </div>
+            <div class="set-group">
+              <span class="set-label">New password</span>
+              <input class="set-input" type="password" id="acctNewPasswordInput" autocomplete="new-password">
+            </div>
+            <div class="set-group">
+              <span class="set-label">Confirm new password</span>
+              <input class="set-input" type="password" id="acctConfirmPasswordInput" autocomplete="new-password">
+            </div>
+            <div class="set-hint" id="acctPasswordErrorMsg" style="color:var(--red); display:none;"></div>
+            <div class="set-hint" id="acctPasswordSuccessMsg" style="color:var(--green); display:none;"></div>
+            <div class="settings-action-row">
+              <button type="button" class="btn btn-sm btn-primary" onclick="submitPasswordChange()">Change password</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sharing — pedido do usuário: "permitir que o usuário escolha se
+             quer compartilhar os comandos e/ou as pastas" + "criar uma tela
+             no menu de sistemas para gerenciar o compartilhamento". Cada
+             usuário tem um HANDLE único e trocável (nunca o username/
+             e-mail — ver users.handle em server/schema.sql) — é com ESSE
+             apelido que ele compartilha e é encontrado por outros, mantendo
+             o e-mail restrito. "Tudo ou nada, por tipo": dois toggles
+             independentes por concessão (Folders/Commands, sem seleção de
+             pasta/comando específico), valendo imediatamente, sem aceite do
+             outro lado. Sem gate de admin (igual a "Commands"/"Folders" na
+             pane System) — cada usuário só gerencia o PRÓPRIO handle e as
+             PRÓPRIAS concessões; admin continua vendo as pastas/comandos de
+             todo mundo sempre, independente disso (ver isAdmin em
+             server/index.js). Ver js/sharing.js. -->
+        <div class="set-group" id="acctGroupSharing">
+          <span class="set-label">Sharing</span>
+          <div class="set-hint">Folders and commands are private by default. Share your handle with someone so they can see yours, or share below to see someone else's.</div>
+
+          <div class="settings-action-row" style="align-items:center; gap:8px; flex-wrap:wrap;">
+            <span class="set-hint" style="margin:0;">Your handle:</span>
+            <code id="myHandleDisplay">—</code>
+            <input class="set-input" type="text" id="myHandleInput" style="max-width:180px; display:none;" placeholder="your-handle" autocomplete="off">
+            <button type="button" class="btn btn-sm" id="myHandleEditBtn" onclick="startEditMyHandle()">Change</button>
+            <button type="button" class="btn btn-sm btn-primary" id="myHandleSaveBtn" style="display:none;" onclick="saveMyHandle()">Save</button>
+            <button type="button" class="btn btn-sm" id="myHandleCancelBtn" style="display:none;" onclick="cancelEditMyHandle()">Cancel</button>
+          </div>
+          <div class="set-hint" id="myHandleErrorMsg" style="color:var(--red); display:none;"></div>
+
+          <div class="settings-action-row" style="align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
+            <input class="set-input" type="text" id="shareHandleInput" style="max-width:180px;" placeholder="Their handle" autocomplete="off">
+            <label class="set-check-row" style="margin:0;"><input type="checkbox" id="shareFoldersCheckbox"><span>Folders</span></label>
+            <label class="set-check-row" style="margin:0;"><input type="checkbox" id="shareCommandsCheckbox"><span>Commands</span></label>
+            <button type="button" class="btn btn-sm btn-primary" onclick="submitNewShare()">Share</button>
+          </div>
+          <div class="set-hint" id="newShareErrorMsg" style="color:var(--red); display:none;"></div>
+
+          <div class="set-hint" style="margin-top:14px;">Shared by you</div>
+          <div class="audit-log-wrap" id="sharesGivenWrap">
+            <table class="audit-log-table">
+              <thead><tr><th>Handle</th><th>Folders</th><th>Commands</th><th></th></tr></thead>
+              <tbody id="sharesGivenTbody"></tbody>
+            </table>
+            <div class="audit-log-empty" id="sharesGivenEmpty" style="display:none;">You haven't shared anything yet.</div>
+          </div>
+
+          <div class="set-hint" style="margin-top:14px;">Shared with you</div>
+          <div class="audit-log-wrap" id="sharesReceivedWrap">
+            <table class="audit-log-table">
+              <thead><tr><th>Handle</th><th>Folders</th><th>Commands</th></tr></thead>
+              <tbody id="sharesReceivedTbody"></tbody>
+            </table>
+            <div class="audit-log-empty" id="sharesReceivedEmpty" style="display:none;">No one has shared anything with you yet.</div>
+          </div>
+        </div>
+      </div><!-- /.settings-pane[account] -->
+
       <!-- PANE: Register — cadastros compartilhados (Vendors, Systems,
            Versions, Environments, Topics, Parameters), antes na sidebar
            (#addCommandBlock) e reservados ao Admin mode. Cada botão abre o
@@ -742,60 +866,6 @@
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 10.5V3M4.5 6.5L8 3l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 12.5h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
               <span>Import folder</span>
             </button>
-          </div>
-        </div>
-        <!-- Sharing — pedido do usuário: "permitir que o usuário escolha se
-             quer compartilhar os comandos e/ou as pastas" + "criar uma tela
-             no menu de sistemas para gerenciar o compartilhamento". Cada
-             usuário tem um HANDLE único e trocável (nunca o username/
-             e-mail — ver users.handle em server/schema.sql) — é com ESSE
-             apelido que ele compartilha e é encontrado por outros, mantendo
-             o e-mail restrito. "Tudo ou nada, por tipo": dois toggles
-             independentes por concessão (Folders/Commands, sem seleção de
-             pasta/comando específico), valendo imediatamente, sem aceite do
-             outro lado. Sem gate de admin (igual a "Commands"/"Folders"
-             acima) — cada usuário só gerencia o PRÓPRIO handle e as
-             PRÓPRIAS concessões; admin continua vendo as pastas/comandos de
-             todo mundo sempre, independente disso (ver isAdmin em
-             server/index.js). Ver js/sharing.js. -->
-        <div class="set-group" id="sysGroupSharing">
-          <span class="set-label">Sharing</span>
-          <div class="set-hint">Folders and commands are private by default. Share your handle with someone so they can see yours, or share below to see someone else's.</div>
-
-          <div class="settings-action-row" style="align-items:center; gap:8px; flex-wrap:wrap;">
-            <span class="set-hint" style="margin:0;">Your handle:</span>
-            <code id="myHandleDisplay">—</code>
-            <input class="set-input" type="text" id="myHandleInput" style="max-width:180px; display:none;" placeholder="your-handle" autocomplete="off">
-            <button type="button" class="btn btn-sm" id="myHandleEditBtn" onclick="startEditMyHandle()">Change</button>
-            <button type="button" class="btn btn-sm btn-primary" id="myHandleSaveBtn" style="display:none;" onclick="saveMyHandle()">Save</button>
-            <button type="button" class="btn btn-sm" id="myHandleCancelBtn" style="display:none;" onclick="cancelEditMyHandle()">Cancel</button>
-          </div>
-          <div class="set-hint" id="myHandleErrorMsg" style="color:var(--red); display:none;"></div>
-
-          <div class="settings-action-row" style="align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
-            <input class="set-input" type="text" id="shareHandleInput" style="max-width:180px;" placeholder="Their handle" autocomplete="off">
-            <label class="set-check-row" style="margin:0;"><input type="checkbox" id="shareFoldersCheckbox"><span>Folders</span></label>
-            <label class="set-check-row" style="margin:0;"><input type="checkbox" id="shareCommandsCheckbox"><span>Commands</span></label>
-            <button type="button" class="btn btn-sm btn-primary" onclick="submitNewShare()">Share</button>
-          </div>
-          <div class="set-hint" id="newShareErrorMsg" style="color:var(--red); display:none;"></div>
-
-          <div class="set-hint" style="margin-top:14px;">Shared by you</div>
-          <div class="audit-log-wrap" id="sharesGivenWrap">
-            <table class="audit-log-table">
-              <thead><tr><th>Handle</th><th>Folders</th><th>Commands</th><th></th></tr></thead>
-              <tbody id="sharesGivenTbody"></tbody>
-            </table>
-            <div class="audit-log-empty" id="sharesGivenEmpty" style="display:none;">You haven't shared anything yet.</div>
-          </div>
-
-          <div class="set-hint" style="margin-top:14px;">Shared with you</div>
-          <div class="audit-log-wrap" id="sharesReceivedWrap">
-            <table class="audit-log-table">
-              <thead><tr><th>Handle</th><th>Folders</th><th>Commands</th></tr></thead>
-              <tbody id="sharesReceivedTbody"></tbody>
-            </table>
-            <div class="audit-log-empty" id="sharesReceivedEmpty" style="display:none;">No one has shared anything with you yet.</div>
           </div>
         </div>
         <div class="set-group" id="sysGroupDatabase" style="display:none;">

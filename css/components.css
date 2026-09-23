@@ -534,9 +534,18 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 
 
 
-/* Marca "//" isolada do rodapé — escondida no estado normal (só aparece na
-   barra colapsada, ver regra .app.sidebar-collapsed em css/layout.css). */
-.sb-credit-mark { display: none; }
+/* Rodapé "Desenvolvido por SEG45" da sidebar (ver index.html, logo depois
+   do bloco de gerenciar catálogos) — mesma posição/estrutura que o antigo
+   crédito "Developed by CG One" (removido no rebrand p/ Toolbox45), agora
+   só com texto (sem logo/mark próprios da SEG45 no projeto — ver comentário
+   em index.html). Na sidebar colapsada some por completo, sem versão em
+   ícone (ver .app.sidebar-collapsed .sb-credit em css/layout.css). */
+.sb-credit {
+  margin-top: auto; padding: 12px 14px 14px; border-top: 1px solid var(--bdr);
+  display: flex; text-decoration: none; color: inherit; transition: opacity .12s;
+}
+.sb-credit:hover { opacity: .8; }
+.sb-credit-txt { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: .3px; }
 
 
 /* ─── DROPDOWN (Versão / Ambiente / Tipo-Assunto) ─── */
