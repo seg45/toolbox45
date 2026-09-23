@@ -43,12 +43,13 @@
    claro (--surf claro é quase branco), mas quase ilegível em cima do fundo
    escuro (--surf escuro, #161B22 — contraste ~2.2:1, abaixo do mínimo
    recomendado até pra texto grande/negrito, 3:1). Pedido do usuário: "mudar
-   também a cor do nome Toolbox45 ... em modo escuro" — #2DD4BF é a mesma
-   família de cor (verde-azulado/teal), só bem mais clara, com contraste
-   ~10:1 em cima do fundo escuro. Mesmo tratamento em .sb-credit-txt logo
-   abaixo ("Developed by SEG45"). */
+   também a cor do nome Toolbox45 ... em modo escuro", depois "pode deixar
+   branco no modo escuro igual a cor do logo" — branco puro, a mesma cor do
+   mark ao lado (img/logo-toolbox45-white.png, ver acima), no lugar do
+   #2DD4BF intermediário testado antes. Mesmo tratamento em .sb-credit-txt
+   logo abaixo ("Developed by SEG45"). */
 .hdr-logo-txt { font-size: 22px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
-[data-theme="dark"] .hdr-logo-txt { color: #2DD4BF; }
+[data-theme="dark"] .hdr-logo-txt { color: #FFFFFF; }
 .hdr-gap { flex: 1; }
 /* Usuário identificado (login do Windows via NTLM, ou sessão local — ver
    js/auth.js) — mostrado à esquerda do botão de Configurações. É também o

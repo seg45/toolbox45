@@ -574,10 +574,10 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
    nome" — mesma cor fixa #105B63 do nome "Toolbox45" no header
    (.hdr-logo-txt, css/layout.css), no lugar do var(--muted) padrão.
    Mesmo problema de contraste no tema escuro que o nome no header (ver
-   comentário completo em .hdr-logo-txt) — mesma correção, #2DD4BF só no
-   dark. */
+   comentário completo em .hdr-logo-txt) — mesma correção, branco puro (a
+   cor do logo) só no dark. */
 .sb-credit-txt { font-size: 10px; font-weight: 700; color: #105B63; letter-spacing: .3px; }
-[data-theme="dark"] .sb-credit-txt { color: #2DD4BF; }
+[data-theme="dark"] .sb-credit-txt { color: #FFFFFF; }
 
 
 /* ─── DROPDOWN (Versão / Ambiente / Tipo-Assunto) ─── */
