@@ -21,14 +21,14 @@
    align-items:center). */
 .hdr-logo { gap: 6px; }
 .hdr-logo-img { width: 32px; height: 32px; display: block; }
-/* Pedido do usuário: aumentar a fonte (16px -> 18px, depois "aumentar o
-   nome toolbox" -> 20px) e trocar a cor de --text por um verde específico
+/* Pedido do usuário: aumentar a fonte (16px -> 18px -> 20px -> 22px, em
+   pedidos separados) e trocar a cor de --text por um verde específico
    escolhido por ele (#105B63, via color picker) — fixo, igual em
    claro/escuro (diferente de var(--green), que é theme-scoped, ver
    css/theme.css; aqui o usuário pediu essa cor exata, não a semântica
    "verde do tema"). .hdr tem height:48px fixo (ver acima), então continua
    cabendo sem mudar a altura da linha do header. */
-.hdr-logo-txt { font-size: 20px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
+.hdr-logo-txt { font-size: 22px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
 .hdr-gap { flex: 1; }
 /* Usuário identificado (login do Windows via NTLM, ou sessão local — ver
    js/auth.js) — mostrado à esquerda do botão de Configurações. É também o
