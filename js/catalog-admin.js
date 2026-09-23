@@ -24,6 +24,17 @@
 function _cat(id) { return document.getElementById(id); }
 function _catEscAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function _catEscHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+// Ordena uma CÓPIA de uma lista de catálogo por label (alfabético,
+// case-insensitive, locale-aware) sem alterar o array original de CATALOGS
+// -- mesmo critério já usado pelos chips "Command parameter" da sidebar (ver
+// js/catalogs.js, renderCatalogUI) e pelos dropdowns de filtro
+// (sortAllDropdowns, js/state.js). Pedido do usuário: "exibir os cadastros
+// em ordem alfabética" (telas Settings -> Register). Usado só para exibição
+// aqui -- a ordem em CATALOGS (sort_order/key, vinda do servidor) continua
+// intacta para quem mais consome esses arrays.
+function _catSortByLabel(items) {
+  return (items || []).slice().sort((a, b) => (a.label || a.key || '').localeCompare(b.label || b.key || '', undefined, { sensitivity: 'base' }));
+}
 
 // `kind`: 'versions' | 'environments' | 'topics' | 'parameters' — each one is
 // its own screen now (no tabs). The corresponding sidebar button calls
@@ -336,7 +347,7 @@ async function catAdminSaveAll(kind) {
 function renderCatAdminVendors() {
   const list = _cat('catVendorsList');
   if (!list) return;
-  list.innerHTML = (CATALOGS.vendors || []).map(v => `
+  list.innerHTML = _catSortByLabel(CATALOGS.vendors).map(v => `
     <div class="cat-row" data-cat-search="${_catEscAttr((v.key + ' ' + v.label).toLowerCase())}">
       <input class="set-input" id="catVd_label_${_catEscAttr(v.key)}" value="${_catEscAttr(v.label)}" style="flex:1;min-width:80px;" oninput="catAdminMarkDirty('vendors')">
       <input type="color" class="cat-color-input" id="catVd_color_${_catEscAttr(v.key)}" value="${_catEscAttr(v.color || '#8B949E')}" oninput="catAdminMarkDirty('vendors')">
@@ -379,7 +390,7 @@ async function catAdminAddVendor() {
 function renderCatAdminSystems() {
   const list = _cat('catSysList');
   if (!list) return;
-  const systems = CATALOGS.systems || [];
+  const systems = _catSortByLabel(CATALOGS.systems);
   list.innerHTML = systems.map(s => `
     <div class="cat-row" data-cat-search="${_catEscAttr((s.key + ' ' + s.label).toLowerCase())}">
       <select class="set-input" id="catSys_vendor_${_catEscAttr(s.key)}" style="max-width:140px;" onchange="catAdminMarkDirty('systems')"></select>
@@ -430,7 +441,7 @@ async function catAdminAddSystem() {
 function renderCatAdminVersions() {
   const list = _cat('catVersionsList');
   if (!list) return;
-  const versions = CATALOGS.versions || [];
+  const versions = _catSortByLabel(CATALOGS.versions);
   list.innerHTML = versions.map(v => {
     const rid = _catEscAttr(v.system) + '::' + _catEscAttr(v.key);
     return `
@@ -481,7 +492,7 @@ async function catAdminAddVersion() {
 function renderCatAdminEnvironments() {
   const list = _cat('catEnvironmentsList');
   if (!list) return;
-  const environments = CATALOGS.environments || [];
+  const environments = _catSortByLabel(CATALOGS.environments);
   list.innerHTML = environments.map(e => `
     <div class="cat-row" data-cat-search="${_catEscAttr((e.key + ' ' + e.label + ' ' + (e.system || '')).toLowerCase())}">
       <select class="set-input" id="catE_system_${_catEscAttr(e.key)}" style="max-width:130px;" onchange="catAdminMarkDirty('environments')"></select>
@@ -529,7 +540,7 @@ async function catAdminAddEnvironment() {
 function renderCatAdminTopics() {
   const list = _cat('catTopicsList');
   if (!list) return;
-  list.innerHTML = (CATALOGS.topics || []).map(tp => `
+  list.innerHTML = _catSortByLabel(CATALOGS.topics).map(tp => `
     <div class="cat-row" data-cat-search="${_catEscAttr((tp.key + ' ' + tp.label).toLowerCase())}">
       ${tp.is_protected ? `<span class="cat-protected-badge">${_catEscHtml('protected')}</span>` : ''}
       <input class="set-input" id="catT_label_${_catEscAttr(tp.key)}" value="${_catEscAttr(tp.label)}" style="flex:1;min-width:120px;" oninput="catAdminMarkDirty('topics')">
@@ -576,7 +587,7 @@ async function catAdminAddTopic() {
 function renderCatAdminParameters() {
   const list = _cat('catParametersList');
   if (!list) return;
-  list.innerHTML = (CATALOGS.parameters || []).map(p => `
+  list.innerHTML = _catSortByLabel(CATALOGS.parameters).map(p => `
     <div class="cat-row" data-cat-search="${_catEscAttr((p.key + ' ' + p.label).toLowerCase())}">
       <span class="cat-key-badge" title="{{${_catEscAttr(p.key)}}}">${_catEscHtml(p.key)}</span>
       <input class="set-input" id="catP_label_${_catEscAttr(p.key)}" value="${_catEscAttr(p.label)}" style="flex:1;min-width:140px;" oninput="catAdminMarkDirty('parameters')">
@@ -622,7 +633,7 @@ async function catAdminAddParameter() {
 function renderCatAdminPrompts() {
   const list = _cat('catPromptsList');
   if (!list) return;
-  list.innerHTML = (CATALOGS.prompts || []).map(p => `
+  list.innerHTML = _catSortByLabel(CATALOGS.prompts).map(p => `
     <div class="cat-row" data-cat-search="${_catEscAttr((p.key + ' ' + p.label).toLowerCase())}">
       <input class="set-input" id="catPr_label_${_catEscAttr(p.key)}" value="${_catEscAttr(p.label)}" style="flex:1;min-width:140px;" oninput="catAdminMarkDirty('prompts')">
       <div class="cat-row-actions">
@@ -662,7 +673,7 @@ async function catAdminAddPrompt() {
 function renderCatAdminExports() {
   const list = _cat('catExportsList');
   if (!list) return;
-  list.innerHTML = (CATALOGS.exports || []).map(x => `
+  list.innerHTML = _catSortByLabel(CATALOGS.exports).map(x => `
     <div class="cat-row" data-cat-search="${_catEscAttr((x.key + ' ' + x.label).toLowerCase())}">
       <input class="set-input" id="catEx_label_${_catEscAttr(x.key)}" value="${_catEscAttr(x.label)}" style="flex:1;min-width:140px;" oninput="catAdminMarkDirty('exports')">
       <div class="cat-row-actions">
