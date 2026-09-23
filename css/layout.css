@@ -13,8 +13,14 @@
    sólida --teal) + nome em texto ao lado (.hdr-logo-txt). Cor única do
    mark funciona igual em claro/escuro, sem precisar de [data-theme]
    (diferente do logo antigo). Ver comentário em index.html. */
-.hdr-logo { gap: 9px; }
-.hdr-logo-img { width: 28px; height: 28px; display: block; }
+/* Pedido do usuário: "aumente um pouco o logo e deixe um pouco mais
+   próximo do nome, sem mexer na altura da linha" — gap 9px -> 6px (mais
+   perto do texto) e o mark 28px -> 32px (.hdr tem height:48px FIXO, ver
+   acima, então crescer o mark aqui não muda a altura da linha do header —
+   só sobra menos espaço vazio acima/abaixo dele, sempre centralizado por
+   align-items:center). */
+.hdr-logo { gap: 6px; }
+.hdr-logo-img { width: 32px; height: 32px; display: block; }
 /* Pedido do usuário: aumentar um pouco a fonte (16px -> 18px) e trocar a
    cor de --text por um verde específico escolhido por ele (#105B63, via
    color picker) — fixo, igual em claro/escuro (diferente de var(--green),
