@@ -344,18 +344,31 @@ async function runMigrations() {
     // (pedido do usuario: "tres perfis de acesso: User, Admin e Super
     // Admin" + registro pendente de aprovacao) -- ver comentario grande
     // acima de CREATE TABLE users em schema.sql para a semantica completa.
-    // ADD COLUMN nullable (sem backfill de valor "aprovado" automatico
-    // aqui -- isso e feito explicitamente abaixo): instalacoes novas ja
-    // nascem com a coluna via CREATE TABLE em schema.sql.
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`);
-    // Toda conta que ja existia ANTES deste recurso (criada por um admin,
-    // ou auto-provisionada no 1o login Google -- os 2 unicos jeitos de uma
-    // conta existir antes de POST /api/auth/register/self-registro Google
-    // pendente passarem a existir) ja era, na pratica, uma conta aprovada
-    // -- nunca passou por um fluxo de "pendente". So marca approved_at pra
-    // quem ainda esta NULL (nunca sobrescreve uma aprovacao/rejeicao real
-    // que o fluxo novo ja tenha gravado depois do deploy).
-    await pool.query(`UPDATE users SET approved_at = COALESCE(approved_at, created_at, NOW()) WHERE approved_at IS NULL`);
+    // CUIDADO: runMigrations() roda em TODO boot do backend (nao so na
+    // primeira vez) -- por isso o backfill abaixo (marcar contas
+    // pre-existentes como ja aprovadas) fica dentro de um `IF NOT EXISTS
+    // (coluna)` que so e verdadeiro no boot em que a coluna esta sendo
+    // criada agora. Sem essa guarda, um `UPDATE ... WHERE approved_at IS
+    // NULL` incondicional aprovaria automaticamente QUALQUER cadastro
+    // pendente de verdade (self-registration/Google novo) a cada restart
+    // do container -- destruiria a feature de aprovacao inteira. Mesmo
+    // padrao ja usado no bloco de supports_export logo acima (checar
+    // information_schema.columns ANTES do ADD COLUMN).
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'approved_at') THEN
+          ALTER TABLE users ADD COLUMN approved_at TIMESTAMPTZ;
+          -- Toda conta que ja existia ANTES deste recurso (criada por um
+          -- admin, ou auto-provisionada no 1o login Google -- os 2 unicos
+          -- jeitos de uma conta existir antes de POST /api/auth/register/
+          -- self-registro Google pendente passarem a existir) ja era, na
+          -- pratica, uma conta aprovada -- nunca passou por um fluxo de
+          -- "pendente". So roda aqui dentro, uma unica vez.
+          UPDATE users SET approved_at = COALESCE(created_at, NOW());
+        END IF;
+      END $$;
+    `);
     // A conta local 'admin' semeada por seedDefaultAdmin() abaixo e SEMPRE
     // Super Admin, e isto e reforcado aqui a cada boot (idempotente) alem
     // do INSERT em si -- cobre instalacoes que ja tinham essa conta ANTES
