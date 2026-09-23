@@ -60,9 +60,11 @@ function flushUserDataSync() {
 }
 window.addEventListener('beforeunload', flushUserDataSync);
 
-function renderCurrentUserUI(username) {
+// Recebe o texto já resolvido pra exibir (handle, de preferência — ver
+// chamador abaixo) — esta função só põe no DOM, não decide o quê mostrar.
+function renderCurrentUserUI(label) {
   const el = document.getElementById('currentUserLabel');
-  if (el) el.textContent = username || '';
+  if (el) el.textContent = label || '';
 }
 
 // Reaplica, ao vivo, tudo que os módulos já carregaram de forma síncrona a partir
@@ -175,8 +177,14 @@ function safeUpdateAccountUI(me) {
 async function initUserSync() {
   try {
     const me = await fetchMeWithRetry();
-    CURRENT_USER = me.username;
-    renderCurrentUserUI(me.upn || me.username);
+    CURRENT_USER = me.username; // identidade REAL (username/e-mail) — usada em todo o app pras comparações "isOwn"/posse; nunca muda
+    // No header mostramos o HANDLE (ver users.handle em server/schema.sql),
+    // não o username/e-mail — pedido do usuário: "mude para exibir o nome
+    // do usuário" (o "nome de usuário" da feature de compartilhamento,
+    // trocável em Settings → System → Sharing). Fallback pro username só
+    // pro caso (não deveria acontecer numa sessão de navegador normal) de
+    // `handle` vir nulo.
+    renderCurrentUserUI(me.handle || me.upn || me.username);
     if (!safeUpdateAccountUI(me)) {
       window.addEventListener('load', () => safeUpdateAccountUI(me), { once: true });
     }
