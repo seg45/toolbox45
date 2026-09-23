@@ -208,8 +208,14 @@ function toggleModalSystemCommands() {
 // inicializado e mantido a partir daqui em vez de sempre começar em false.
 function applyExportSetting(enabled) {
   FL.log = !!enabled;
-  const fw = document.getElementById('fw-log');
-  if (fw) fw.classList.toggle('show', FL.log);
+  // #fw-log (a caixa de edicao rapida do caminho do arquivo, mostrada aqui
+  // antes quando o toggle Export era ligado) nao e mais exibida na sidebar
+  // -- pedido do usuario: "remover a exibicao desse valor quando export
+  // estiver selecionado". O <input id="f-log"> continua no DOM (so nunca
+  // mais ganha a classe .show, entao fica sempre display:none via CSS) --
+  // continua sendo o valor que render.js le (gv('f-log')) para o
+  // redirecionamento, so que agora so editavel em Settings -> User
+  // preferences (#mLogFile).
   if (typeof render === 'function') render();
 }
 // Reflete o estado atual no toggle da sidebar E no espelho do modal de
