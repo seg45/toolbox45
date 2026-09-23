@@ -498,8 +498,51 @@ CREATE TABLE IF NOT EXISTS users (
   disabled      INTEGER NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by    TEXT,
-  auth_provider TEXT NOT NULL DEFAULT 'ntlm'    -- 'ntlm' | 'local' | 'google' — só identifica a ORIGEM da conta (ver login com Google em server/index.js); não decide permissão (isso é role)
+  auth_provider TEXT NOT NULL DEFAULT 'ntlm',   -- 'ntlm' | 'local' | 'google' — só identifica a ORIGEM da conta (ver login com Google em server/index.js); não decide permissão (isso é role)
+  -- handle: apelido único e ESCOLHIDO PELO USUÁRIO (gerado automaticamente
+  -- na criação da conta, trocável depois em PUT /api/me/handle — ver
+  -- server/index.js) usado para compartilhar pastas/comandos com outra
+  -- pessoa (ver `shares` abaixo) e para identificar o dono de algo de OUTRO
+  -- usuário na interface, SEM nunca expor o username real (que é o e-mail,
+  -- no caso de contas Google) — pedido do usuário: "cada usuário deverá ter
+  -- um nome de usuário no sistema... e o e-mail fique restrito". Único via
+  -- idx_users_handle (índice, não constraint inline — ver runMigrations()
+  -- em server/db.js, que faz o backfill de instalações já existentes antes
+  -- de criar o índice único).
+  handle        TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle ON users(handle);
+
+-- ════════════════════════════════════════════════
+-- Shares — concessão de visibilidade de pastas e/ou comandos de UM usuário
+-- (grantor) para OUTRO (grantee), identificado pelo HANDLE que o grantor
+-- digitou (resolvido para grantee_username na hora de criar a linha — ver
+-- POST /api/shares em server/index.js). Pedido do usuário (compartilhamento
+-- entre usuários):
+--   1) por padrão a aplicação agora é PRIVADA: um usuário só vê pastas/
+--      comandos de outro se existir uma linha aqui autorizando (ver o filtro
+--      de visibilidade em GET /api/commands e GET /api/folders/all).
+--   2) "tudo ou nada, por tipo" — dois toggles independentes (share_folders/
+--      share_commands), sem seleção de pasta/comando específico.
+--   3) vale IMEDIATAMENTE, sem fluxo de aceite da outra pessoa.
+--   4) admins continuam vendo tudo de todo mundo sempre — este mecanismo só
+--      é consultado para usuários comuns (ver isAdmin no código acima).
+-- UNIQUE(grantor,grantee): no máximo uma linha por par — compartilhar de
+-- novo com o mesmo handle faz UPSERT (ON CONFLICT ... DO UPDATE) em vez de
+-- duplicar. CHECK impede um usuário "compartilhar consigo mesmo".
+-- ════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS shares (
+  id               SERIAL PRIMARY KEY,
+  grantor_username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+  grantee_username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+  share_folders    BOOLEAN NOT NULL DEFAULT false,
+  share_commands   BOOLEAN NOT NULL DEFAULT false,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (grantor_username, grantee_username),
+  CHECK (grantor_username <> grantee_username)
+);
+CREATE INDEX IF NOT EXISTS idx_shares_grantee ON shares(grantee_username);
 
 -- Sessões de login local — o cookie `tb45_session` guarda só o token (chave
 -- primária desta tabela); nenhum dado sensível viaja no cookie em si. Uma

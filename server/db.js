@@ -13,6 +13,7 @@
 // só DATABASE_URL como alternativa de conveniência (ex.: um único env var).
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { Pool } = require('pg');
 const { hashPassword } = require('./auth');
 
@@ -213,6 +214,37 @@ async function migrateCommandsIdToSerial() {
 // `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` explícito aqui. Seguro rodar em
 // todo boot, inclusive numa instalação nova onde a coluna já veio do CREATE
 // TABLE (o IF NOT EXISTS simplesmente não faz nada nesse caso).
+// Handles — apelido único usado para compartilhamento entre usuários (ver
+// users.handle e a tabela `shares` em schema.sql, e PUT /api/me/handle
+// /POST /api/shares em server/index.js). `slugifyHandle()` deriva um
+// candidato "limpo" a partir de um texto qualquer (normalmente a parte
+// local do username/e-mail: "rodrigo.silva@empresa.com" -> "rodrigo.silva")
+// — minúsculas, só [a-z0-9._-], sem repetir separador, sem começar/terminar
+// em separador. `generateUniqueHandle()` tenta esse candidato e, se já
+// estiver em uso, vai acrescentando um sufixo numérico (-2, -3, ...) até
+// achar um livre — usada tanto no backfill de instalações já existentes
+// (runMigrations() abaixo) quanto toda vez que uma conta nova é criada
+// (POST /api/users, login com Google — ver server/index.js).
+function slugifyHandle(raw) {
+  let s = String(raw || '').trim().toLowerCase();
+  const at = s.indexOf('@');
+  if (at > 0) s = s.slice(0, at); // e-mail -> só a parte local
+  s = s.replace(/[^a-z0-9._-]+/g, '-').replace(/^[._-]+|[._-]+$/g, '').replace(/[._-]{2,}/g, '-');
+  if (s.length < 2) s = `user-${s}`.replace(/-+$/, '') || 'user';
+  return s.slice(0, 28);
+}
+async function generateUniqueHandle(dbPool, rawBase) {
+  const base = slugifyHandle(rawBase);
+  for (let i = 0; i < 1000; i++) {
+    const candidate = i === 0 ? base : `${base}-${i + 1}`;
+    const { rows } = await dbPool.query('SELECT 1 FROM users WHERE handle = $1', [candidate]);
+    if (!rows.length) return candidate;
+  }
+  // Praticamente inatingível (1000 colisões seguidas) — sufixo aleatório
+  // como último recurso, só para nunca travar a criação de uma conta.
+  return `${base}-${crypto.randomBytes(3).toString('hex')}`;
+}
+
 async function runMigrations() {
   // Roda ANTES de qualquer outra migração/seed — várias delas tocam em
   // command_lines/folder_commands/etc., então é mais simples garantir que
@@ -296,6 +328,43 @@ async function runMigrations() {
     `);
   } catch (err) {
     console.error('[db] Falha ao rodar migrações:', err.message);
+  }
+
+  // users.handle + tabela `shares` (compartilhamento entre usuários — ver
+  // comentário em schema.sql). ADD COLUMN nullable de propósito: instalações
+  // já existentes ganham a coluna sem handle nenhum ainda; o backfill abaixo
+  // gera um handle único para cada usuário que ainda não tem um (derivado do
+  // username/e-mail — ver generateUniqueHandle() acima) ANTES do índice
+  // único ser criado, senão CREATE UNIQUE INDEX falharia com vários NULLs...
+  // na prática não falharia (NULL não colide com NULL num índice único
+  // padrão do Postgres), mas deixaríamos contas sem handle utilizável para
+  // compartilhamento — o backfill evita isso. Instalações novas já criam a
+  // tabela/coluna direto de schema.sql; rodar de novo aqui não faz nada
+  // (ADD COLUMN/CREATE ... IF NOT EXISTS são idempotentes).
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS handle TEXT`);
+    const { rows: noHandle } = await pool.query('SELECT username FROM users WHERE handle IS NULL');
+    for (const { username } of noHandle) {
+      const handle = await generateUniqueHandle(pool, username);
+      await pool.query('UPDATE users SET handle = $1 WHERE username = $2', [handle, username]);
+    }
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle ON users(handle)`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS shares (
+        id               SERIAL PRIMARY KEY,
+        grantor_username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+        grantee_username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+        share_folders    BOOLEAN NOT NULL DEFAULT false,
+        share_commands   BOOLEAN NOT NULL DEFAULT false,
+        created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (grantor_username, grantee_username),
+        CHECK (grantor_username <> grantee_username)
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_shares_grantee ON shares(grantee_username)`);
+  } catch (err) {
+    console.error('[db] Falha ao migrar users.handle / criar tabela shares:', err.message);
   }
 
   // environments.system/vendor (pedido do usuário: "Environment deve ter um
@@ -601,9 +670,13 @@ async function runMigrations() {
 // isto não mexe em nada depois).
 async function seedDefaultAdmin() {
   try {
+    // handle='admin' explícito (runMigrations(), que faz o backfill
+    // automático de handle para linhas já existentes, roda ANTES desta
+    // função — ver initDb() acima — então esta conta ainda não existia
+    // quando o backfill rodou; sem isso ficaria sem handle).
     await pool.query(
-      `INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider)
-       VALUES ('admin', $1, 'admin', 1, 'system', 'local')
+      `INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle)
+       VALUES ('admin', $1, 'admin', 1, 'system', 'local', 'admin')
        ON CONFLICT (username) DO NOTHING`,
       [hashPassword('admin')]
     );
@@ -818,4 +891,4 @@ async function withTransaction(fn) {
 // environments.system precisa inserir vendors/systems/version_environments
 // "pré-existentes" entre a aplicação do schema.sql e o backfill em si, coisa
 // que initDb() (que roda os dois passos em sequência, sem pausa) não permite.
-module.exports = { pool, initDb, runMigrations, withTransaction, getConnectionString };
+module.exports = { pool, initDb, runMigrations, withTransaction, getConnectionString, generateUniqueHandle };

@@ -83,6 +83,22 @@ GOOGLE_REDIRECT_URI=https://toolbox45.seg45.com.br/api/auth/google/callback
    aparece automaticamente em `login.html` assim que as 3 variáveis estiverem presentes
    (`GET /api/auth/providers`).
 
+## Compartilhamento entre usuários (handles + shares)
+
+Pastas e comandos de cada usuário são **privados por padrão** — ninguém mais vê o que
+você criou, a menos que você compartilhe explicitamente. Todo usuário tem um **handle**
+(apelido único, gerado automaticamente na criação da conta — ver `generateUniqueHandle()`
+em `server/db.js` — e trocável livremente depois em **Settings → System → Sharing**)
+usado para esse compartilhamento **sem nunca expor o username real** (que é o e-mail,
+no caso de contas Google). Para outro usuário, você digita o handle dele e escolhe o
+que compartilhar — pastas e/ou comandos, "tudo ou nada" (não dá para escolher uma
+pasta/comando específico) — e vale imediatamente, sem a outra pessoa precisar aceitar
+nada. Você também pode revogar a qualquer momento. Admins continuam vendo as pastas/
+comandos de todo mundo sempre, sem depender de nenhuma concessão aqui — este mecanismo
+só regula a visibilidade entre usuários comuns. Ver `users.handle`/tabela `shares` em
+`server/schema.sql`, `PUT /api/me/handle`/`/api/shares` em `server/index.js` e a seção
+**Compartilhamento entre usuários** em `docs/api.md`.
+
 ## Catálogos administráveis (Versão / Ambiente / Tópico)
 
 Versão, Ambiente e Tópico (antes listas fixas no código) agora ficam nas tabelas

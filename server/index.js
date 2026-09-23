@@ -40,7 +40,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const express = require('express');
-const { pool, initDb, withTransaction, getConnectionString } = require('./db');
+const { pool, initDb, withTransaction, getConnectionString, generateUniqueHandle } = require('./db');
 const { hashPassword, verifyPassword, generateSessionToken } = require('./auth');
 
 const app = express();
@@ -500,12 +500,16 @@ app.get('/api/auth/google/callback', async (req, res) => {
     } else {
       // Primeira vez que este e-mail Google aparece — provisiona
       // automaticamente com role 'user' (decisão do usuário); um admin
-      // promove depois em Manage users.
+      // promove depois em Manage users. handle gerado a partir da parte
+      // local do e-mail (ver generateUniqueHandle em server/db.js) — é ele,
+      // não o e-mail, que fica visível para outros usuários daqui em
+      // diante (ver comentário acima de maskUsernameForViewer).
+      const handle = await generateUniqueHandle(pool, email);
       await pool.query(
-        `INSERT INTO users (username, role, is_local, created_by, auth_provider)
-         VALUES ($1, 'user', 0, 'google-oauth', 'google')
+        `INSERT INTO users (username, role, is_local, created_by, auth_provider, handle)
+         VALUES ($1, 'user', 0, 'google-oauth', 'google', $2)
          ON CONFLICT (username) DO NOTHING`,
-        [email]
+        [email, handle]
       );
       await ensureDefaultFolder(email);
       const { rows } = await pool.query('SELECT * FROM users WHERE username = $1', [email]);
@@ -533,7 +537,37 @@ app.get('/api/auth/google/callback', async (req, res) => {
 // GET /api/folders). Opcional: chamadores que não têm um usuário resolvido
 // (não deveria acontecer em uso normal, getCurrentUsername sempre devolve
 // algo) simplesmente recebem folder_ids: [].
-async function shapeCommand(row, username) {
+// ════════════════════════════════════════════════
+// Handles — apelido único e ESCOLHIDO PELO USUÁRIO (users.handle, ver
+// schema.sql), trocável em PUT /api/me/handle abaixo, usado para
+// compartilhar pastas/comandos com outra pessoa (ver `shares`/POST
+// /api/shares abaixo) e para identificar o dono de algo de OUTRO usuário na
+// interface — pedido do usuário: "cada usuário deverá ter um nome de
+// usuário no sistema... e o e-mail fique restrito". `maskUsernameForViewer`
+// é o ponto único que decide isso: o USERNAME real (que é o e-mail, no caso
+// de contas Google) só é devolvido a quem já teria como sabê-lo de qualquer
+// forma — o próprio dono, ou um admin (que já vê usernames reais em Manage
+// users) — qualquer outro usuário recebe o HANDLE no lugar. Comandos
+// 'System'/sem dono (null) nunca são mascarados (não são de ninguém
+// específico).
+// ════════════════════════════════════════════════
+const HANDLE_RE = /^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$/;
+function normalizeHandle(raw) {
+  return String(raw || '').trim().toLowerCase();
+}
+async function getHandleMap() {
+  const { rows } = await pool.query('SELECT username, handle FROM users');
+  return new Map(rows.map(r => [r.username, r.handle]));
+}
+// `viewerCtx` = { username, isAdmin, handleMap } — handleMap pode ser null
+// quando isAdmin (nunca é consultado nesse caso, ver early-return abaixo).
+function maskUsernameForViewer(rawUsername, viewerCtx) {
+  if (!rawUsername || rawUsername === 'System') return rawUsername;
+  if (!viewerCtx || viewerCtx.isAdmin || rawUsername === viewerCtx.username) return rawUsername;
+  return (viewerCtx.handleMap && viewerCtx.handleMap.get(rawUsername)) || rawUsername;
+}
+
+async function shapeCommand(row, username, viewerCtx) {
   const [vendorsQ, systemsQ, versionsQ, envQ, topicsQ, folderQ, linesQ] = await Promise.all([
     pool.query('SELECT vendor FROM command_vendors WHERE command_id = $1 ORDER BY vendor', [row.id]),
     pool.query('SELECT system FROM command_systems WHERE command_id = $1 ORDER BY system', [row.id]),
@@ -593,8 +627,8 @@ async function shapeCommand(row, username) {
     lines,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    created_by: row.created_by || null,
-    modified_by: row.modified_by || row.created_by || null,
+    created_by: maskUsernameForViewer(row.created_by, viewerCtx) || null,
+    modified_by: maskUsernameForViewer(row.modified_by || row.created_by, viewerCtx) || null,
     is_system: row.created_by === 'System',
   };
 }
@@ -626,7 +660,7 @@ function _groupRowsBy(rows, keyField) {
 // comandos de uma vez (`WHERE command_id = ANY($1)`) e distribuída em
 // memória — mesmo formato de saída de shapeCommand(), só que O(1) queries
 // por tabela em vez de O(N).
-async function shapeCommandsBatch(rows, username) {
+async function shapeCommandsBatch(rows, username, viewerCtx) {
   if (!rows.length) return [];
   const ids = rows.map(r => r.id);
 
@@ -698,8 +732,8 @@ async function shapeCommandsBatch(rows, username) {
       lines,
       created_at: row.created_at,
       updated_at: row.updated_at,
-      created_by: row.created_by || null,
-      modified_by: row.modified_by || row.created_by || null,
+      created_by: maskUsernameForViewer(row.created_by, viewerCtx) || null,
+      modified_by: maskUsernameForViewer(row.modified_by || row.created_by, viewerCtx) || null,
       is_system: row.created_by === 'System',
     };
   });
@@ -722,9 +756,28 @@ async function getCommandRow(id) {
 app.get('/api/commands', async (req, res) => {
   try {
     const { topic, version, environment, vendor, system: systemParam, sort } = req.query;
+    const username = getCurrentUsername(req);
+    const isAdmin = (await getCurrentRole(req)) === 'admin';
 
     let sql = 'SELECT * FROM commands WHERE 1=1';
     const params = [];
+    // Privado por padrão (pedido do usuário — ver comentário em `shares` em
+    // schema.sql): um usuário comum só vê comandos de referência (System/
+    // sem dono), os PRÓPRIOS comandos, e os de quem compartilhou com ele
+    // (share_commands=true). Admin continua vendo tudo, sem exceção — igual
+    // a antes desta mudança.
+    if (!isAdmin) {
+      params.push(username);
+      const p = params.length;
+      sql += ` AND (
+        commands.created_by IS NULL OR commands.created_by = 'System'
+        OR commands.created_by = $${p}
+        OR EXISTS (
+          SELECT 1 FROM shares sh
+          WHERE sh.grantor_username = commands.created_by AND sh.grantee_username = $${p} AND sh.share_commands = true
+        )
+      )`;
+    }
     if (topic) {
       params.push(topic);
       // Um comando pode ter vários tópicos (command_topics) — casa se QUALQUER um bater.
@@ -763,12 +816,12 @@ app.get('/api/commands', async (req, res) => {
     sql += (sort === 'creator') ? ' ORDER BY created_by, sort_order, id' : ' ORDER BY sort_order, id';
 
     const { rows } = await pool.query(sql, params);
-    const username = getCurrentUsername(req);
     // shapeCommandsBatch() em vez de Promise.all(rows.map(shapeCommand)) — ver
     // comentário na função: evita ~8 queries POR COMANDO (N+1) nesta listagem
     // completa, que ficou perceptivelmente lenta depois do import de 1452
     // comandos.
-    const shaped = await shapeCommandsBatch(rows, username);
+    const handleMap = isAdmin ? null : await getHandleMap();
+    const shaped = await shapeCommandsBatch(rows, username, { username, isAdmin, handleMap });
     res.json(shaped);
   } catch (err) {
     console.error(err);
@@ -783,7 +836,21 @@ app.get('/api/commands/:id', async (req, res) => {
   try {
     const row = await findCommand(req.params.id);
     if (!row) return res.status(404).json({ error: 'not_found', message: `Command '${req.params.id}' not found` });
-    res.json(await shapeCommand(row, getCurrentUsername(req)));
+    const username = getCurrentUsername(req);
+    const isAdmin = (await getCurrentRole(req)) === 'admin';
+    // Mesma regra de visibilidade de GET /api/commands (privado por
+    // padrão) — 404 (não 403: "não vaza a distinção", mesma convenção do
+    // resto da API) quando o comando é de outro usuário que não
+    // compartilhou com quem pediu, e quem pediu não é admin.
+    if (!isAdmin && row.created_by && row.created_by !== 'System' && row.created_by !== username) {
+      const { rows: shareRows } = await pool.query(
+        'SELECT 1 FROM shares WHERE grantor_username = $1 AND grantee_username = $2 AND share_commands = true',
+        [row.created_by, username]
+      );
+      if (!shareRows.length) return res.status(404).json({ error: 'not_found', message: `Command '${req.params.id}' not found` });
+    }
+    const handleMap = isAdmin ? null : await getHandleMap();
+    res.json(await shapeCommand(row, username, { username, isAdmin, handleMap }));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });
@@ -807,13 +874,141 @@ app.get('/api/me', async (req, res) => {
   const username = getCurrentUsername(req);
   let role = 'admin';
   try { role = await getCurrentRole(req); } catch (e) { console.error('getCurrentRole failed:', e); }
+  // handle — ver comentário acima de maskUsernameForViewer. Null para
+  // requisições via API key (não têm uma linha em `users`) — o front-end só
+  // usa isto numa sessão de navegador logada, então nunca deveria acontecer
+  // na prática, mas fica seguro de qualquer forma (sem handle, "Sharing" na
+  // aba System simplesmente não tem o que mostrar).
+  let handle = null;
+  try {
+    const { rows } = await pool.query('SELECT handle FROM users WHERE username = $1', [username]);
+    handle = (rows[0] && rows[0].handle) || null;
+  } catch (e) { console.error('handle lookup failed:', e); }
   res.json({
     username,
     upn: username, // mantido por compatibilidade com o front-end (js/user-sync.js) — sem NTLM/AD, username já é o identificador "de verdade" (e-mail, no caso do Google)
     role,
     isAdmin: role === 'admin',
     authMethod: getAuthMethod(req),
+    handle,
   });
+});
+
+// Troca o próprio handle (ver comentário acima de maskUsernameForViewer) —
+// gerado automaticamente na criação da conta, mas o usuário pode alterá-lo
+// livremente depois, contanto que continue único (pedido do usuário: "o
+// usuário poderá alterar o nome de usuário, mas ele deverá ser único").
+app.put('/api/me/handle', async (req, res) => {
+  try {
+    const username = getCurrentUsername(req);
+    const handle = normalizeHandle(req.body && req.body.handle);
+    if (!HANDLE_RE.test(handle)) {
+      return res.status(400).json({
+        error: 'validation_error',
+        message: 'Handle must be 2-32 characters: lowercase letters, numbers, dots, underscores or hyphens, starting and ending with a letter or number.',
+      });
+    }
+    const { rows: conflict } = await pool.query('SELECT username FROM users WHERE handle = $1 AND username <> $2', [handle, username]);
+    if (conflict.length) return res.status(409).json({ error: 'conflict', message: `Handle "${handle}" is already taken` });
+    await pool.query('UPDATE users SET handle = $1 WHERE username = $2', [handle, username]);
+    res.json({ handle });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'conflict', message: 'That handle is already taken' });
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════
+// Shares — compartilhamento de pastas e/ou comandos com outro usuário
+// específico, identificado pelo HANDLE dele (nunca o username/e-mail — ver
+// comentário acima de maskUsernameForViewer). Decisões confirmadas pelo
+// usuário:
+//   - "tudo ou nada, por tipo": dois toggles independentes por concessão
+//     (share_folders/share_commands), sem seleção de pasta/comando
+//     específico.
+//   - vale IMEDIATAMENTE, sem fluxo de aceite do outro lado.
+//   - admin continua vendo tudo de todo mundo sempre, independente destas
+//     linhas — este mecanismo só é consultado para usuários comuns (ver
+//     isAdmin em GET /api/commands e GET /api/folders/all acima).
+// ════════════════════════════════════════════════
+app.get('/api/shares', async (req, res) => {
+  try {
+    const username = getCurrentUsername(req);
+    const [givenQ, receivedQ] = await Promise.all([
+      pool.query(
+        `SELECT s.id, s.share_folders, s.share_commands, s.created_at, s.updated_at, u.handle AS grantee_handle
+         FROM shares s JOIN users u ON u.username = s.grantee_username
+         WHERE s.grantor_username = $1 ORDER BY u.handle`,
+        [username]
+      ),
+      pool.query(
+        `SELECT s.id, s.share_folders, s.share_commands, s.created_at, s.updated_at, u.handle AS grantor_handle
+         FROM shares s JOIN users u ON u.username = s.grantor_username
+         WHERE s.grantee_username = $1 ORDER BY u.handle`,
+        [username]
+      ),
+    ]);
+    res.json({ given: givenQ.rows, received: receivedQ.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// Cria/atualiza uma concessão (UPSERT — compartilhar de novo com o mesmo
+// handle só atualiza os toggles da linha já existente, ver UNIQUE
+// (grantor_username, grantee_username) em schema.sql).
+app.post('/api/shares', async (req, res) => {
+  try {
+    const username = getCurrentUsername(req);
+    const handle = normalizeHandle(req.body && req.body.handle);
+    const shareFolders = !!(req.body && req.body.share_folders);
+    const shareCommands = !!(req.body && req.body.share_commands);
+    if (!handle) return res.status(400).json({ error: 'validation_error', message: '"handle" is required' });
+    if (!shareFolders && !shareCommands) {
+      return res.status(400).json({ error: 'validation_error', message: 'Enable at least one of folders/commands to share' });
+    }
+    const { rows: targetRows } = await pool.query('SELECT username, handle FROM users WHERE handle = $1', [handle]);
+    if (!targetRows.length) return res.status(404).json({ error: 'not_found', message: `No user found with handle "${handle}"` });
+    const target = targetRows[0];
+    if (target.username === username) {
+      return res.status(400).json({ error: 'validation_error', message: 'You cannot share with yourself' });
+    }
+    const { rows } = await pool.query(
+      `INSERT INTO shares (grantor_username, grantee_username, share_folders, share_commands)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (grantor_username, grantee_username)
+       DO UPDATE SET share_folders = $3, share_commands = $4, updated_at = NOW()
+       RETURNING id, share_folders, share_commands, created_at, updated_at`,
+      [username, target.username, shareFolders, shareCommands]
+    );
+    await logAudit(username, 'update', 'share', String(rows[0].id), target.handle, `Folders: ${shareFolders ? 'on' : 'off'}, Commands: ${shareCommands ? 'on' : 'off'}`);
+    res.status(201).json(Object.assign({}, rows[0], { grantee_handle: target.handle }));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// Revoga uma concessão que EU dei (só o grantor pode revogar a própria —
+// 404 tanto se não existir quanto se for de outro grantor, mesma convenção
+// "não vaza a distinção" do resto desta API).
+app.delete('/api/shares/:id', async (req, res) => {
+  try {
+    const username = getCurrentUsername(req);
+    const before = await pool.query(
+      `SELECT s.id, u.handle FROM shares s JOIN users u ON u.username = s.grantee_username WHERE s.id = $1 AND s.grantor_username = $2`,
+      [req.params.id, username]
+    );
+    if (!before.rows.length) return res.status(404).json({ error: 'not_found', message: `Share '${req.params.id}' not found` });
+    await pool.query('DELETE FROM shares WHERE id = $1 AND grantor_username = $2', [req.params.id, username]);
+    await logAudit(username, 'delete', 'share', req.params.id, before.rows[0].handle || null);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
 });
 
 // ════════════════════════════════════════════════
@@ -906,29 +1101,43 @@ app.get('/api/folders', async (req, res) => {
   }
 });
 
-// Lista as pastas de TODOS os usuários (cross-user) — usada pelo Group by
-// "User folders" (fora de Folders) E pelo novo seletor de escopo de pastas
-// dentro de Folders ("My folders" / escolher um usuário / "All" — ver
-// js/folders.js), uma visão de equipe para ver o que cada colega organizou,
-// no mesmo espírito do "Created by" (que já é cross-user). Diferente de GET
-// /api/folders acima, que é privado ao usuário da requisição — aqui não há
-// filtro por username. Comandos em si já são visíveis a todo mundo (ver
-// "Created by"); o que era privado era só a ORGANIZAÇÃO em pastas. Notas de
-// outro usuário aparecem aqui também, só que sem nenhuma ação disponível no
-// front-end (edição/clone/exclusão exige username === CURRENT_USER).
+// Lista as pastas de TODOS os usuários VISÍVEIS a quem pediu (cross-user) —
+// usada pelo seletor de escopo de pastas dentro de Folders ("My folders" /
+// escolher um usuário / "All" — ver js/folders.js). Diferente de GET
+// /api/folders acima, que é só as PRÓPRIAS pastas — aqui entram também as de
+// quem compartilhou (share_folders=true, ver `shares` em schema.sql) e,
+// pra admin, as de TODO MUNDO sem exceção (bypass — pedido do usuário:
+// "admin vê tudo sempre"). Privado por padrão para os demais — antes desta
+// mudança não havia filtro nenhum aqui; ver comentário em `shares` em
+// schema.sql sobre a decisão de fechar isso. `username` de cada pasta que
+// não é do próprio usuário nem visto por um admin vem TROCADO pelo handle
+// do dono (maskUsernameForViewer — "e-mail fique restrito"); a pasta do
+// próprio usuário continua com o username real de sempre, preservando as
+// comparações `f.username === CURRENT_USER` já existentes no front-end
+// (js/render.js) sem precisar mudar nada lá.
 app.get('/api/folders/all', async (req, res) => {
   try {
+    const username = getCurrentUsername(req);
+    const isAdmin = (await getCurrentRole(req)) === 'admin';
+    const visibilityClause = isAdmin ? '' : `
+       WHERE f.username = $1 OR EXISTS (
+         SELECT 1 FROM shares sh WHERE sh.grantor_username = f.username AND sh.grantee_username = $1 AND sh.share_folders = true
+       )`;
     const { rows } = await pool.query(
       `SELECT f.id, f.username, f.name, f.sort_order, f.parent_id,
               COALESCE(array_agg(fc.command_id ORDER BY fc.sort_order, fc.created_at) FILTER (WHERE fc.command_id IS NOT NULL), '{}') AS command_ids
        FROM folders f
        LEFT JOIN folder_commands fc ON fc.folder_id = f.id
+       ${visibilityClause}
        GROUP BY f.id
-       ORDER BY f.username, f.sort_order, f.name`
+       ORDER BY f.username, f.sort_order, f.name`,
+      isAdmin ? [] : [username]
     );
     const { orderByFolder, notesByFolder } = await loadFolderOrderAndNotes(rows.map(r => r.id));
+    const handleMap = isAdmin ? null : await getHandleMap();
+    const viewerCtx = { username, isAdmin, handleMap };
     res.json(rows.map(r => ({
-      id: r.id, username: r.username, name: r.name, sort_order: r.sort_order, parent_id: r.parent_id, command_ids: r.command_ids,
+      id: r.id, username: maskUsernameForViewer(r.username, viewerCtx), name: r.name, sort_order: r.sort_order, parent_id: r.parent_id, command_ids: r.command_ids,
       notes: notesByFolder.get(r.id) || [],
       order: orderByFolder.get(r.id) || [],
     })));
@@ -1271,8 +1480,25 @@ app.put('/api/folders/:id/reorder', async (req, res) => {
 app.post('/api/folders/:id/copy', async (req, res) => {
   try {
     const username = getCurrentUsername(req);
-    const src = await pool.query('SELECT id, name FROM folders WHERE id = $1', [req.params.id]);
+    const src = await pool.query('SELECT id, name, username FROM folders WHERE id = $1', [req.params.id]);
     if (!src.rows.length) return res.status(404).json({ error: 'not_found', message: `Folder '${req.params.id}' not found` });
+    // Privado por padrão (ver `shares` em schema.sql): copiar a pasta de
+    // OUTRO usuário só é permitido se ele compartilhou pastas com quem
+    // pediu, ou se quem pediu é admin — antes desta mudança qualquer
+    // usuário autenticado podia copiar QUALQUER pasta só sabendo o id
+    // (a única checagem de posse era no destino, não na origem), o que
+    // furava por completo o novo modelo de compartilhamento se não
+    // corrigido aqui também.
+    if (src.rows[0].username !== username) {
+      const isAdmin = (await getCurrentRole(req)) === 'admin';
+      if (!isAdmin) {
+        const { rows: shareRows } = await pool.query(
+          'SELECT 1 FROM shares WHERE grantor_username = $1 AND grantee_username = $2 AND share_folders = true',
+          [src.rows[0].username, username]
+        );
+        if (!shareRows.length) return res.status(404).json({ error: 'not_found', message: `Folder '${req.params.id}' not found` });
+      }
+    }
     const baseName = src.rows[0].name;
 
     let name = baseName;
@@ -1352,7 +1578,7 @@ function flattenCommandLinesForImport(lines) {
 // espelha o que GET /api/folders já devolve para uma pasta (command_ids +
 // notes + order), só que resolvendo cada command_id para o comando inteiro
 // (em vez de só o id) e caminhando por parent_id para trazer as subpastas.
-async function buildFolderExportNode(folderId, username) {
+async function buildFolderExportNode(folderId, username, viewerCtx) {
   const { rows: folderRows } = await pool.query('SELECT id, name FROM folders WHERE id = $1', [folderId]);
   if (!folderRows.length) return null;
   const name = folderRows[0].name;
@@ -1370,7 +1596,7 @@ async function buildFolderExportNode(folderId, username) {
   for (const fc of fcRows) {
     const cmdRow = await findCommand(fc.command_id);
     if (!cmdRow) continue; // comando pode ter sido excluído sem a membership ainda ter sido limpa — ignora silenciosamente
-    commands.push({ sort_order: fc.sort_order, command: await shapeCommand(cmdRow, username) });
+    commands.push({ sort_order: fc.sort_order, command: await shapeCommand(cmdRow, username, viewerCtx) });
   }
 
   const { rows: childRows } = await pool.query(
@@ -1379,7 +1605,7 @@ async function buildFolderExportNode(folderId, username) {
   );
   const children = [];
   for (const cf of childRows) {
-    const childNode = await buildFolderExportNode(cf.id, username);
+    const childNode = await buildFolderExportNode(cf.id, username, viewerCtx);
     if (childNode) children.push({ sort_order: cf.sort_order, folder: childNode });
   }
 
@@ -1395,7 +1621,9 @@ app.get('/api/folders/:id/export', async (req, res) => {
     const username = getCurrentUsername(req);
     const owned = await pool.query('SELECT id FROM folders WHERE id = $1 AND username = $2', [req.params.id, username]);
     if (!owned.rows.length) return res.status(404).json({ error: 'not_found', message: `Folder '${req.params.id}' not found` });
-    const root = await buildFolderExportNode(Number(req.params.id), username);
+    const isAdmin = (await getCurrentRole(req)) === 'admin';
+    const handleMap = isAdmin ? null : await getHandleMap();
+    const root = await buildFolderExportNode(Number(req.params.id), username, { username, isAdmin, handleMap });
     res.json({ type: 'toolbox45-folder-export', version: 1, exported_at: new Date().toISOString(), root });
   } catch (err) {
     console.error(err);
@@ -2009,7 +2237,7 @@ app.delete('/api/api-keys/:id', requireAdmin, async (req, res) => {
 // podem ter contas auth_provider='ntlm' do login do Windows (removido) —
 // um admin pode desabilitá-las/excluí-las. Nunca devolve password_hash.
 // ════════════════════════════════════════════════
-const USERS_PUBLIC_COLUMNS = 'username, role, is_local, disabled, created_at, created_by, auth_provider';
+const USERS_PUBLIC_COLUMNS = 'username, role, is_local, disabled, created_at, created_by, auth_provider, handle';
 
 app.get('/api/users', requireAdmin, async (req, res) => {
   try {
@@ -2034,9 +2262,10 @@ app.post('/api/users', requireAdmin, async (req, res) => {
     const trimmed = username.trim();
     const { rows: existing } = await pool.query('SELECT username FROM users WHERE username = $1', [trimmed]);
     if (existing.length) return res.status(409).json({ error: 'conflict', message: `User '${trimmed}' already exists` });
+    const handle = await generateUniqueHandle(pool, trimmed);
     await pool.query(
-      "INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider) VALUES ($1, $2, $3, 1, $4, 'local')",
-      [trimmed, hashPassword(password), roleVal, getCurrentUsername(req)]
+      "INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle) VALUES ($1, $2, $3, 1, $4, 'local', $5)",
+      [trimmed, hashPassword(password), roleVal, getCurrentUsername(req), handle]
     );
     await ensureDefaultFolder(trimmed);
     const { rows } = await pool.query(`SELECT ${USERS_PUBLIC_COLUMNS} FROM users WHERE username = $1`, [trimmed]);
@@ -2269,7 +2498,10 @@ app.post('/api/commands', async (req, res) => {
 
     await logAudit(username, 'create', 'command', id, cols.name);
     const row = await findCommand(id);
-    res.status(201).json(await shapeCommand(row, username));
+    // created_by === username sempre aqui (comando recém-criado pelo
+    // próprio usuário) — maskUsernameForViewer nunca mascara a própria
+    // criação, então isAdmin/handleMap não importam neste caso.
+    res.status(201).json(await shapeCommand(row, username, { username, isAdmin: false, handleMap: null }));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });
@@ -2352,7 +2584,11 @@ app.put('/api/commands/:id', async (req, res) => {
     });
     await logAudit(currentUser, 'update', 'command', id, cols.name, changeDetails);
     const row = await findCommand(id);
-    res.json(await shapeCommand(row, currentUser));
+    // Editar exige ser o dono OU o comando ser 'System' (ver comentário de
+    // permissões no topo do arquivo) — em nenhum dos dois casos
+    // maskUsernameForViewer mascara nada aqui, então isAdmin/handleMap não
+    // importam.
+    res.json(await shapeCommand(row, currentUser, { username: currentUser, isAdmin: false, handleMap: null }));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });

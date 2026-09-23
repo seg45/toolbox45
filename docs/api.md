@@ -79,7 +79,15 @@ etc.) com suas linhas, variações por versão e escopo (vendor/sistema/versão/
 tópico).
 
 ### `GET /api/commands`
-Lista comandos. Filtros opcionais via query string — todos combináveis (AND):
+**Privado por padrão** (ver seção **Compartilhamento entre usuários** abaixo): um
+usuário comum só recebe comandos de referência (`created_by` nulo ou `"System"`), os
+PRÓPRIOS comandos, e os de quem compartilhou comandos com ele (`share_commands: true`
+numa concessão em `/api/shares`). Admins continuam recebendo todos, sem exceção. O
+`created_by`/`modified_by` de um comando de OUTRA pessoa vem trocado pelo **handle**
+dela, nunca o username real (ver `GET /api/me`/`/api/shares` abaixo) — exceto para
+admins, que continuam vendo o username real de qualquer um.
+
+Filtros opcionais via query string — todos combináveis (AND):
 
 | Parâmetro     | Efeito                                                                 |
 |---------------|-------------------------------------------------------------------------|
@@ -224,10 +232,15 @@ usuário que está fazendo a requisição.
   de `command_ids`/`notes` que por algum motivo não apareçam em `order` (nunca deveria
   acontecer, mas o front-end trata defensivamente) são exibidos ao final, comandos antes
   de notes.
-- `GET /api/folders/all` → mesmo formato, só que para **todas** as pastas de **todos os
-  usuários** (cada pasta ganha um campo extra `"username"`). Usado pelo Group By "User
-  folders" (fora de Folders) e pelo seletor de escopo de pastas "All"/usuário
-  específico (dentro de Folders) — ver `docs/README.md`/comentários em `js/render.js`.
+- `GET /api/folders/all` → mesmo formato, para as pastas de **outros usuários que
+  também são visíveis** a quem pediu — **privado por padrão** (ver seção
+  **Compartilhamento entre usuários** abaixo): as PRÓPRIAS pastas, mais as de quem
+  compartilhou pastas (`share_folders: true`) com quem pediu; admins continuam
+  recebendo as de todo mundo, sem exceção. Cada pasta ganha um campo extra
+  `"username"` — para uma pasta de outra pessoa, esse campo vem trocado pelo
+  **handle** dela (nunca o username real), exceto para admins. Usado pelo seletor de
+  escopo de pastas "All"/usuário específico dentro de Folders — ver `docs/README.md`/
+  comentários em `js/render.js`.
 - `POST /api/folders` — corpo `{ "name": "..." }`. `201` com a pasta criada
   (`command_ids: []`, `notes: []`, `order: []`). `400 validation_error` se faltar
   `name`. `409 conflict` se o usuário já tiver uma pasta com esse nome (nomes são
@@ -254,7 +267,9 @@ usuário que está fazendo a requisição.
   são totalmente editáveis/clonáveis/excluíveis por essa pessoa como qualquer outra nota
   própria. Resposta já vem no mesmo formato de `GET /api/folders` (`notes`/`order`
   incluídos, sem precisar de uma segunda chamada). `404 not_found` se a pasta de origem
-  não existir.
+  não existir **ou não for visível** para quem pediu (própria, compartilhada com
+  `share_folders: true`, ou quem pediu é admin — mesma regra de visibilidade de
+  `GET /api/folders/all` acima).
 - `PUT /api/folders/:id/reorder` — corpo `{ "order": [{ "type": "command"|"note", "id": ... }, ...] }`
   com a nova ordem completa (mistura comandos e notes livremente). `204`. Aceita também
   o formato antigo `{ "command_ids": [...] }` por compatibilidade (equivalente a
@@ -310,14 +325,68 @@ Identifica o chamador atual, seu papel e como foi autenticado. Exige sessão ou 
   "upn": "rsilva@seg45.com.br",
   "role": "admin",
   "isAdmin": true,
-  "authMethod": "google"
+  "authMethod": "google",
+  "handle": "rsilva"
 }
 ```
 `upn` espelha `username` (mantido só por compatibilidade com respostas antigas — quando
 a identificação vinha do Windows/NTLM, `upn` era resolvido separadamente via Active
 Directory). `authMethod` é `"local"` | `"google"` | `"api_key"`. Para chamadas com API
 key, `username` é `api:<nome da key>`, `upn` espelha o mesmo valor e `role`/`isAdmin`
-sempre vêm como admin (ver seção Permissões acima).
+sempre vêm como admin (ver seção Permissões acima). `handle` é o apelido de
+compartilhamento do usuário (ver seção **Compartilhamento entre usuários** abaixo);
+`null` para chamadas via API key.
+
+---
+
+## Compartilhamento entre usuários (`/api/me/handle`, `/api/shares`)
+
+Por padrão, pastas e comandos de um usuário são **privados**: os demais só os veem se
+o dono compartilhar explicitamente. Cada usuário tem um **handle** — um apelido único,
+gerado automaticamente na criação da conta e trocável livremente depois — usado para
+identificá-lo nesse compartilhamento **sem expor o username real** (que é o e-mail, no
+caso de contas Google). Admins continuam vendo as pastas/comandos de todo mundo sempre,
+independente de qualquer concessão aqui (ver **Permissões** acima).
+
+### `PUT /api/me/handle`
+Troca o próprio handle. Corpo `{ "handle": "novo-handle" }` — minúsculas, 2 a 32
+caracteres, `[a-z0-9._-]`, começando/terminando em letra ou número (o servidor já
+normaliza para minúsculas antes de validar). `200` com `{ "handle": "novo-handle" }`.
+`400 validation_error` se o formato for inválido. `409 conflict` se já estiver em uso
+por outra conta (handles são únicos globalmente).
+
+### `GET /api/shares`
+Lista as concessões do usuário atual, nos dois sentidos:
+```json
+{
+  "given": [
+    { "id": 1, "share_folders": true, "share_commands": false, "created_at": "...", "updated_at": "...", "grantee_handle": "jsilva" }
+  ],
+  "received": [
+    { "id": 4, "share_folders": true, "share_commands": true, "created_at": "...", "updated_at": "...", "grantor_handle": "mcosta" }
+  ]
+}
+```
+`given` = concessões que EU dei (posso revogar); `received` = concessões que ME deram
+(só leitura aqui — quem revoga é sempre o grantor).
+
+### `POST /api/shares`
+Cria ou atualiza (UPSERT) uma concessão para o handle informado. Corpo:
+```json
+{ "handle": "jsilva", "share_folders": true, "share_commands": false }
+```
+Pelo menos um de `share_folders`/`share_commands` precisa ser `true`. Vale
+IMEDIATAMENTE — não há fluxo de aceite do outro lado. Chamar de novo com o mesmo
+`handle` só atualiza os toggles da concessão já existente (não duplica). `201` com a
+concessão criada/atualizada (inclui `grantee_handle`). `400 validation_error` se faltar
+`handle`, se os dois toggles vierem `false`, ou se `handle` for o do próprio usuário
+(não dá para compartilhar consigo mesmo). `404 not_found` se não existir ninguém com
+esse handle.
+
+### `DELETE /api/shares/:id`
+Revoga uma concessão que EU dei (só o grantor pode revogar a própria). `204`. `404
+not_found` se o id não existir ou pertencer a outro grantor (não distinguimos os dois
+casos).
 
 ---
 
@@ -380,12 +449,15 @@ https://openidconnect.googleapis.com/v1/userinfo`, e:
 Lista todo usuário já visto pela aplicação (contas locais ou Google — `auth_provider`
 distingue). Nunca devolve `password_hash`.
 ```json
-[{ "username": "admin", "role": "admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system", "auth_provider": "local" },
- { "username": "jsilva@gmail.com", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": "google-oauth", "auth_provider": "google" }]
+[{ "username": "admin", "role": "admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system", "auth_provider": "local", "handle": "admin" },
+ { "username": "jsilva@gmail.com", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": "google-oauth", "auth_provider": "google", "handle": "jsilva" }]
 ```
 Instalações antigas (de antes do login do Windows/NTLM ser removido) podem ainda listar
 contas com `auth_provider: "ntlm"` — nunca fazem login (não têm senha nem vínculo com
 Google); um admin pode desabilitá-las/excluí-las quando não forem mais necessárias.
+`handle` é o apelido de compartilhamento da conta (ver **Compartilhamento entre
+usuários** acima) — aqui, como em toda esta seção admin-only, vem sempre como o
+handle de verdade (nunca mascarado).
 
 ### `POST /api/users` — **(admin)**
 Cria uma conta **local** — corpo `{ "username", "password" (≥4 caracteres), "role"? }`

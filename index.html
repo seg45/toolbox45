@@ -744,6 +744,60 @@
             </button>
           </div>
         </div>
+        <!-- Sharing — pedido do usuário: "permitir que o usuário escolha se
+             quer compartilhar os comandos e/ou as pastas" + "criar uma tela
+             no menu de sistemas para gerenciar o compartilhamento". Cada
+             usuário tem um HANDLE único e trocável (nunca o username/
+             e-mail — ver users.handle em server/schema.sql) — é com ESSE
+             apelido que ele compartilha e é encontrado por outros, mantendo
+             o e-mail restrito. "Tudo ou nada, por tipo": dois toggles
+             independentes por concessão (Folders/Commands, sem seleção de
+             pasta/comando específico), valendo imediatamente, sem aceite do
+             outro lado. Sem gate de admin (igual a "Commands"/"Folders"
+             acima) — cada usuário só gerencia o PRÓPRIO handle e as
+             PRÓPRIAS concessões; admin continua vendo as pastas/comandos de
+             todo mundo sempre, independente disso (ver isAdmin em
+             server/index.js). Ver js/sharing.js. -->
+        <div class="set-group" id="sysGroupSharing">
+          <span class="set-label">Sharing</span>
+          <div class="set-hint">Folders and commands are private by default. Share your handle with someone so they can see yours, or share below to see someone else's.</div>
+
+          <div class="settings-action-row" style="align-items:center; gap:8px; flex-wrap:wrap;">
+            <span class="set-hint" style="margin:0;">Your handle:</span>
+            <code id="myHandleDisplay">—</code>
+            <input class="set-input" type="text" id="myHandleInput" style="max-width:180px; display:none;" placeholder="your-handle" autocomplete="off">
+            <button type="button" class="btn btn-sm" id="myHandleEditBtn" onclick="startEditMyHandle()">Change</button>
+            <button type="button" class="btn btn-sm btn-primary" id="myHandleSaveBtn" style="display:none;" onclick="saveMyHandle()">Save</button>
+            <button type="button" class="btn btn-sm" id="myHandleCancelBtn" style="display:none;" onclick="cancelEditMyHandle()">Cancel</button>
+          </div>
+          <div class="set-hint" id="myHandleErrorMsg" style="color:var(--red); display:none;"></div>
+
+          <div class="settings-action-row" style="align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;">
+            <input class="set-input" type="text" id="shareHandleInput" style="max-width:180px;" placeholder="Their handle" autocomplete="off">
+            <label class="set-check-row" style="margin:0;"><input type="checkbox" id="shareFoldersCheckbox"><span>Folders</span></label>
+            <label class="set-check-row" style="margin:0;"><input type="checkbox" id="shareCommandsCheckbox"><span>Commands</span></label>
+            <button type="button" class="btn btn-sm btn-primary" onclick="submitNewShare()">Share</button>
+          </div>
+          <div class="set-hint" id="newShareErrorMsg" style="color:var(--red); display:none;"></div>
+
+          <div class="set-hint" style="margin-top:14px;">Shared by you</div>
+          <div class="audit-log-wrap" id="sharesGivenWrap">
+            <table class="audit-log-table">
+              <thead><tr><th>Handle</th><th>Folders</th><th>Commands</th><th></th></tr></thead>
+              <tbody id="sharesGivenTbody"></tbody>
+            </table>
+            <div class="audit-log-empty" id="sharesGivenEmpty" style="display:none;">You haven't shared anything yet.</div>
+          </div>
+
+          <div class="set-hint" style="margin-top:14px;">Shared with you</div>
+          <div class="audit-log-wrap" id="sharesReceivedWrap">
+            <table class="audit-log-table">
+              <thead><tr><th>Handle</th><th>Folders</th><th>Commands</th></tr></thead>
+              <tbody id="sharesReceivedTbody"></tbody>
+            </table>
+            <div class="audit-log-empty" id="sharesReceivedEmpty" style="display:none;">No one has shared anything with you yet.</div>
+          </div>
+        </div>
         <div class="set-group" id="sysGroupDatabase" style="display:none;">
           <span class="set-label">Database</span>
           <div class="settings-action-row">
@@ -2010,6 +2064,7 @@
 <script src="js/audit-log.js"></script>
 <script src="js/backup.js"></script>
 <script src="js/api-keys.js"></script>
+<script src="js/sharing.js"></script>
 <script src="js/ssl-certificate.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/users-admin.js"></script>
