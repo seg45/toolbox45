@@ -441,6 +441,29 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6.5 18.5a6 6 0 0 1 11 0"/></svg>
           <span>User account</span>
         </button>
+        <button type="button" class="settings-nav-btn" data-pane="prefs" onclick="switchSettingsPane('prefs')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+          <span>User preferences</span>
+        </button>
+        <button type="button" class="settings-nav-btn" data-pane="catalog" onclick="switchSettingsPane('catalog')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+          <span>Register</span>
+        </button>
+        <button type="button" class="settings-nav-btn" data-pane="system" onclick="switchSettingsPane('system')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6l7-3z"/></svg>
+          <span>System</span>
+        </button>
+        <!-- Aba própria "Users" (antes um grupo espremido dentro de System,
+             junto com Database/API access — ver applyAdminGating() em
+             js/auth.js, que agora esconde este botão inteiro para não-admin
+             em vez do antigo #sysGroupUsers). Mais espaço vertical pra
+             gerenciar a lista de usuários. -->
+        <button type="button" class="settings-nav-btn" id="usersNavBtn" data-pane="users" onclick="switchSettingsPane('users')" style="display:none;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3.2"/><path d="M2.5 19c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 4.5v5M14.3 7h5.4"/></svg>
+          <span>Users</span>
+        </button>
+      </nav>
+      <div class="settings-content">
       <div class="settings-pane" data-pane="account" style="display:none;">
         <!-- Password — só para contas locais (username/senha); contas
              Google (users.is_local = false) não têm senha local pra
@@ -545,30 +568,6 @@
           </div>
         </div>
       </div><!-- /.settings-pane[account] -->
-
-        <button type="button" class="settings-nav-btn" data-pane="prefs" onclick="switchSettingsPane('prefs')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
-          <span>User preferences</span>
-        </button>
-        <button type="button" class="settings-nav-btn" data-pane="catalog" onclick="switchSettingsPane('catalog')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
-          <span>Register</span>
-        </button>
-        <button type="button" class="settings-nav-btn" data-pane="system" onclick="switchSettingsPane('system')">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6l7-3z"/></svg>
-          <span>System</span>
-        </button>
-        <!-- Aba própria "Users" (antes um grupo espremido dentro de System,
-             junto com Database/API access — ver applyAdminGating() em
-             js/auth.js, que agora esconde este botão inteiro para não-admin
-             em vez do antigo #sysGroupUsers). Mais espaço vertical pra
-             gerenciar a lista de usuários. -->
-        <button type="button" class="settings-nav-btn" id="usersNavBtn" data-pane="users" onclick="switchSettingsPane('users')" style="display:none;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3.2"/><path d="M2.5 19c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 4.5v5M14.3 7h5.4"/></svg>
-          <span>Users</span>
-        </button>
-      </nav>
-      <div class="settings-content">
       <div class="settings-pane" data-pane="prefs">
       <!-- Ordem completa da aba (pedido do usuário): Dark mode; Home page +
            Group by; Vendor; System; Version; Environment; Topic; Details;
