@@ -1,5 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<!-- data-theme="light" fixo (pedido do usuário: "a tela de login não deve
+     ter modo escuro") — css/theme.css define o tema ESCURO em :root e o
+     claro em [data-theme="light"] (ver comentário lá), então sem esse
+     atributo a página nasceria escura por padrão antes de qualquer JS
+     rodar. Hardcoded aqui (não via JS) para não ter nenhum flash de tema
+     errado. Ver também o script inline no fim do <body>, que reforça isto
+     DEPOIS de js/theme.js rodar (initTheme() de lá aplicaria o tema salvo
+     do app — inclusive escuro — já que login.html compartilha o mesmo
+     localStorage/origem; a tela de login precisa ficar sempre clara,
+     independente da preferência do resto do app). -->
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -107,6 +117,26 @@
 </div>
 
 <script src="js/theme.js"></script>
+<!-- js/theme.js acima é carregado só pela cor de destaque (accent —
+     applyAccentColor(), independente de tema, ver js/theme.js) — mas seu
+     initTheme() aplica o tema ESCURO/claro salvo do resto do app (mesmo
+     localStorage), o que reabriria modo escuro aqui. Esta linha reforça
+     data-theme="light" DEPOIS que initTheme() já rodou (scripts executam
+     em ordem), sem precisar tocar em js/theme.js (compartilhado com
+     index.html, onde o modo escuro continua normal). -->
+<script>
+  document.documentElement.setAttribute('data-theme', 'light');
+  // O preset de accent "white" (branco) só existe/faz sentido no tema
+  // escuro (ver comentário do preset "white" em ACCENT_PRESETS,
+  // js/theme.js) — se o usuário tinha ele salvo (porque o RESTO do app
+  // está em modo escuro), forçar esta página pro claro deixaria o botão
+  // "Log in" branco em cima do card branco (--teal aplicado inline por
+  // applyAccentColor() tem prioridade sobre a variável de tema). Mesma
+  // rede de segurança que toggleModalTheme()/initAccentColor() já usam ao
+  // entrar no tema claro — _resetAccentIfWhite() está definida acima, em
+  // js/theme.js.
+  if (typeof _resetAccentIfWhite === 'function') _resetAccentIfWhite();
+</script>
 <script src="js/login.js"></script>
 </body>
 </html>

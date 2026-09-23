@@ -18,17 +18,17 @@
 /* Logo oficial (mesmo arquivo .png do header, ver .hdr-logo/.hdr-logo-img
    em css/layout.css) — regras duplicadas aqui (em vez de carregar
    layout.css inteiro, que traz a grade do app/sidebar que esta página não
-   usa). O mark (ícone) tem cor única (--teal), não depende de [data-theme].
-   O texto "Toolbox45", porém, usava var(--text) (cor de texto genérica,
-   preta/quase preta) em vez da cor de marca #105B63 que .hdr-logo-txt usa
-   no header (ver css/layout.css) — pedido do usuário: "ajuste o logo da
-   tela de login" (com o header como referência de como deveria ficar).
-   Mesmos valores exatos de .hdr-logo-txt, duplicados aqui pelo mesmo
-   motivo acima (não carregar layout.css inteiro). */
+   usa). O mark (ícone) tem cor única (--teal), não depende de tema. O
+   texto "Toolbox45" usa a cor de marca #105B63, mesmo valor de
+   .hdr-logo-txt no header (ver css/layout.css) — pedido do usuário:
+   "ajuste o logo da tela de login" (com o header como referência).
+   Sem variante para tema escuro (diferente de .hdr-logo-txt): a tela de
+   login é sempre clara agora (pedido do usuário: "a tela de login não deve
+   ter modo escuro" — ver data-theme="light" fixo em login.html), então
+   #105B63 (pensado pro fundo claro) é a única cor que este texto usa. */
 .login-brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 14px; margin-bottom: 6px; }
 .login-logo-img { width: 42px; height: 42px; display: block; }
 .login-logo-txt { font-size: 23px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
-[data-theme="dark"] .login-logo-txt { color: #FFFFFF; }
 .login-card .set-group { margin-top: 14px; }
 .login-submit-btn { margin-top: 16px; width: 100%; text-align: center; padding: 9px 14px; }
 .login-error { text-align: center; }
