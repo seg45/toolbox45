@@ -821,38 +821,46 @@
       <div class="settings-pane" data-pane="catalog" style="display:none;">
         <span class="set-hint">Manage the shared catalogs used across the app. Changes apply to every user immediately.</span>
         <div class="settings-catalog-grid">
-          <button type="button" class="settings-tile" onclick="openCatalogAdmin('vendors')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V7l7-4 7 4v14"/><path d="M10 21v-6h4v6"/><path d="M17 21V10l4 2v9"/></svg>
-            <span>Vendors</span>
-          </button>
-          <button type="button" class="settings-tile" onclick="openCatalogAdmin('systems')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/></svg>
-            <span>Systems</span>
-          </button>
-          <button type="button" class="settings-tile" onclick="openCatalogAdmin('versions')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-            <span>Versions</span>
-          </button>
-          <button type="button" class="settings-tile" onclick="openCatalogAdmin('environments')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 4 5.6 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.6-4-9s1.5-6.5 4-9z"/></svg>
-            <span>Environments</span>
-          </button>
-          <button type="button" class="settings-tile" onclick="openCatalogAdmin('topics')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4L13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>
-            <span>Topics</span>
-          </button>
-          <button type="button" class="settings-tile" onclick="openCatalogAdmin('parameters')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-            <span>Parameters</span>
-          </button>
-          <button type="button" class="settings-tile" onclick="openCatalogAdmin('prompts')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
-            <span>Prompts</span>
-          </button>
-          <button type="button" class="settings-tile" onclick="openCatalogAdmin('exports')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>
-            <span>Exports</span>
-          </button>
+          <div class="settings-catalog-group">
+            <button type="button" class="settings-tile" onclick="openCatalogAdmin('vendors')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21V7l7-4 7 4v14"/><path d="M10 21v-6h4v6"/><path d="M17 21V10l4 2v9"/></svg>
+              <span>Vendors</span>
+            </button>
+            <button type="button" class="settings-tile" onclick="openCatalogAdmin('systems')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/></svg>
+              <span>Systems</span>
+            </button>
+            <button type="button" class="settings-tile" onclick="openCatalogAdmin('versions')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+              <span>Versions</span>
+            </button>
+            <button type="button" class="settings-tile" onclick="openCatalogAdmin('environments')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 4 5.6 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.6-4-9s1.5-6.5 4-9z"/></svg>
+              <span>Environments</span>
+            </button>
+            <button type="button" class="settings-tile" onclick="openCatalogAdmin('topics')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4L13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.3"/></svg>
+              <span>Topics</span>
+            </button>
+          </div>
+          <!-- Segundo grupo (Exports/Parameters/Prompts) -- pedido do usuário:
+               separar visualmente dos 5 cadastros de cima (que têm relação de
+               hierarquia entre si: Vendor -> System -> Version/Environment ->
+               Topic) e manter em ordem alfabética. -->
+          <div class="settings-catalog-group">
+            <button type="button" class="settings-tile" onclick="openCatalogAdmin('exports')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></svg>
+              <span>Exports</span>
+            </button>
+            <button type="button" class="settings-tile" onclick="openCatalogAdmin('parameters')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+              <span>Parameters</span>
+            </button>
+            <button type="button" class="settings-tile" onclick="openCatalogAdmin('prompts')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
+              <span>Prompts</span>
+            </button>
+          </div>
         </div>
       </div><!-- /.settings-pane[catalog] -->
 

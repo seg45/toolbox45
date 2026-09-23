@@ -241,7 +241,15 @@
 /* Antes um grid 3x2 de blocos quadrados; virou uma lista de barras
    horizontais (ícone + nome lado a lado, ocupando a largura toda) — mais
    fácil de escanear numa lista de 6 itens. */
-.settings-catalog-grid { display: flex; flex-direction: column; gap: 8px; }
+/* Pedido do usuário: "coloque um espaço entre esses dois blocos" -- os
+   cadastros de Register agora ficam em dois grupos (ver index.html,
+   .settings-catalog-group): os 5 com hierarquia entre si (Vendor -> System
+   -> Version/Environment -> Topic) e, com um respiro maior entre eles, os
+   demais (Exports/Parameters/Prompts, em ordem alfabética). O gap maior
+   fica no container externo; dentro de cada grupo o espaçamento entre
+   tiles continua o mesmo de antes (8px). */
+.settings-catalog-grid { display: flex; flex-direction: column; gap: 20px; }
+.settings-catalog-group { display: flex; flex-direction: column; gap: 8px; }
 .settings-tile {
   display: flex; flex-direction: row; align-items: center; justify-content: flex-start;
   gap: 12px; padding: 12px 14px; border: 1px solid var(--bdr); border-radius: 8px;
