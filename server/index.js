@@ -482,7 +482,7 @@ app.post('/api/auth/register', async (req, res) => {
 //   GOOGLE_CLIENT_ID      Client ID OAuth do Google Cloud Console
 //   GOOGLE_CLIENT_SECRET  Client Secret correspondente
 //   GOOGLE_REDIRECT_URI   URL pública EXATA de GET /api/auth/google/callback
-//                         (ex.: https://toolbox45.seg45.com.br/api/auth/google/callback)
+//                         (ex.: https://toolbox.seg45.com.br/api/auth/google/callback)
 //                         — precisa bater com o registrado no Google Cloud
 //                         Console, caractere por caractere.
 // Sem as 3, o login com Google fica desligado (botão escondido no
@@ -513,7 +513,7 @@ const OAUTH_STATE_COOKIE = 'tb45_oauth_state';
 //   MICROSOFT_CLIENT_SECRET   Client secret correspondente
 //   MICROSOFT_REDIRECT_URI    URL pública EXATA de GET
 //                             /api/auth/microsoft/callback (ex.:
-//                             https://toolbox45.seg45.com.br/api/auth/microsoft/callback)
+//                             https://toolbox.seg45.com.br/api/auth/microsoft/callback)
 //                             — precisa bater com o registrado no Azure
 //                             Portal, caractere por caractere.
 //   MICROSOFT_TENANT_ID       Opcional. 'common' (padrão) aceita qualquer

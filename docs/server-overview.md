@@ -63,7 +63,7 @@ Primeiro login de um e-mail cria a conta automaticamente com `role: "user"`.
 2. Em **APIs & Services → Credentials → Create Credentials → OAuth client ID**, tipo
    **Web application**.
 3. Em **Authorized redirect URIs**, adicione a URL pública EXATA de
-   `GET /api/auth/google/callback` (ex.: `https://toolbox45.seg45.com.br/api/auth/google/callback`)
+   `GET /api/auth/google/callback` (ex.: `https://toolbox.seg45.com.br/api/auth/google/callback`)
    — precisa bater caractere por caractere com `GOOGLE_REDIRECT_URI` abaixo.
 4. Copie o **Client ID** e o **Client secret** gerados.
 5. **NUNCA cole o Client ID/Secret no `docker-compose.yml`** — este repositório é
@@ -76,7 +76,7 @@ Primeiro login de um e-mail cria a conta automaticamente com `role: "user"`.
 ```
 GOOGLE_CLIENT_ID=<client id>
 GOOGLE_CLIENT_SECRET=<client secret>
-GOOGLE_REDIRECT_URI=https://toolbox45.seg45.com.br/api/auth/google/callback
+GOOGLE_REDIRECT_URI=https://toolbox.seg45.com.br/api/auth/google/callback
 ```
 
 6. Recrie o container (`docker compose up -d --build`) — o botão "Sign in with Google"
@@ -102,7 +102,7 @@ auto-cadastro local e ao login com Google.
    travar o login a uma organização específica, ver passo 6).
 3. Em **Redirect URI**, escolha o tipo **Web** e cole a URL pública EXATA de
    `GET /api/auth/microsoft/callback` (ex.:
-   `https://toolbox45.seg45.com.br/api/auth/microsoft/callback`) — precisa bater
+   `https://toolbox.seg45.com.br/api/auth/microsoft/callback`) — precisa bater
    caractere por caractere com `MICROSOFT_REDIRECT_URI` abaixo. Clique **Register**.
 4. Na página do app recém-criado, copie o **Application (client) ID** (é o
    `MICROSOFT_CLIENT_ID`).
@@ -116,7 +116,7 @@ auto-cadastro local e ao login com Google.
 ```
 MICROSOFT_CLIENT_ID=<application (client) id>
 MICROSOFT_CLIENT_SECRET=<client secret value>
-MICROSOFT_REDIRECT_URI=https://toolbox45.seg45.com.br/api/auth/microsoft/callback
+MICROSOFT_REDIRECT_URI=https://toolbox.seg45.com.br/api/auth/microsoft/callback
 # opcional — só se quiser restringir o login a uma organização específica em vez de
 # "common" (qualquer conta Microsoft, pessoal ou de qualquer organização):
 # MICROSOFT_TENANT_ID=<tenant id ou domínio da organização>
