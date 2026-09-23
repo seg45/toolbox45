@@ -2,12 +2,36 @@
 // CONFIGURAÇÕES DO USUÁRIO (persistidas em localStorage)
 // ════════════════════════════════════════════════
 const SETTINGS_KEY = 'cpa-settings';
+
+// ════════════════════════════════════════════════
+// Caminho do arquivo de export ("Export to", {{logFile}} nos templates de
+// Exports) — pedido do usuário: "onde está esse registro de export? no
+// cadastro está como {{logFile}}" e depois "deixe como os demais registros
+// em banco, e cadastre esse para refletir nos comandos". Deixou de ser uma
+// preferência POR USUÁRIO (campo "Export to" em User preferences, removido)
+// e virou um valor ÚNICO, global, cadastrado pelo admin em Settings →
+// System (ver GET/PUT /api/system/export-log-file em server/index.js) —
+// mesmo espírito dos outros cadastros (Vendors/Systems/Exports etc.), só
+// que fora do modelo de tabela porque é um valor único, não uma lista.
+// GLOBAL_EXPORT_LOG_FILE começa com o mesmo default de sempre (pintura
+// instantânea, antes da resposta do servidor chegar — ver
+// loadGlobalExportLogFile() abaixo, chamada por js/user-sync.js) e é
+// atualizada em memória sempre que o valor real chega ou é salvo.
+let GLOBAL_EXPORT_LOG_FILE = '/tmp/$(hostname).txt';
+
+async function loadGlobalExportLogFile() {
+  try {
+    const res = await fetch('/api/system/export-log-file');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && typeof data.value === 'string' && data.value) GLOBAL_EXPORT_LOG_FILE = data.value;
+  } catch (e) {
+    console.warn('Não foi possível carregar o caminho global de export — usando o padrão', e);
+  }
+  return GLOBAL_EXPORT_LOG_FILE;
+}
 const DEFAULT_SETTINGS = {
   home: 'menu', vendor: [], sys: [], version: [], env: [], type: [],
-  // Padrão usa $(hostname) — substituição de shell resolvida pelo próprio
-  // gateway Check Point ao rodar o comando exportado (não pelo app), então
-  // já nasce nomeando o arquivo por equipamento (pedido do usuário).
-  logFile: '/tmp/$(hostname).txt',
   showCardDetails: false,
   enableCommandEditing: false,
   exportEnabled: false,
@@ -213,9 +237,9 @@ function applyExportSetting(enabled) {
   // -- pedido do usuario: "remover a exibicao desse valor quando export
   // estiver selecionado". O <input id="f-log"> continua no DOM (so nunca
   // mais ganha a classe .show, entao fica sempre display:none via CSS) --
-  // continua sendo o valor que render.js le (gv('f-log')) para o
-  // redirecionamento, so que agora so editavel em Settings -> User
-  // preferences (#mLogFile).
+  // continua sendo o valor que render.js le (gv('f-log')), so que agora
+  // vem de GLOBAL_EXPORT_LOG_FILE (cadastrado pelo admin em Settings ->
+  // System), nao mais de uma preferencia por usuario.
   if (typeof render === 'function') render();
 }
 // Reflete o estado atual no toggle da sidebar E no espelho do modal de
@@ -430,7 +454,7 @@ function applyDefaultsFromSettings() {
     if (input && typeof onSearchInput === 'function') input.dispatchEvent(new Event('input', { bubbles: true }));
   }
   if (typeof ccRefreshCascade === 'function') ccRefreshCascade();
-  gvSet('f-log', s.logFile);
+  gvSet('f-log', GLOBAL_EXPORT_LOG_FILE);
   applyCardDetailsSetting(s.showCardDetails === true);
   syncShowDetailsToggleUI(s.showCardDetails === true);
   applyShowSystemCommandsSetting(s.showSystemCommands !== false);

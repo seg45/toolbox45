@@ -2611,6 +2611,52 @@ app.put('/api/global-settings', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════
+// Caminho do arquivo de export ("Export to", placeholder {{logFile}} nos
+// templates da tela System → Manage Exports) — pedido do usuário: "onde
+// está esse registro de export? no cadastro está como {{logFile}}" e
+// depois "deixe como os demais registros em banco, e cadastre esse para
+// refletir nos comandos". Antes era uma preferência POR USUÁRIO (campo
+// "Export to" em User preferences, ver histórico em js/settings.js) — agora
+// é um valor ÚNICO, global, cadastrado pelo admin aqui, igual aos outros
+// cadastros (Vendors/Systems/Exports etc.), em vez de cada usuário ter o
+// seu. Reaproveita a mesma tabela/mecanismo de GET/PUT /api/global-settings
+// acima (readGlobalSetting/writeGlobalSetting, definidas mais abaixo,
+// função declarada = hoisted, disponível aqui mesmo vindo depois no
+// arquivo) — chave própria (EXPORT_LOG_FILE_KEY), não misturada com as
+// outras chaves de /api/global-settings. GET é público pra qualquer sessão
+// autenticada (todo usuário precisa do valor pra renderizar os comandos
+// com export habilitado, ver js/render.js); só o PUT é admin-only.
+// ════════════════════════════════════════════════
+const EXPORT_LOG_FILE_KEY = 'exportLogFile';
+const DEFAULT_EXPORT_LOG_FILE = '/tmp/$(hostname).txt';
+
+app.get('/api/system/export-log-file', async (req, res) => {
+  try {
+    const value = await readGlobalSetting(EXPORT_LOG_FILE_KEY, DEFAULT_EXPORT_LOG_FILE);
+    res.json({ value });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.put('/api/system/export-log-file', requireAdmin, async (req, res) => {
+  const { value } = req.body || {};
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  if (!trimmed) {
+    return res.status(400).json({ error: 'validation_error', message: '"value" is required.' });
+  }
+  try {
+    await writeGlobalSetting(EXPORT_LOG_FILE_KEY, trimmed);
+    await logAudit(getCurrentUsername(req), 'update', 'export_log_file', null, 'Export log file', `Export log file set to "${trimmed}"`);
+    res.json({ value: trimmed });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════
 // API keys — acesso programático externo (ver api_keys em schema.sql e o
 // middleware de autenticação no topo deste arquivo). Gerenciável pela UI em
 // Settings → System → API access (ver js/api-keys.js). A key em texto puro só

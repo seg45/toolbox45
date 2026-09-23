@@ -210,6 +210,17 @@ async function initUserSync() {
     console.warn('Não foi possível sincronizar preferências do usuário — usando cópia local', e);
   }
 
+  // Caminho global do arquivo de export ("Export to") — pedido do usuário
+  // "deixe como os demais registros em banco, e cadastre esse para refletir
+  // nos comandos", com "Um valor único, global" confirmado como o escopo.
+  // Não é mais por-usuário (removido de USER_SYNCED_KEYS/localStorage
+  // acima) — GLOBAL_EXPORT_LOG_FILE (js/settings.js) precisa estar
+  // carregado ANTES de reapplyAfterUserSync() rodar applyDefaultsFromSettings(),
+  // senão o primeiro render usaria o valor padrão embutido no código.
+  if (typeof loadGlobalExportLogFile === 'function') {
+    try { await loadGlobalExportLogFile(); } catch (e) {}
+  }
+
   // Espera os catálogos de Versão/Ambiente/Tópico (js/catalogs.js) ficarem prontos
   // antes do primeiro render() de verdade (disparado dentro de
   // reapplyAfterUserSync) — sem isso, o primeiro render poderia rodar com

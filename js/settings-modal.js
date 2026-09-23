@@ -102,7 +102,6 @@ function openSettingsModal() {
   updateModalMultiLabel('mType', 'mTypeDDBtn', TYPE_KEYS, 'selected', 'None');
   updateModalSingleLabel('mGroupBy', 'mGroupByDDBtn');
   if (typeof ccRefreshCascade === 'function') ccRefreshCascade();
-  gvSet('mLogFile', s.logFile);
   syncShowDetailsToggleUI(s.showCardDetails === true);
   // O antigo botão "Clear favorites" (mClearFavBtn) foi removido junto com a
   // migração para Folders (ver js/folders.js) — excluir uma pasta específica
@@ -128,7 +127,6 @@ function saveSettingsModal() {
     version: versionSel,
     env: envSel,
     type: typeSel,
-    logFile: (gv('mLogFile') || DEFAULT_SETTINGS.logFile),
   });
   persistSettings(s);
   // Tema já foi aplicado e persistido na hora pelo toggle (toggleModalTheme) — nada a fazer aqui.
@@ -144,7 +142,7 @@ function saveSettingsModal() {
   updateEnvDDLabel();
   updateTypeDDLabel();
   if (typeof ccRefreshCascade === 'function') ccRefreshCascade();
-  gvSet('f-log', s.logFile);
+  gvSet('f-log', GLOBAL_EXPORT_LOG_FILE);
   VIEW_FOLDERS_HOME = s.home === 'folders';
   // Bug reportado: "configurei para pagina inicial ser a folders, mas
   // quando usuario loga esta indo para pagina de comandos". Causa:
@@ -184,7 +182,6 @@ function restoreDefaultsModal() {
   updateModalMultiLabel('mType', 'mTypeDDBtn', TYPE_KEYS, 'selected', 'None');
   updateModalSingleLabel('mGroupBy', 'mGroupByDDBtn');
   if (typeof ccRefreshCascade === 'function') ccRefreshCascade();
-  gvSet('mLogFile', DEFAULT_SETTINGS.logFile);
   setShowCardDetails(DEFAULT_SETTINGS.showCardDetails);
   // "Default settings" (Dark mode/Details/Export/Show images/System
   // commands) voltam todos para desabilitado — Details já estava aqui,
