@@ -16,9 +16,11 @@
 .hdr-logo { gap: 9px; }
 .hdr-logo-img { width: 28px; height: 28px; display: block; }
 /* Pedido do usuário: aumentar um pouco a fonte (16px -> 18px) e trocar a
-   cor de --text pro verde do tema (var(--green) — escuro no tema claro,
-   #15803D; um verde claro no escuro, #4ADE80, ver css/theme.css). */
-.hdr-logo-txt { font-size: 18px; font-weight: 800; letter-spacing: -.3px; color: var(--green); }
+   cor de --text por um verde específico escolhido por ele (#105B63, via
+   color picker) — fixo, igual em claro/escuro (diferente de var(--green),
+   que é theme-scoped, ver css/theme.css; aqui o usuário pediu essa cor
+   exata, não a semântica "verde do tema"). */
+.hdr-logo-txt { font-size: 18px; font-weight: 800; letter-spacing: -.3px; color: #105B63; }
 .hdr-gap { flex: 1; }
 /* Usuário identificado (login do Windows via NTLM, ou sessão local — ver
    js/auth.js) — mostrado à esquerda do botão de Configurações. É também o
