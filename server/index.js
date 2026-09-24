@@ -42,6 +42,7 @@ const { execFile } = require('child_process');
 const express = require('express');
 const { pool, initDb, withTransaction, getConnectionString, generateUniqueHandle } = require('./db');
 const { hashPassword, verifyPassword, generateSessionToken } = require('./auth');
+const { getImageDimensions } = require('./image-dimensions');
 
 const app = express();
 
@@ -2644,6 +2645,14 @@ app.put('/api/global-settings', async (req, res) => {
 // ════════════════════════════════════════════════
 const LOGO_ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const LOGO_MAX_BYTES = 2 * 1024 * 1024; // 2MB decodificado
+// Pedido do usuário: "inclua dimensões e tamanho máximo da imagem" — limite
+// de RESOLUÇÃO (px), separado do limite de tamanho de arquivo acima. O logo
+// é sempre exibido pequeno (32-42px de altura, ver .hdr-logo-img/
+// .login-logo-img em css/layout.css/css/login.css), então 4096px de
+// qualquer lado já é bem mais que suficiente pra qualquer densidade de tela
+// — o limite existe só pra recusar upload de imagem gigante/desproporcional
+// por engano, não pra forçar um tamanho "ideal".
+const LOGO_MAX_DIMENSION = 4096;
 
 app.get('/api/system/logo', async (req, res) => {
   try {
@@ -2676,6 +2685,19 @@ app.put('/api/system/logo', requireAdmin, async (req, res) => {
   if (decodedSize > LOGO_MAX_BYTES) {
     return res.status(400).json({ error: 'too_large', message: `Image is too large (max ${(LOGO_MAX_BYTES / (1024 * 1024)).toFixed(0)}MB).` });
   }
+  const decodedBuf = Buffer.from(match[2], 'base64');
+  const dims = getImageDimensions(decodedBuf, mimeType);
+  if (dims && (dims.width > LOGO_MAX_DIMENSION || dims.height > LOGO_MAX_DIMENSION)) {
+    return res.status(400).json({
+      error: 'too_large',
+      message: `Image dimensions are too large (${dims.width}×${dims.height}px, max ${LOGO_MAX_DIMENSION}×${LOGO_MAX_DIMENSION}px).`,
+    });
+  }
+  // dims === null (formato não reconhecido pelo parser mínimo em
+  // server/image-dimensions.js) não bloqueia o upload — o navegador já
+  // recusou tipos fora de LOGO_ALLOWED_MIME antes de chegar aqui, então só
+  // não conseguimos avisar a resolução exata; o limite de bytes acima
+  // continua valendo de qualquer forma.
   try {
     await pool.query(
       `INSERT INTO system_logo (id, image_data, mime_type, updated_at, updated_by)

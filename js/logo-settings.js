@@ -135,6 +135,11 @@ async function loadLogoStatus() {
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024; // 2MB — mesmo limite validado no servidor (LOGO_MAX_BYTES em server/index.js)
 const LOGO_ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+// Pedido do usuário: "inclua dimensões e tamanho máximo da imagem" — mesmo
+// valor de LOGO_MAX_DIMENSION em server/index.js, checado aqui de novo só
+// pra avisar o admin ANTES do upload (o servidor recusa de qualquer forma,
+// esta checagem client-side é só uma resposta mais rápida).
+const LOGO_MAX_DIMENSION = 4096;
 
 function _logoHandleFileInput(input) {
   const file = input.files && input.files[0];
@@ -151,13 +156,24 @@ function _logoHandleFileInput(input) {
   }
   const reader = new FileReader();
   reader.onload = () => {
-    _logoPendingDataUrl = String(reader.result || '');
-    const pendingPreview = document.getElementById('logoPendingPreview');
-    if (pendingPreview) { pendingPreview.src = _logoPendingDataUrl; pendingPreview.style.display = ''; }
-    const saveBtn = document.getElementById('logoSaveBtn');
-    if (saveBtn) saveBtn.disabled = false;
-    const status = document.getElementById('logoSaveStatus');
-    if (status) status.textContent = '';
+    const dataUrl = String(reader.result || '');
+    const probe = new Image();
+    probe.onload = () => {
+      if (probe.naturalWidth > LOGO_MAX_DIMENSION || probe.naturalHeight > LOGO_MAX_DIMENSION) {
+        alert(`Image dimensions are too large (${probe.naturalWidth}×${probe.naturalHeight}px, max ${LOGO_MAX_DIMENSION}×${LOGO_MAX_DIMENSION}px).`);
+        input.value = '';
+        return;
+      }
+      _logoPendingDataUrl = dataUrl;
+      const pendingPreview = document.getElementById('logoPendingPreview');
+      if (pendingPreview) { pendingPreview.src = _logoPendingDataUrl; pendingPreview.style.display = ''; }
+      const saveBtn = document.getElementById('logoSaveBtn');
+      if (saveBtn) saveBtn.disabled = false;
+      const status = document.getElementById('logoSaveStatus');
+      if (status) status.textContent = '';
+    };
+    probe.onerror = () => alert('Could not read the selected file.');
+    probe.src = dataUrl;
   };
   reader.onerror = () => alert('Could not read the selected file.');
   reader.readAsDataURL(file);
