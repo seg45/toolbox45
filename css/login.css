@@ -16,18 +16,15 @@
   display: flex; flex-direction: column;
 }
 /* Logo oficial (mesmo arquivo .png do header, ver .hdr-logo/.hdr-logo-img
-   em css/layout.css) — regras duplicadas aqui (em vez de carregar
+   em css/layout.css) — regra duplicada aqui (em vez de carregar
    layout.css inteiro, que traz a grade do app/sidebar que esta página não
-   usa). O mark (ícone) tem cor única (--teal), não depende de tema.
-   O texto "Toolbox45" usava a cor de marca #105B63 (mesmo valor de
-   .hdr-logo-txt no header) — trocado pra var(--teal) a pedido do usuário:
-   "deixe o nome Toolbox da mesma cor do botão login" (o botão "Log in"
-   usa .btn-primary, que é var(--teal) — ver css/components.css).
-   Sem variante para tema escuro (diferente de .hdr-logo-txt): a tela de
-   login é sempre clara agora (pedido do usuário: "a tela de login não deve
-   ter modo escuro" — ver data-theme="light" fixo em login.html), mas
-   --teal não muda entre temas (ver comentário em css/theme.css), então não
-   precisa de override pra light aqui. */
+   usa). Ícone + "Toolbox45" vêm achatados em uma única imagem (pedido do
+   usuário: "ajuste a qualidade dessa imagem e use como logo default...
+   deixe centralizado" — ver comentário completo em index.html); antes o
+   nome era um <span> de texto à parte na cor var(--teal), pra bater com o
+   botão "Log in" (.btn-primary). Sem variante escura aqui: a tela de login
+   é sempre clara (data-theme="light" fixo em login.html), por isso só a
+   variante teal do logo (img/logo-toolbox45.png) é usada. */
 /* Histórico: "centralize o nome e deixe o logo mais próximo do nome" ->
    depois "centralize pelo nome Toolbox45 e deixe o logo a esquerda" (virou
    um grid de 3 colunas que centralizava só o TEXTO, com o ícone
@@ -43,12 +40,13 @@
    escolhido. gap 4px entre ícone e nome — pedido do usuário: "aproxime o
    logo do nome" (era 8px), mantido aqui. */
 .login-brand { display: flex; justify-content: center; align-items: center; gap: 4px; width: 100%; margin: 14px 0 6px; }
-/* object-fit:contain — o logo customizado (Settings -> System -> Logo)
-   pode não ser quadrado; sem isso uma imagem retangular ficaria esticada
-   dentro da caixa fixa de 42x42. */
-.login-logo-img { width: 42px; height: 42px; object-fit: contain; display: block; }
-/* Pedido do usuário: "deixe o nome maior na tela de login" — 23px -> 30px. */
-.login-logo-txt { font-size: 30px; font-weight: 800; letter-spacing: -.3px; color: var(--teal); }
+/* Pedido do usuário: "ajuste a qualidade dessa imagem e use como logo
+   default... deixe centralizado" — ícone + "Toolbox45" agora vêm achatados
+   em uma única imagem bem mais larga que alta, por isso height fixo (era
+   42x42 quadrado) + width:auto, mantendo a altura de antes. object-fit:
+   contain continua como rede de segurança pro logo customizado (Settings ->
+   System -> Logo, ver js/logo-settings.js), que pode ter outra proporção. */
+.login-logo-img { height: 42px; width: auto; object-fit: contain; display: block; }
 .login-card .set-group { margin-top: 14px; }
 .login-submit-btn { margin-top: 16px; width: 100%; text-align: center; padding: 9px 14px; }
 .login-error { text-align: center; }

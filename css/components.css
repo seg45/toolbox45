@@ -603,10 +603,10 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 }
 .sb-credit:hover { opacity: .8; }
 /* Pedido do usuário: "em inglês com a cor da fonte verde no mesmo tom do
-   nome" — mesma cor fixa #105B63 do nome "Toolbox45" no header
-   (.hdr-logo-txt, css/layout.css), no lugar do var(--muted) padrão.
-   Mesmo problema de contraste no tema escuro que o nome no header (ver
-   comentário completo em .hdr-logo-txt) — mesma correção, branco puro (a
+   nome" — mesma cor fixa #105B63 que o nome "Toolbox45" no header usava
+   quando ainda era um <span> de texto próprio (hoje faz parte do PNG do
+   logo, ver .hdr-logo-img em css/layout.css). Mesmo problema de contraste
+   no tema escuro que aquele texto tinha — mesma correção, branco puro (a
    cor do logo) só no dark. */
 .sb-credit-txt { font-size: 10px; font-weight: 700; color: #105B63; letter-spacing: .3px; }
 [data-theme="dark"] .sb-credit-txt { color: #FFFFFF; }

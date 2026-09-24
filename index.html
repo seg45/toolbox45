@@ -37,19 +37,21 @@
 
 <header class="hdr">
   <div class="hdr-logo" onclick="goHome()" title="Go to home page">
-    <!-- Logo Toolbox45: mark losangular + "45" ao lado do nome em texto
-         (não é mais um bitmap único como no logo antigo). Pedido do
-         usuário: "no modo escuro utilize o logo branco" — o mark teal sólido
-         (img/logo-toolbox45.png) some/fica pouco visível em cima do fundo
-         escuro do tema dark, então ganhou uma segunda versão, branca
-         (img/logo-toolbox45-white.png — mesmo arquivo, só recolorido pra
-         branco, alpha preservado). Troca via [data-theme] (ver
-         css/layout.css: .hdr-logo-img.for-dark/.for-light), mesmo padrão já
-         usado antes pro rodapé "Developed by CG One" (removido no rebrand,
-         mas o mecanismo era esse). -->
-    <img class="hdr-logo-img for-dark" src="img/logo-toolbox45-white.png?v=1" alt="Toolbox45">
-    <img class="hdr-logo-img for-light" src="img/logo-toolbox45.png?v=1" alt="Toolbox45">
-    <span class="hdr-logo-txt">Toolbox45</span>
+    <!-- Logo Toolbox45 — pedido do usuário: "ajuste a qualidade dessa
+         imagem e use como logo default... deixe centralizado", com o mark +
+         "Toolbox45" ACHATADOS em uma única imagem (antes era o mark sozinho
+         + <span> de texto ao lado, cada um com sua própria cor). O texto
+         deixou de acompanhar o accent picker (var(--teal)) — agora é pixel
+         fixo dentro do PNG — troca aceita explicitamente pelo usuário nessa
+         conversa. Duas variantes continuam existindo só pelo contraste
+         claro/escuro do FUNDO (mesmo mecanismo de antes, [data-theme] troca
+         qual <img> aparece — ver css/layout.css:
+         .hdr-logo-img.for-dark/.for-light), não porque o texto agora tem
+         cor própria por tema. Cada arquivo é bem mais largo que alto (ícone
+         + texto lado a lado); por isso a CSS usa height fixo + width:auto,
+         não mais uma caixa quadrada fixa (ver .hdr-logo-img). -->
+    <img class="hdr-logo-img for-dark" src="img/logo-toolbox45-white.png?v=2" alt="Toolbox45">
+    <img class="hdr-logo-img for-light" src="img/logo-toolbox45.png?v=2" alt="Toolbox45">
   </div>
   <div class="hdr-gap"></div>
   <!-- Menu de conta — clicar no usuário identificado abre um dropdown com o
@@ -1383,7 +1385,7 @@
 
       <div class="set-group">
         <span class="set-label">Replace logo</span>
-        <span class="set-hint">PNG, JPEG or WEBP, up to 2MB. Square images with a transparent background work best.</span>
+        <span class="set-hint">PNG, JPEG or WEBP, up to 2MB. The default logo now includes the "Toolbox45" name baked into the image — include your own text if you want a name shown next to the icon. Transparent background works best.</span>
         <div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
           <img id="logoPendingPreview" alt="" style="width:48px;height:48px;object-fit:contain;border-radius:6px;background:var(--surf3,rgba(128,128,128,.15));display:none;">
           <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
