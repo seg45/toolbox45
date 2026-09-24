@@ -26,7 +26,7 @@ RUN apt-get update \
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY server/schema.sql server/db.js server/index.js server/seed.js server/auth.js ./
+COPY server/schema.sql server/db.js server/index.js server/seed.js server/auth.js server/image-dimensions.js ./
 
 # Dedicated non-root user + folders for features that write to disk outside
 # the app code itself: /app/backups (Backup & Restore, a named volume so
