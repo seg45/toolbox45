@@ -976,6 +976,54 @@
             </button>
           </div>
         </div>
+        <!-- Default theme & colors — pedido do usuário: "em system inclua
+             a opção para que o super admin possa escolher o tema e cores
+             default, e isso reflita na página de login". super_admin-only
+             (ver SUPER_ADMIN_ONLY_SETTINGS_GROUP_IDS em js/auth.js, mesmo
+             nível de "Manage users") porque isso é visto por TODO mundo,
+             inclusive antes do login — diferente das outras opções desta
+             aba, que são admin-only comum. GET/PUT /api/system/appearance
+             em server/index.js, js/appearance-settings.js. Mesmo padrão
+             visual do toggle "Dark mode"/swatches "Color" de Settings ->
+             User preferences (#mThemeToggle/#accentSwatches, mais abaixo
+             neste arquivo) — aqui muda o DEFAULT global, não a preferência
+             pessoal de quem está logado; por isso Save explícito em vez de
+             commit instantâneo (mesmo cuidado já usado em Logo/SSL
+             Certificate). -->
+        <div class="set-group" id="sysGroupAppearance" style="display:none;">
+          <span class="set-label">Default theme &amp; colors</span>
+          <span class="set-hint">Applied on the login page for everyone, and as the starting theme/color for anyone who hasn't chosen their own yet in the app.</span>
+          <div class="sb-toggle" id="sysAppearanceThemeToggle" onclick="toggleSysAppearanceTheme()">
+            <div class="set-row-half">
+              <div class="tog-track"><div class="tog-knob"></div></div><span>Dark theme</span>
+            </div>
+            <div class="set-row-half">
+              <span class="set-label">Color</span>
+              <div class="accent-swatches" id="sysAppearanceAccentSwatches" onclick="event.stopPropagation()">
+                <button type="button" class="accent-swatch" data-accent="teal" style="background:#1695A3" onclick="setSysAppearanceAccent('teal')" title="Toolbox45 teal (default)"></button>
+                <button type="button" class="accent-swatch" data-accent="pink" style="background:#DA1572" onclick="setSysAppearanceAccent('pink')" title="Check Point pink"></button>
+                <button type="button" class="accent-swatch" data-accent="blue" style="background:#60A5FA" onclick="setSysAppearanceAccent('blue')" title="Light blue"></button>
+                <button type="button" class="accent-swatch" data-accent="green" style="background:#4ADE80" onclick="setSysAppearanceAccent('green')" title="Green"></button>
+                <button type="button" class="accent-swatch" data-accent="purple" style="background:#C084FC" onclick="setSysAppearanceAccent('purple')" title="Purple"></button>
+                <button type="button" class="accent-swatch" data-accent="orange" style="background:#FB923C" onclick="setSysAppearanceAccent('orange')" title="Orange"></button>
+                <button type="button" class="accent-swatch" data-accent="red" style="background:#F87171" onclick="setSysAppearanceAccent('red')" title="Red"></button>
+                <!-- Visibilidade controlada em JS (_sysAppearanceSyncUI,
+                     js/appearance-settings.js) a partir do tema PENDENTE
+                     deste grupo, não do tema ao vivo da página (diferente
+                     de #accentSwatchWhite em User preferences, que usa CSS
+                     [data-theme="dark"] — aqui o admin pode estar no
+                     próprio tema claro escolhendo "dark" como padrão pra
+                     todo mundo, então a regra tem que seguir a seleção
+                     pendente, não a página dele). -->
+                <button type="button" class="accent-swatch" id="sysAppearanceAccentSwatchWhite" data-accent="white" style="background:#FFFFFF; display:none;" onclick="setSysAppearanceAccent('white')" title="White (dark theme only)"></button>
+              </div>
+            </div>
+          </div>
+          <div class="settings-action-row" style="gap:8px;">
+            <button type="button" class="btn btn-primary" id="sysAppearanceSaveBtn" onclick="saveSysAppearance()" disabled>Save</button>
+          </div>
+          <span class="set-hint" id="sysAppearanceStatus"></span>
+        </div>
         <!-- API access — chaves para integrações externas autenticarem via
              header X-API-Key (ver api_keys em server/schema.sql e o
              middleware de autenticação em server/index.js). A key em texto
@@ -2448,6 +2496,7 @@
 <script src="js/ssl-certificate.js"></script>
 <script src="js/oauth-settings.js"></script>
 <script src="js/logo-settings.js"></script>
+<script src="js/appearance-settings.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/users-admin.js"></script>
 </body>

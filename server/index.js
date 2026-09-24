@@ -186,6 +186,11 @@ const REQUIRE_AUTH_PUBLIC_ROUTES = new Set([
   // -- mesmo motivo de /api/auth/providers acima. Só o GET é público;
   // PUT/DELETE continuam exigindo sessão (requireAdmin), ver mais abaixo.
   'GET /api/system/logo',
+  // Mesmo motivo acima, agora pro tema/cor padrão (Settings -> System,
+  // super_admin-only) -- pedido do usuário: "...e isso reflita na página
+  // de login". Só o GET é público; PUT exige requireSuperAdmin, ver mais
+  // abaixo.
+  'GET /api/system/appearance',
 ]);
 app.use((req, res, next) => {
   if (req.currentUser) return next(); // já autenticado por API key ou sessão (acima)
@@ -2718,6 +2723,79 @@ app.delete('/api/system/logo', requireAdmin, async (req, res) => {
     await pool.query('DELETE FROM system_logo WHERE id = 1');
     await logAudit(getCurrentUsername(req), 'delete', 'system_logo', null, 'Logo', 'Removed custom logo — reverted to the default Toolbox45 logo');
     res.json({ imageData: null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════
+// Tema e cor de destaque PADRÃO (Settings -> System, super_admin-only) —
+// pedido do usuário: "em system inclua a opção para que o super admin
+// possa escolher o tema e cores default, e isso reflita na página de
+// login". Reaproveita o mesmo mecanismo de global-settings do resto do
+// arquivo (readGlobalSetting/writeGlobalSetting, chave própria, tabela
+// user_data via GLOBAL_SETTINGS_USER, definidas mais abaixo — função
+// hoisted, disponível aqui mesmo vindo depois no arquivo).
+//
+// Tema/cor SEMPRE foram preferência PESSOAL, por navegador, via
+// localStorage ('cpa-theme'/'cpa-accent', ver js/theme.js) — isso não
+// muda para o app principal: o valor daqui só entra como SEMENTE inicial
+// pra navegador que nunca tocou no toggle/nos swatches (ver
+// initTheme()/initAccentColor() em js/theme.js, que passam a cair pro
+// cache 'cpa-org-theme'/'cpa-org-accent' quando não existe preferência
+// pessoal salva — esse cache é escrito por js/appearance-settings.js a
+// partir do GET abaixo). Em login.html é diferente: não existe
+// "preferência pessoal" numa tela pré-autenticação, então lá o valor
+// daqui é sempre aplicado, sem exceção (substitui o antigo
+// data-theme="light" fixo — ver comentário em login.html).
+//
+// GET é público pelo mesmo motivo do logo acima (login.html precisa antes
+// de qualquer sessão existir); só o PUT exige requireSuperAdmin — mesmo
+// nível de "Manage users" (rank 2), mais restrito que os outros cadastros
+// de Settings -> System (Logo, SSL Certificate etc., que são
+// requireAdmin/rank 1) porque isso afeta a aparência vista por TODO mundo,
+// inclusive antes do login.
+// ════════════════════════════════════════════════
+const APPEARANCE_THEME_KEY = 'appearanceTheme';
+const APPEARANCE_ACCENT_KEY = 'appearanceAccent';
+const APPEARANCE_THEMES = new Set(['light', 'dark']);
+// Mesmas chaves de ACCENT_PRESETS em js/theme.js — precisa ficar em sincronia
+// manualmente (duplicado de propósito, front/back não compartilham módulo).
+const APPEARANCE_ACCENTS = new Set(['teal', 'pink', 'blue', 'green', 'purple', 'orange', 'red', 'white']);
+
+app.get('/api/system/appearance', async (req, res) => {
+  try {
+    const theme = await readGlobalSetting(APPEARANCE_THEME_KEY, 'light');
+    const accentColor = await readGlobalSetting(APPEARANCE_ACCENT_KEY, 'teal');
+    res.json({ theme, accentColor });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.put('/api/system/appearance', requireSuperAdmin, async (req, res) => {
+  const { theme, accentColor } = req.body || {};
+  if (!APPEARANCE_THEMES.has(theme)) {
+    return res.status(400).json({ error: 'validation_error', message: '"theme" must be "light" or "dark".' });
+  }
+  if (!APPEARANCE_ACCENTS.has(accentColor)) {
+    return res.status(400).json({ error: 'validation_error', message: `"accentColor" must be one of: ${[...APPEARANCE_ACCENTS].join(', ')}.` });
+  }
+  // "white" só tem contraste em cima do tema ESCURO (ver comentário do
+  // preset "white" em ACCENT_PRESETS, js/theme.js) — em cima do claro fica
+  // um destaque branco invisível. Mesma checagem que _resetAccentIfWhite()
+  // já faz no navegador, só que aqui bloqueia de vez essa combinação
+  // inválida de ser salva como padrão global.
+  if (theme === 'light' && accentColor === 'white') {
+    return res.status(400).json({ error: 'validation_error', message: 'The "white" accent only has contrast on the dark theme — pick another color for the light theme default.' });
+  }
+  try {
+    await writeGlobalSetting(APPEARANCE_THEME_KEY, theme);
+    await writeGlobalSetting(APPEARANCE_ACCENT_KEY, accentColor);
+    await logAudit(getCurrentUsername(req), 'update', 'appearance', null, 'Default theme & colors', `Default theme set to "${theme}", default accent color set to "${accentColor}"`);
+    res.json({ theme, accentColor });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });

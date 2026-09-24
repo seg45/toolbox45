@@ -1,16 +1,34 @@
 <!DOCTYPE html>
-<!-- data-theme="light" fixo (pedido do usuário: "a tela de login não deve
-     ter modo escuro") — css/theme.css define o tema ESCURO em :root e o
-     claro em [data-theme="light"] (ver comentário lá), então sem esse
-     atributo a página nasceria escura por padrão antes de qualquer JS
-     rodar. Hardcoded aqui (não via JS) para não ter nenhum flash de tema
-     errado. Ver também o script inline no fim do <body>, que reforça isto
-     DEPOIS de js/theme.js rodar (initTheme() de lá aplicaria o tema salvo
-     do app — inclusive escuro — já que login.html compartilha o mesmo
-     localStorage/origem; a tela de login precisa ficar sempre clara,
-     independente da preferência do resto do app). -->
+<!-- data-theme="light" é só o FALLBACK (pedido do usuário: "em system
+     inclua a opção para que o super admin possa escolher o tema e cores
+     default, e isso reflita na página de login" — superou o pedido
+     anterior "a tela de login não deve ter modo escuro", que tornava isto
+     fixo). O valor de verdade vem de Settings -> System -> "Default theme
+     & colors" (super_admin-only, GET/PUT /api/system/appearance em
+     server/index.js) — o <script> logo abaixo, ainda dentro do <head> e
+     ANTES de qualquer <link> de CSS, aplica esse default a partir de um
+     cache local (localStorage 'cpa-org-theme', escrito por
+     js/appearance-settings.js na visita anterior) pra não ter nenhum
+     flash do valor errado. "light" aqui só vale na primeiríssima visita
+     de um navegador (cache ainda vazio) — corrigido assim que o cache
+     existir. Ver também o <script> inline no fim do <body>, que reforça
+     isto DEPOIS de js/theme.js rodar (initTheme() de lá aplicaria o tema
+     PESSOAL salvo do resto do app — login.html não usa preferência
+     pessoal, só o default do admin, mesmo compartilhando o
+     localStorage/origem). -->
 <html lang="en" data-theme="light">
 <head>
+<script>
+  // Ver comentário acima. Roda antes de qualquer CSS/paint pra evitar o
+  // flash de tema — mesmo padrão do gate de login em index.html (primeiro
+  // <script>, antes até dos <link>).
+  (function () {
+    try {
+      var t = localStorage.getItem('cpa-org-theme');
+      if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* localStorage indisponível — mantém o fallback "light" do HTML */ }
+  })();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Toolbox45 — Log in</title>
@@ -155,24 +173,40 @@
 <script src="js/theme.js"></script>
 <!-- js/theme.js acima é carregado só pela cor de destaque (accent —
      applyAccentColor(), independente de tema, ver js/theme.js) — mas seu
-     initTheme() aplica o tema ESCURO/claro salvo do resto do app (mesmo
-     localStorage), o que reabriria modo escuro aqui. Esta linha reforça
-     data-theme="light" DEPOIS que initTheme() já rodou (scripts executam
-     em ordem), sem precisar tocar em js/theme.js (compartilhado com
-     index.html, onde o modo escuro continua normal). -->
+     initTheme()/initAccentColor() aplicam o tema/cor PESSOAIS salvos do
+     resto do app (mesmo localStorage), e login.html não usa preferência
+     pessoal — só o default do admin (Settings -> System -> "Default
+     theme & colors", super_admin-only, ver comentário no <head>). Este
+     <script> reaplica esse default (a partir do MESMO cache local que o
+     <script> no <head> já leu antes do CSS) por cima do que
+     initTheme()/initAccentColor() acabaram de aplicar a partir da
+     preferência pessoal deste navegador. -->
 <script>
-  document.documentElement.setAttribute('data-theme', 'light');
-  // O preset de accent "white" (branco) só existe/faz sentido no tema
-  // escuro (ver comentário do preset "white" em ACCENT_PRESETS,
-  // js/theme.js) — se o usuário tinha ele salvo (porque o RESTO do app
-  // está em modo escuro), forçar esta página pro claro deixaria o botão
-  // "Log in" branco em cima do card branco (--teal aplicado inline por
-  // applyAccentColor() tem prioridade sobre a variável de tema). Mesma
-  // rede de segurança que toggleModalTheme()/initAccentColor() já usam ao
-  // entrar no tema claro — _resetAccentIfWhite() está definida acima, em
-  // js/theme.js.
-  if (typeof _resetAccentIfWhite === 'function') _resetAccentIfWhite();
+  (function () {
+    var theme = 'light', accent = null;
+    try {
+      theme = localStorage.getItem('cpa-org-theme') || 'light';
+      accent = localStorage.getItem('cpa-org-accent');
+    } catch (e) { /* localStorage indisponível — fica no que js/theme.js já aplicou */ }
+    document.documentElement.setAttribute('data-theme', theme);
+    if (accent && typeof applyAccentColor === 'function') applyAccentColor(accent);
+    // "white" só faz sentido no tema escuro (ver comentário do preset
+    // "white" em ACCENT_PRESETS, js/theme.js) — mesma rede de segurança
+    // de toggleModalTheme()/initAccentColor(); na prática o PUT
+    // /api/system/appearance já recusa salvar essa combinação como
+    // default (ver server/index.js), então isto aqui é só um reforço caso
+    // o cache local esteja desatualizado/inconsistente.
+    if (theme === 'light' && typeof _resetAccentIfWhite === 'function') _resetAccentIfWhite();
+  })();
 </script>
+<!-- js/appearance-settings.js: busca o default real em
+     /api/system/appearance (o cache lido acima pode estar desatualizado
+     ou, na primeiríssima visita deste navegador, nem existir ainda) e
+     corrige o que foi aplicado acima assim que a resposta chegar — mesmo
+     padrão de dupla checagem (cache síncrono + fetch assíncrono) já usado
+     pro logo, ver js/logo-settings.js logo abaixo. Precisa vir DEPOIS de
+     js/theme.js (usa applyAccentColor/_resetAccentIfWhite, definidas lá). -->
+<script src="js/appearance-settings.js"></script>
 <script src="js/login.js"></script>
 <!-- js/logo-settings.js: aplica o logo customizado (Settings -> System ->
      Logo, admin-only, index.html) nesta tela ANTES do login — só a parte

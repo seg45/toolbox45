@@ -22,10 +22,23 @@ function toggleModalTheme() {
   // (branco em cima do fundo branco do tema claro).
   if (next === 'light') _resetAccentIfWhite();
 }
+// Pedido do usuário: "em system inclua a opção para que o super admin
+// possa escolher o tema e cores default" — cache local só de LEITURA aqui
+// (escrito por js/appearance-settings.js depois de confirmar com o
+// servidor, GET /api/system/appearance), usado como semente inicial só
+// quando este navegador ainda não tem NENHUMA preferência pessoal salva
+// ('cpa-theme'/'cpa-accent' abaixo). Uma vez que o usuário mexe no toggle
+// Dark mode/nos swatches de cor, a preferência pessoal passa a existir e
+// este fallback nunca mais é consultado pra ele — o padrão do admin só
+// "empurra" navegadores que nunca escolheram nada, não substitui uma
+// escolha já feita.
+function _cpaOrgDefault(key, fallback) {
+  try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
+}
 (function initTheme() {
-  let saved = 'light';
-  try { saved = localStorage.getItem('cpa-theme') || 'light'; } catch (e) {}
-  applyTheme(saved);
+  let saved = null;
+  try { saved = localStorage.getItem('cpa-theme'); } catch (e) {}
+  applyTheme(saved || _cpaOrgDefault('cpa-org-theme', 'light'));
 })();
 
 // ════════════════════════════════════════════════
@@ -101,8 +114,11 @@ function _resetAccentIfWhite() {
 (function initAccentColor() {
   let saved = null;
   try { saved = localStorage.getItem('cpa-accent'); } catch (e) {}
-  applyAccentColor(saved || DEFAULT_ACCENT);
-  syncAccentColorUI(saved || DEFAULT_ACCENT);
+  // Mesmo fallback de "semente inicial" do initTheme() acima, ver
+  // comentário lá.
+  const resolved = saved || _cpaOrgDefault('cpa-org-accent', DEFAULT_ACCENT);
+  applyAccentColor(resolved);
+  syncAccentColorUI(resolved);
   const theme = document.documentElement.getAttribute('data-theme'); // já setado por initTheme() acima
   if (theme === 'light') _resetAccentIfWhite();
 })();

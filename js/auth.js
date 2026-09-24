@@ -91,7 +91,12 @@ const ADMIN_ONLY_SETTINGS_GROUP_IDS = ['sysGroupDatabase', 'sysGroupSslCertifica
 // usersNavBtn saiu da lista acima e virou super_admin-only — pedido do
 // usuário: "o perfil de Admin só não pode gerenciar usuários" (um Admin
 // comum não vê nem a aba Users existir).
-const SUPER_ADMIN_ONLY_SETTINGS_GROUP_IDS = ['usersNavBtn'];
+// sysGroupAppearance (Settings -> System -> "Default theme & colors")
+// entrou aqui também — pedido do usuário: "em system inclua a opção
+// para que o super admin possa escolher o tema e cores default" —
+// visto por TODO mundo, inclusive antes do login, então mais
+// restrito que o resto de Settings -> System (admin-rank comum).
+const SUPER_ADMIN_ONLY_SETTINGS_GROUP_IDS = ['usersNavBtn', 'sysGroupAppearance'];
 function applyAdminGating() {
   ADMIN_ONLY_SETTINGS_GROUP_IDS.forEach(id => {
     const el = document.getElementById(id);
