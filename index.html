@@ -52,6 +52,28 @@
          não mais uma caixa quadrada fixa (ver .hdr-logo-img). -->
     <img class="hdr-logo-img for-dark" src="img/logo-toolbox45-white.png?v=2" alt="Toolbox45">
     <img class="hdr-logo-img for-light" src="img/logo-toolbox45.png?v=2" alt="Toolbox45">
+    <script>
+      // Pedido do usuário: "ao ficar atualizando a tela a imagem default
+      // fica aparecendo rapidamente antes de exibir a imagem atual" — o(s)
+      // <img> acima nascem com o src PADRÃO (funciona sem JS/enquanto
+      // carrega), e só trocam pro logo customizado depois que o fetch em
+      // /api/system/logo responder (js/logo-settings.js, carregado lá
+      // embaixo) — nesse intervalo o default pisca. Mesmo padrão de
+      // 'cpa-theme'/initTheme() (js/theme.js): aplica um cache local
+      // SINCRONAMENTE aqui, antes de qualquer fetch. Chave igual a
+      // LOGO_CACHE_KEY em js/logo-settings.js (esse arquivo ainda não foi
+      // carregado nesse ponto do parse, por isso o literal duplicado).
+      (function () {
+        try {
+          var cached = localStorage.getItem('cpa-logo-cache');
+          if (cached) {
+            document.querySelectorAll('.hdr-logo-img, .login-logo-img').forEach(function (img) {
+              img.src = cached;
+            });
+          }
+        } catch (e) { /* localStorage indisponível — mantém o default do HTML */ }
+      })();
+    </script>
   </div>
   <div class="hdr-gap"></div>
   <!-- Menu de conta — clicar no usuário identificado abre um dropdown com o

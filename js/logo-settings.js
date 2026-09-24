@@ -24,10 +24,29 @@
 // tela de login, que sempre usa a versão "clara") — usados tanto pra
 // aplicar o padrão quando não há logo customizado quanto pro Reset.
 const LOGO_DEFAULT_SRC = {
-  headerDark: 'img/logo-toolbox45-white.png?v=1',
-  headerLight: 'img/logo-toolbox45.png?v=1',
-  login: 'img/logo-toolbox45.png?v=1',
+  headerDark: 'img/logo-toolbox45-white.png?v=2',
+  headerLight: 'img/logo-toolbox45.png?v=2',
+  login: 'img/logo-toolbox45.png?v=2',
 };
+
+// Pedido do usuário: "ao ficar atualizando a tela a imagem default fica
+// aparecendo rapidamente antes de exibir a imagem atual" — o <img> já
+// nasce no HTML com o src PADRÃO (pra funcionar sem JS/enquanto carrega),
+// e _logoBoot() abaixo só troca pro logo customizado DEPOIS que o fetch em
+// /api/system/logo responder — nesse intervalo o default pisca na tela.
+// Corrigido com o mesmo padrão já usado em 'cpa-theme'/initTheme()
+// (js/theme.js): um <script> inline logo depois do(s) <img> em
+// index.html/login.html aplica esse cache SINCRONAMENTE, antes de
+// qualquer fetch, e _logoBoot()/saveLogoSettings()/deleteLogoSettings()
+// abaixo mantêm o cache atualizado pra próxima visita. Mesma chave lida
+// por aquele script inline — se mudar aqui, tem que mudar lá também.
+const LOGO_CACHE_KEY = 'cpa-logo-cache';
+function _logoWriteCache(dataUrl) {
+  try {
+    if (dataUrl) localStorage.setItem(LOGO_CACHE_KEY, dataUrl);
+    else localStorage.removeItem(LOGO_CACHE_KEY);
+  } catch (e) { /* localStorage indisponível — sem cache, sem problema, só volta a piscar */ }
+}
 
 // Aplica um logo (customizado, data URL, ou null pra voltar ao padrão) em
 // TODOS os <img> de logo presentes na página atual — index.html tem
@@ -55,6 +74,7 @@ async function _logoBoot() {
     const data = await res.json();
     _logoCurrentDataUrl = (data && typeof data.imageData === 'string') ? data.imageData : null;
     _logoApplyToDom(_logoCurrentDataUrl);
+    _logoWriteCache(_logoCurrentDataUrl);
   } catch (e) {
     console.warn('Não foi possível carregar o logo customizado — usando o padrão', e);
   }
@@ -196,6 +216,7 @@ async function saveLogoSettings() {
     if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
     _logoCurrentDataUrl = data.imageData;
     _logoApplyToDom(_logoCurrentDataUrl); // já aparece no header desta sessão, sem precisar recarregar
+    _logoWriteCache(_logoCurrentDataUrl);
     _logoPendingDataUrl = null;
     const pendingPreview = document.getElementById('logoPendingPreview');
     if (pendingPreview) { pendingPreview.style.display = 'none'; pendingPreview.src = ''; }
@@ -221,6 +242,7 @@ function deleteLogoSettings() {
       if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
       _logoCurrentDataUrl = null;
       _logoApplyToDom(null);
+      _logoWriteCache(null);
       await loadLogoStatus();
       const status = document.getElementById('logoSaveStatus');
       if (status) status.textContent = 'Reverted to the default logo.';
