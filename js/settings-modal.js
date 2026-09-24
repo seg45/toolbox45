@@ -142,7 +142,6 @@ function saveSettingsModal() {
   updateEnvDDLabel();
   updateTypeDDLabel();
   if (typeof ccRefreshCascade === 'function') ccRefreshCascade();
-  gvSet('f-log', GLOBAL_EXPORT_LOG_FILE);
   VIEW_FOLDERS_HOME = s.home === 'folders';
   // Bug reportado: "configurei para pagina inicial ser a folders, mas
   // quando usuario loga esta indo para pagina de comandos". Causa:

@@ -67,15 +67,24 @@ function resolveTokensMarked(str, values) {
 // shape: {p, c} for a command line, {type, c} for an annotation line.
 //
 // Redirecionamento generico "Exportar para arquivo": linhas com um
-// export_template escolhido (catalogo Exports, ver server/schema.sql --
-// antes um simples flag supports_export=1, agora o TEXTO do template em
-// si, ex.: '> {{logFile}}' ou '-w {{logFile}}') tem esse template resolvido
-// e anexado automaticamente quando o toggle da sidebar (FL.log) esta
-// ligado -- sem precisar de um resolver dedicado nem de tokens manuais no
-// texto do comando. Os 4 comandos com placeholder_resolver que ja
-// gerenciam seu proprio redirecionamento (fw monitor, tcpdump, zdebug, fw
-// log/logexport) nao passam por aqui com export_template preenchido, entao
-// nao ha conflito/duplicacao.
+// export_template escolhido (catalogo Register -> Manage Exports, ver
+// server/schema.sql -- antes um simples flag supports_export=1, agora o
+// TEXTO do template em si, ex.: '> {{logFile}}' ou '-w {{logFile}}') tem
+// esse template resolvido e anexado automaticamente quando o toggle da
+// sidebar (FL.log) esta ligado -- sem precisar de um resolver dedicado nem
+// de tokens manuais no texto do comando.
+//
+// Os comandos com placeholder_resolver (fw monitor, tcpdump, zdebug, fw
+// log, fwm logexport) montam suas proprias linhas em JS em vez de passar
+// pela funcao acima, entao nao ha conflito/duplicacao -- mas zdebug e fw
+// log (RESOLVERS.zdebug/RESOLVERS.fwlog abaixo) leem o export_template da
+// linha 'cmd' do proprio row DIRETO (mesmo cadastro do Register), pra nao
+// ficar com um caminho fixo hardcoded. fwm logexport (RESOLVERS.logexport)
+// e fw fetchlogs (RESOLVERS.fetchlogs) ficam de fora dessa troca: logexport
+// já usa um mecanismo proprio de substituicao inline (troca um trecho fixo
+// do comando, '-o /tmp/fw_export.txt', por values.logFile) que nao mapeia
+// bem pra um export_template tipo '> {{logFile}}'/'-w {{logFile}}'; e
+// fetchlogs nunca usou logFile/FL.log pra comecar.
 function dbLineToTerm(line, values) {
   if (line.line_type === 'cmd') {
     let content = resolveTokensMarked(line.content, values);
@@ -166,12 +175,21 @@ RESOLVERS.tcpdump = function (row, values) {
 };
 
 RESOLVERS.zdebug = function (row, values) {
-  const { src_ip: src, dst_ip: dst, FL, logFile } = values;
+  const { src_ip: src, dst_ip: dst, FL } = values;
   const srcP = parseAddr(src), dstP = parseAddr(dst);
   const orRegex = combinedAddrRegex([srcP, dstP]);
   const orRegexStr = orRegex.regex || `${src}|${dst}`;
   const orRegexNotes = orRegex.rangeTooLarge ? [RANGE_TOO_LARGE_NOTE] : [];
-  const zdCmd = `fw ctl zdebug + drop | grep -E "${markVar(orRegexStr)}"${FL.log ? ' > ' + markVar(logFile) : ''}`;
+  // Redirecionamento vem do export_template cadastrado em Register -> Manage
+  // Exports (mesmo cadastro que os demais comandos usam via dbLineToTerm),
+  // nao mais de um caminho fixo/global -- pedido do usuario: "utilize no
+  // comandos o export somente do que esta em register" + "Também ligar os 4
+  // comandos avançados ao Register".
+  const cmdLine = (row.lines.default || []).find(l => l.line_type === 'cmd');
+  const exportSuffix = (FL.log && cmdLine && cmdLine.export_template)
+    ? ` ${resolveTokensMarked(cmdLine.export_template, values)}`
+    : '';
+  const zdCmd = `fw ctl zdebug + drop | grep -E "${markVar(orRegexStr)}"${exportSuffix}`;
   const warnLine = (row.lines.default || []).find(l => l.line_type === 'warn');
   const lines = [
     { p: '[Expert@FW]#', c: zdCmd },
@@ -183,12 +201,18 @@ RESOLVERS.zdebug = function (row, values) {
 };
 
 RESOLVERS.fwlog = function (row, values) {
-  const { src_ip: src, dst_ip: dst, FL, logFile } = values;
+  const { src_ip: src, dst_ip: dst, FL } = values;
   const srcP = parseAddr(src), dstP = parseAddr(dst);
   const orRegex = combinedAddrRegex([srcP, dstP]);
   const orRegexStr = orRegex.regex || `${src}|${dst}`;
   const orRegexNotes = orRegex.rangeTooLarge ? [RANGE_TOO_LARGE_NOTE] : [];
-  const logRedir = FL.log ? ` > ${markVar(logFile)}` : '';
+  // Mesmo redirecionamento cadastrado em Register -> Manage Exports (ver
+  // comentario em RESOLVERS.zdebug acima) -- os dois comandos abaixo
+  // (fwlogCmd/fwlogCmdDrop) compartilham o mesmo export_template.
+  const cmdLine = (row.lines.default || []).find(l => l.line_type === 'cmd');
+  const logRedir = (FL.log && cmdLine && cmdLine.export_template)
+    ? ` ${resolveTokensMarked(cmdLine.export_template, values)}`
+    : '';
   const fwlogUsesFallback = srcP.isMulti || dstP.isMulti;
   const fwlogCmd = fwlogUsesFallback
     ? `fw log -n | grep -E "${markVar(orRegexStr)}"${logRedir}`

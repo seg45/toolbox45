@@ -776,11 +776,12 @@
              REMOVIDO — pedido do usuário: "onde está esse registro de
              export? no cadastro está como {{logFile}}" seguido de "deixe
              como os demais registros em banco, e cadastre esse para
-             refletir nos comandos", com "Um valor único, global" confirmado
-             como o escopo. O caminho do arquivo de export não é mais uma
-             preferência por usuário — agora é um único valor cadastrado
-             pelo admin em Settings -> System (ver #sysGroupExportLogFile
-             mais abaixo e GLOBAL_EXPORT_LOG_FILE em js/settings.js). -->
+             refletir nos comandos". O valor global cadastrado pelo admin
+             que substituiu esse campo (Settings -> System -> Export log
+             file) foi por sua vez REMOVIDO também — pedido do usuário:
+             "remova essa opção daqui e utilize no comandos o export
+             somente do que está em register." {{logFile}} volta a
+             resolver só pelo padrão fixo de #f-log (ver js/render.js). -->
         <div class="sb-toggle" id="mExportToggle" onclick="toggleModalExport()">
           <div class="tog-track"><div class="tog-knob"></div></div><span>Export</span>
         </div>
@@ -926,32 +927,14 @@
             </div>
           </div>
         </div>
-        <!-- Export log file — caminho usado no lugar de {{logFile}} nos
-             templates da tela System -> Manage Exports (comandos
-             tcpdump/fw monitor/zdebug com redirecionamento ">"). Pedido do
-             usuário: "onde está esse registro de export? no cadastro está
-             como {{logFile}}" seguido de "deixe como os demais registros em
-             banco, e cadastre esse para refletir nos comandos", com "Um
-             valor único, global" confirmado como o escopo — antes era uma
-             preferência POR USUÁRIO (Settings -> User preferences -> Export
-             to / #mLogFile, removido). Agora é um único valor cadastrado
-             aqui pelo admin e usado por TODOS os usuários (GET/PUT
-             /api/system/export-log-file em server/index.js, guardado via
-             readGlobalSetting/writeGlobalSetting como os demais valores
-             globais). Texto livre, sem validação de extensão/formato — pode
-             conter substituições de shell como $(hostname), resolvidas pelo
-             próprio gateway Check Point ao rodar o comando exportado (não
-             pelo app). Ver js/settings.js (GLOBAL_EXPORT_LOG_FILE) e
-             js/system-settings.js (load/save deste campo). -->
-        <div class="set-group" id="sysGroupExportLogFile" style="display:none;">
-          <span class="set-label">Export log file</span>
-          <span class="set-hint">Path used wherever the Exports catalog shows {{logFile}} (tcpdump / fw monitor / zdebug redirection). Applies to every user.</span>
-          <div class="settings-action-row" style="gap:8px;">
-            <input class="set-input" id="sysExportLogFileInput" placeholder="/tmp/$(hostname).txt" style="flex:1 1 auto;">
-            <button type="button" class="btn btn-primary" id="sysExportLogFileSaveBtn" onclick="saveSystemExportLogFile()">Save</button>
-          </div>
-          <span class="set-hint" id="sysExportLogFileStatus"></span>
-        </div>
+        <!-- Export log file (Settings -> System) foi REMOVIDO — pedido do
+             usuário: "remova essa opção daqui e utilize no comandos o
+             export somente do que está em register." {{logFile}} nos
+             templates de Register -> Manage Exports volta a resolver só
+             pelo padrão fixo de #f-log (ver js/render.js); os comandos
+             avançados zdebug/fw log passaram a usar o export_template
+             cadastrado em cada linha (ver RESOLVERS em
+             js/db-render-engine.js), igual aos demais comandos. -->
         <!-- Logo — pedido do usuário: "em system inclua uma opção para
              troca de logo. o logo trocado será da página de login e da
              página principal. a opção Developed by SEG45 não pode ser
@@ -2442,7 +2425,6 @@
 <script src="js/sharing.js"></script>
 <script src="js/ssl-certificate.js"></script>
 <script src="js/oauth-settings.js"></script>
-<script src="js/system-settings.js"></script>
 <script src="js/logo-settings.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/users-admin.js"></script>
