@@ -28,3 +28,11 @@ server/backup/
 Thumbs.db
 .vscode/
 .idea/
+
+# Backend Python (server-py/) -- Fase 1 da migracao (Project toolbox45).
+# Ambiente virtual e cache de bytecode nunca sao versionados (mesmo
+# racional do node_modules/ acima, so que pro lado Python).
+server-py/.venv/
+server-py/venv/
+__pycache__/
+*.pyc
