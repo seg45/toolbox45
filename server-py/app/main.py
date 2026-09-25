@@ -9,9 +9,15 @@ server/index.js linha 63).
 Fatia 2 (auth local): POST /api/auth/login, POST /api/auth/logout, POST
 /api/auth/register, GET /api/auth/providers (ver app/routers/auth.py) --
 compatibilidade de hash de senha (scrypt) com os usuarios locais ja
-cadastrados validada nesta maquina (ver app/security.py) antes de subir.
+cadastrados validada em producao (ver app/security.py).
 
-As demais ~89 rotas do server/index.js ainda nao existem aqui -- ver
+Fatia 3 (OAuth Google/Microsoft): GET /api/auth/google[/callback], GET
+/api/auth/microsoft[/callback] (ver app/routers/oauth.py) -- reaproveita a
+MESMA tabela sessions/cookie tb45_session da fatia 2. Config efetiva
+(banco > variavel de ambiente, ver app/oauth.py) recarregada uma vez no
+boot, logo depois de init_db().
+
+As demais ~85 rotas do server/index.js ainda nao existem aqui -- ver
 roadmap no plano de migracao (Project toolbox45).
 """
 import logging
@@ -22,8 +28,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from . import db
+from . import db, oauth
 from .routers import auth as auth_router
+from .routers import oauth as oauth_router
 
 logging.basicConfig(level=logging.INFO)
 
@@ -35,11 +42,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ver server/index.js) -- importante porque o healthcheck do
     # docker-compose depende disso pra saber quando o servico esta pronto.
     await db.init_db()
+    # Carrega a config efetiva de OAuth (banco > ambiente -- ver
+    # app/oauth.py) DEPOIS do pool existir, mesma ordem do
+    # reloadOAuthConfig() no startup IIFE do Node.
+    await oauth.reload_oauth_config()
     yield
     await db.close_db()
 
 
-app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase2", lifespan=lifespan)
+app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase3", lifespan=lifespan)
 
 
 # ════════════════════════════════════════════════
@@ -74,6 +85,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 app.include_router(auth_router.router)
+app.include_router(oauth_router.router)
 
 
 @app.get("/api/health")

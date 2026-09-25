@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
-from ..config import settings
+from .. import oauth
 from ..db import get_pool
 from ..handles import generate_unique_handle
 from ..security import hash_password, verify_password
@@ -50,7 +50,10 @@ class RegisterRequest(BaseModel):
 
 @router.get("/providers")
 async def get_providers() -> dict:
-    return {"google": settings.google_enabled, "microsoft": settings.microsoft_enabled}
+    # Le a config JA com a prioridade banco > ambiente (ver app/oauth.py) --
+    # mesmo GOOGLE_ENABLED/MICROSOFT_ENABLED que o Node calcula depois de
+    # reloadOAuthConfig().
+    return {"google": oauth.google_config.enabled, "microsoft": oauth.microsoft_config.enabled}
 
 
 @router.post("/login")
