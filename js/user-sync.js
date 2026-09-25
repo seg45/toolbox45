@@ -91,11 +91,37 @@ function renderCurrentUserUI(label) {
 // populado (ou definitivamente vazio, se o fetch falhar — reloadFoldersFromServer
 // trata esse erro internamente) antes do render() final rodar.
 async function reapplyAfterUserSync() {
+  // BUG relatado pelo usuário: "ao trocar o tema default em systems
+  // somente a tela de login está sendo alterada para os usuários que não
+  // definiram o tema". Causa raiz: esta função reaplicava o tema com
+  // `localStorage.getItem('cpa-theme') || 'light'` — fallback FIXO em
+  // 'light', diferente do fallback pro default do admin já usado em
+  // initTheme() (js/theme.js, `_cpaOrgDefault('cpa-org-theme', 'light')`)
+  // e em _appearanceBoot() (js/appearance-settings.js). Pior: applyTheme()
+  // sempre PERSISTE em 'cpa-theme' (é o que a torna útil pro toggle Dark
+  // mode de verdade) — então, todo carregamento da página, um usuário SEM
+  // preferência pessoal tinha 'cpa-theme'='light' gravado aqui como se
+  // fosse uma escolha pessoal de verdade, vindo do 'light' fixo acima. A
+  // partir daí ele passava a "ter" preferência pessoal (mesmo nunca tendo
+  // tocado no toggle), e tanto _cpaOrgDefault() (initTheme) quanto o novo
+  // fallback ao vivo de _appearanceBoot() passavam a ignorá-lo pra sempre
+  // — só a tela de login (que nunca olha preferência pessoal) continuava
+  // acompanhando trocas do default do admin.
+  //
+  // Fix: só reaplica/persiste tema aqui quando existe preferência PESSOAL
+  // de verdade — já estava salva neste navegador, ou acabou de chegar do
+  // servidor agora mesmo (Object.keys(data).forEach acima, ex.: usuário
+  // abrindo num navegador novo mas que já tinha escolhido tema em outro).
+  // Sem preferência pessoal, não faz nada aqui — o tema já foi aplicado
+  // corretamente por initTheme()/_appearanceBoot() a partir do default do
+  // admin, e essa é a fonte que deve continuar valendo.
   if (typeof applyTheme === 'function') {
-    let theme = 'light';
-    try { theme = localStorage.getItem('cpa-theme') || 'light'; } catch (e) {}
-    applyTheme(theme);
-    if (typeof syncThemeToggleUI === 'function') syncThemeToggleUI(theme);
+    let personalTheme = null;
+    try { personalTheme = localStorage.getItem('cpa-theme'); } catch (e) {}
+    if (personalTheme) {
+      applyTheme(personalTheme);
+      if (typeof syncThemeToggleUI === 'function') syncThemeToggleUI(personalTheme);
+    }
   }
   if (typeof applyDefaultsFromSettings === 'function') applyDefaultsFromSettings();
   if (typeof reloadFoldersFromServer === 'function') await reloadFoldersFromServer();
