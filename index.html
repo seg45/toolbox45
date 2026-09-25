@@ -60,15 +60,26 @@
       // /api/system/logo responder (js/logo-settings.js, carregado lá
       // embaixo) — nesse intervalo o default pisca. Mesmo padrão de
       // 'cpa-theme'/initTheme() (js/theme.js): aplica um cache local
-      // SINCRONAMENTE aqui, antes de qualquer fetch. Chave igual a
+      // SINCRONAMENTE aqui, antes de qualquer fetch. Chaves iguais a
       // LOGO_CACHE_KEY em js/logo-settings.js (esse arquivo ainda não foi
-      // carregado nesse ponto do parse, por isso o literal duplicado).
+      // carregado nesse ponto do parse, por isso os literais duplicados).
+      // Pedido do usuário: "incluir opção para logo em dark e light mode"
+      // — duas chaves agora (antes era uma só aplicada em TODOS os <img>);
+      // cada uma só no(s) elemento(s) certo(s) — a clara também vale pro
+      // .login-logo-img (login.html tem o mesmo script, variante só clara,
+      // já que a tela de login é sempre clara).
       (function () {
         try {
-          var cached = localStorage.getItem('cpa-logo-cache');
-          if (cached) {
-            document.querySelectorAll('.hdr-logo-img, .login-logo-img').forEach(function (img) {
-              img.src = cached;
+          var light = localStorage.getItem('cpa-logo-cache-light');
+          var dark = localStorage.getItem('cpa-logo-cache-dark');
+          if (light) {
+            document.querySelectorAll('.hdr-logo-img.for-light, .login-logo-img').forEach(function (img) {
+              img.src = light;
+            });
+          }
+          if (dark) {
+            document.querySelectorAll('.hdr-logo-img.for-dark').forEach(function (img) {
+              img.src = dark;
             });
           }
         } catch (e) { /* localStorage indisponível — mantém o default do HTML */ }
@@ -1409,42 +1420,61 @@
       <button class="modal-close" onclick="closeLogoSettingsModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div class="set-group">
-        <span class="set-label">Current logo</span>
-        <span class="set-hint">Used on the login page and in the app header (both light and dark theme). The "Developed by SEG45" footer note is separate and never changes.</span>
-        <div class="audit-log-wrap" id="logoCurrentWrap" style="padding:10px 12px;display:flex;align-items:center;gap:12px;">
-          <img id="logoCurrentPreview" alt="Current logo" style="width:48px;height:48px;object-fit:contain;">
-          <div id="logoCurrentInfo" style="font-size:12.5px;line-height:1.6;color:var(--muted);">Loading…</div>
-        </div>
-      </div>
+      <!-- Pedido do usuário: "o tamanho recomendado ao importar um novo
+           defina como 1600x400" — recomendação de PROPORÇÃO/tamanho ideal
+           (banner bem mais largo que alto, igual ao logo padrão atual),
+           separada do limite de resolução MÁXIMA aceita (LOGO_MAX_DIMENSION
+           = 4096px em server/index.js, que só existe pra recusar upload
+           gigante por engano — ver comentário lá). Hint compartilhado pelas
+           duas variantes abaixo (mesmas regras pras duas), em vez de
+           repetir o mesmo texto duas vezes. -->
+      <span class="set-hint">PNG, JPEG or WEBP, up to 2MB and 4096×4096px — recommended size 1600×400px (wide banner, same shape as the current default). The default logo now includes the "Toolbox45" name baked into the image — include your own text if you want a name shown next to the icon. Transparent background works best.</span>
 
+      <!-- Pedido do usuário: "incluir opção para logo em dark e light
+           mode" — duas variantes INDEPENDENTES (cada uma com seu próprio
+           Save/Reset), em vez de uma imagem única aplicada nos dois temas
+           como antes. Mesmo id base com sufixo Light/Dark, resolvido em JS
+           por _logoEl()/_logoSuffix() (js/logo-settings.js) pra não
+           duplicar cada função. -->
       <div class="set-group">
-        <span class="set-label">Replace logo</span>
-        <!-- Pedido do usuário: "o tamanho recomendado ao importar um novo
-             defina como 1600x400" — recomendação de PROPORÇÃO/tamanho
-             ideal (banner bem mais largo que alto, igual ao logo padrão
-             atual), separada do limite de resolução MÁXIMA aceita
-             (LOGO_MAX_DIMENSION = 4096px em server/index.js, que só existe
-             pra recusar upload gigante por engano — ver comentário lá). -->
-        <span class="set-hint">PNG, JPEG or WEBP, up to 2MB and 4096×4096px — recommended size 1600×400px (wide banner, same shape as the current default). The default logo now includes the "Toolbox45" name baked into the image — include your own text if you want a name shown next to the icon. Transparent background works best.</span>
+        <span class="set-label">Light theme logo</span>
+        <span class="set-hint">Used in the app header when light theme is active, and on the login page (always shown in light theme).</span>
+        <div class="audit-log-wrap" id="logoCurrentWrapLight" style="padding:10px 12px;display:flex;align-items:center;gap:12px;">
+          <img id="logoCurrentPreviewLight" alt="Current light theme logo" style="width:48px;height:48px;object-fit:contain;">
+          <div id="logoCurrentInfoLight" style="font-size:12.5px;line-height:1.6;color:var(--muted);">Loading…</div>
+        </div>
         <div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
-          <img id="logoPendingPreview" alt="" style="width:48px;height:48px;object-fit:contain;border-radius:6px;background:var(--surf3,rgba(128,128,128,.15));display:none;">
+          <img id="logoPendingPreviewLight" alt="" style="width:48px;height:48px;object-fit:contain;border-radius:6px;background:var(--surf3,rgba(128,128,128,.15));display:none;">
           <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
             📤 Choose image
-            <input type="file" id="logoFileInput" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="_logoHandleFileInput(this)">
+            <input type="file" id="logoFileInputLight" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="_logoHandleFileInput(this, 'light')">
           </label>
         </div>
         <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
-          <button type="button" class="btn btn-primary" id="logoSaveBtn" onclick="saveLogoSettings()" disabled>Save logo</button>
-          <span class="set-hint" id="logoSaveStatus"></span>
+          <button type="button" class="btn btn-primary" id="logoSaveBtnLight" onclick="saveLogoSettings('light')" disabled>Save</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="logoResetBtnLight" style="color:var(--danger,#e5484d);display:none;" onclick="deleteLogoSettings('light')">🗑️ Reset</button>
+          <span class="set-hint" id="logoSaveStatusLight"></span>
         </div>
       </div>
 
       <div class="set-group">
-        <span class="set-label">Danger zone</span>
-        <span class="set-hint">Removes the custom logo and reverts to the default Toolbox45 logo everywhere.</span>
-        <div>
-          <button type="button" class="btn btn-ghost" id="logoResetBtn" style="color:var(--danger,#e5484d);" onclick="deleteLogoSettings()">🗑️ Reset to default logo</button>
+        <span class="set-label">Dark theme logo</span>
+        <span class="set-hint">Used in the app header when dark theme is active. Falls back to the default white Toolbox45 mark if not set — the login page never uses this (it's always light theme).</span>
+        <div class="audit-log-wrap" id="logoCurrentWrapDark" style="padding:10px 12px;display:flex;align-items:center;gap:12px;">
+          <img id="logoCurrentPreviewDark" alt="Current dark theme logo" style="width:48px;height:48px;object-fit:contain;">
+          <div id="logoCurrentInfoDark" style="font-size:12.5px;line-height:1.6;color:var(--muted);">Loading…</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
+          <img id="logoPendingPreviewDark" alt="" style="width:48px;height:48px;object-fit:contain;border-radius:6px;background:var(--surf3,rgba(128,128,128,.15));display:none;">
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;">
+            📤 Choose image
+            <input type="file" id="logoFileInputDark" accept="image/png,image/jpeg,image/webp" style="display:none;" onchange="_logoHandleFileInput(this, 'dark')">
+          </label>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+          <button type="button" class="btn btn-primary" id="logoSaveBtnDark" onclick="saveLogoSettings('dark')" disabled>Save</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="logoResetBtnDark" style="color:var(--danger,#e5484d);display:none;" onclick="deleteLogoSettings('dark')">🗑️ Reset</button>
+          <span class="set-hint" id="logoSaveStatusDark"></span>
         </div>
       </div>
     </div>

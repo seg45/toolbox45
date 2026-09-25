@@ -284,6 +284,20 @@ async function runMigrations() {
     // idêntico ao de antes desta coluna existir).
     await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES folders(id) ON DELETE CASCADE`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id)`);
+    // system_logo: variante do tema escuro (pedido do usuário: "incluir
+    // opção para logo em dark e light mode" — ver comentário completo em
+    // schema.sql). image_data/mime_type existentes (variante clara) também
+    // perdem o NOT NULL aqui, porque a partir de agora uma linha pode
+    // existir com só a variante escura preenchida (ex.: DELETE só da clara
+    // deixando a escura intacta, ver DELETE /api/system/logo em
+    // server/index.js).
+    await pool.query(`ALTER TABLE system_logo ADD COLUMN IF NOT EXISTS image_data_dark TEXT`);
+    await pool.query(`ALTER TABLE system_logo ADD COLUMN IF NOT EXISTS mime_type_dark TEXT`);
+    await pool.query(`ALTER TABLE system_logo ADD COLUMN IF NOT EXISTS updated_at_dark TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE system_logo ADD COLUMN IF NOT EXISTS updated_by_dark TEXT`);
+    await pool.query(`ALTER TABLE system_logo ALTER COLUMN image_data DROP NOT NULL`);
+    await pool.query(`ALTER TABLE system_logo ALTER COLUMN mime_type DROP NOT NULL`);
+    await pool.query(`ALTER TABLE system_logo ALTER COLUMN updated_at DROP NOT NULL`);
     // audit_log: generalizado de "só comandos" (command_id/command_name)
     // para qualquer entidade organizacional (pastas, notas, catálogos,
     // usuários, API keys — ver comentário em schema.sql e logAudit() em

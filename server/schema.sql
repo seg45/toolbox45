@@ -494,12 +494,29 @@ CREATE TABLE IF NOT EXISTS oauth_settings (
 -- acima. O rodapé "Developed by SEG45" (texto, sem logo) NÃO é afetado por
 -- esta tabela.
 -- ════════════════════════════════════════════════
+-- Pedido do usuário: "incluir opção para logo em dark e light mode" —
+-- image_data/mime_type/updated_at/updated_by (colunas originais, sem
+-- sufixo) agora guardam a variante do tema CLARO (aplicada no header claro
+-- E na tela de login, que é sempre clara); image_data_dark/mime_type_dark/
+-- updated_at_dark/updated_by_dark (novas, via ALTER TABLE em
+-- runMigrations(), server/db.js — instalação já existente não recria a
+-- tabela) guardam a variante do tema ESCURO, só usada no header em modo
+-- escuro. As duas são INDEPENDENTES: definir uma não apaga nem exige a
+-- outra — sem a variante escura definida, o header em dark mode cai no
+-- default estático (img/logo-toolbox45-white.png), igual a antes desta
+-- feature existir. image_data/mime_type deixaram de ser NOT NULL (também
+-- via migração) porque agora uma linha pode existir só com a variante
+-- escura preenchida.
 CREATE TABLE IF NOT EXISTS system_logo (
-  id         INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-  image_data TEXT NOT NULL,
-  mime_type  TEXT NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_by TEXT
+  id              INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  image_data      TEXT,
+  mime_type       TEXT,
+  image_data_dark TEXT,
+  mime_type_dark  TEXT,
+  updated_at      TIMESTAMPTZ,
+  updated_by      TEXT,
+  updated_at_dark TIMESTAMPTZ,
+  updated_by_dark TEXT
 );
 
 -- ════════════════════════════════════════════════

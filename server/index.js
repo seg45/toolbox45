@@ -2637,11 +2637,18 @@ app.put('/api/global-settings', async (req, res) => {
 // ════════════════════════════════════════════════
 // Logo customizável (Settings → System → Logo, admin-only) — pedido do
 // usuário: "em system inclua uma opção para troca de logo. o logo trocado
-// será da página de login e da página principal". Uma única imagem
-// (system_logo, linha única, ver schema.sql) substitui as duas imagens
-// padrão do cabeçalho (claro/escuro) E a da tela de login ao mesmo tempo —
-// ver js/logo-settings.js (aplica no <img> de cada página). image_data
-// guarda a data URL completa (data:image/...;base64,...), mesmo formato de
+// será da página de login e da página principal" e, depois, "incluir
+// opção para logo em dark e light mode". system_logo (linha única, ver
+// schema.sql) guarda DUAS variantes independentes: a CLARA (colunas sem
+// sufixo — image_data/mime_type/updated_at/updated_by) é usada no header
+// em tema claro E na tela de login (que é sempre clara); a ESCURA
+// (colunas com sufixo _dark) só é usada no header em tema escuro — sem
+// ela definida, o header em dark mode cai no default estático
+// (img/logo-toolbox45-white.png), igual a antes desta segunda feature
+// existir. Cada variante tem seu próprio Save/Reset independente — ver
+// js/logo-settings.js (aplica os <img> certos em cada página) e o modal
+// #logoSettingsOverlay em index.html. image_data(_dark) guarda a data URL
+// completa (data:image/...;base64,...), mesmo formato de
 // command_lines.image_data — sem endpoint de upload multipart separado.
 // GET é PÚBLICO (sem requireAdmin) porque login.html precisa dele ANTES de
 // qualquer autenticação, pra mostrar o logo customizado já na tela de
@@ -2652,19 +2659,30 @@ const LOGO_ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const LOGO_MAX_BYTES = 2 * 1024 * 1024; // 2MB decodificado
 // Pedido do usuário: "inclua dimensões e tamanho máximo da imagem" — limite
 // de RESOLUÇÃO (px), separado do limite de tamanho de arquivo acima. O logo
-// é sempre exibido pequeno (32-42px de altura, ver .hdr-logo-img/
+// é sempre exibido pequeno (32-52px de altura, ver .hdr-logo-img/
 // .login-logo-img em css/layout.css/css/login.css), então 4096px de
 // qualquer lado já é bem mais que suficiente pra qualquer densidade de tela
 // — o limite existe só pra recusar upload de imagem gigante/desproporcional
 // por engano, não pra forçar um tamanho "ideal".
 const LOGO_MAX_DIMENSION = 4096;
+const LOGO_THEMES = new Set(['light', 'dark']);
 
 app.get('/api/system/logo', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT image_data, mime_type, updated_at, updated_by FROM system_logo WHERE id = 1');
-    if (!rows.length) return res.json({ imageData: null, mimeType: null, updatedAt: null, updatedBy: null });
+    const { rows } = await pool.query(
+      'SELECT image_data, mime_type, updated_at, updated_by, image_data_dark, mime_type_dark, updated_at_dark, updated_by_dark FROM system_logo WHERE id = 1'
+    );
+    if (!rows.length) {
+      return res.json({
+        imageData: null, mimeType: null, updatedAt: null, updatedBy: null,
+        imageDataDark: null, mimeTypeDark: null, updatedAtDark: null, updatedByDark: null,
+      });
+    }
     const row = rows[0];
-    res.json({ imageData: row.image_data, mimeType: row.mime_type, updatedAt: row.updated_at, updatedBy: row.updated_by });
+    res.json({
+      imageData: row.image_data, mimeType: row.mime_type, updatedAt: row.updated_at, updatedBy: row.updated_by,
+      imageDataDark: row.image_data_dark, mimeTypeDark: row.mime_type_dark, updatedAtDark: row.updated_at_dark, updatedByDark: row.updated_by_dark,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });
@@ -2672,7 +2690,11 @@ app.get('/api/system/logo', async (req, res) => {
 });
 
 app.put('/api/system/logo', requireAdmin, async (req, res) => {
-  const { imageData } = req.body || {};
+  const { imageData, theme } = req.body || {};
+  // theme é opcional pra compatibilidade com quem já integrava antes desta
+  // feature (variante clara é o padrão) — mas o modal em index.html sempre
+  // manda 'light' ou 'dark' explicitamente.
+  const resolvedTheme = LOGO_THEMES.has(theme) ? theme : 'light';
   if (typeof imageData !== 'string' || !imageData.startsWith('data:image/')) {
     return res.status(400).json({ error: 'validation_error', message: 'An image file is required.' });
   }
@@ -2704,14 +2726,20 @@ app.put('/api/system/logo', requireAdmin, async (req, res) => {
   // não conseguimos avisar a resolução exata; o limite de bytes acima
   // continua valendo de qualquer forma.
   try {
+    // Colunas trocadas por variável (não por interpolação de valor — os
+    // nomes vêm só de LOGO_THEMES, um Set fixo, nunca de req.body) pra não
+    // duplicar o INSERT/UPDATE inteiro por tema.
+    const cols = resolvedTheme === 'dark'
+      ? { img: 'image_data_dark', mime: 'mime_type_dark', at: 'updated_at_dark', by: 'updated_by_dark' }
+      : { img: 'image_data', mime: 'mime_type', at: 'updated_at', by: 'updated_by' };
     await pool.query(
-      `INSERT INTO system_logo (id, image_data, mime_type, updated_at, updated_by)
+      `INSERT INTO system_logo (id, ${cols.img}, ${cols.mime}, ${cols.at}, ${cols.by})
        VALUES (1, $1, $2, NOW(), $3)
-       ON CONFLICT (id) DO UPDATE SET image_data = $1, mime_type = $2, updated_at = NOW(), updated_by = $3`,
+       ON CONFLICT (id) DO UPDATE SET ${cols.img} = $1, ${cols.mime} = $2, ${cols.at} = NOW(), ${cols.by} = $3`,
       [imageData, mimeType, getCurrentUsername(req)]
     );
-    await logAudit(getCurrentUsername(req), 'update', 'system_logo', null, 'Logo', `Logo updated (${mimeType}, ${(decodedSize / 1024).toFixed(0)}KB)`);
-    res.json({ imageData, mimeType });
+    await logAudit(getCurrentUsername(req), 'update', 'system_logo', null, 'Logo', `${resolvedTheme === 'dark' ? 'Dark' : 'Light'} theme logo updated (${mimeType}, ${(decodedSize / 1024).toFixed(0)}KB)`);
+    res.json({ imageData, mimeType, theme: resolvedTheme });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });
@@ -2719,10 +2747,26 @@ app.put('/api/system/logo', requireAdmin, async (req, res) => {
 });
 
 app.delete('/api/system/logo', requireAdmin, async (req, res) => {
+  // ?theme=light|dark apaga só aquela variante (mantendo a outra intacta);
+  // sem o parâmetro, apaga as duas — compatibilidade com o comportamento
+  // de antes desta feature, embora o modal em index.html sempre mande o
+  // parâmetro agora (um botão "Reset" por variante).
+  const theme = LOGO_THEMES.has(req.query.theme) ? req.query.theme : null;
   try {
-    await pool.query('DELETE FROM system_logo WHERE id = 1');
-    await logAudit(getCurrentUsername(req), 'delete', 'system_logo', null, 'Logo', 'Removed custom logo — reverted to the default Toolbox45 logo');
-    res.json({ imageData: null });
+    if (theme === 'dark') {
+      await pool.query('UPDATE system_logo SET image_data_dark = NULL, mime_type_dark = NULL, updated_at_dark = NULL, updated_by_dark = NULL WHERE id = 1');
+    } else if (theme === 'light') {
+      await pool.query('UPDATE system_logo SET image_data = NULL, mime_type = NULL, updated_at = NULL, updated_by = NULL WHERE id = 1');
+    } else {
+      await pool.query('DELETE FROM system_logo WHERE id = 1');
+    }
+    // Linha vazia dos dois lados não serve mais pra nada — remove pra
+    // manter o mesmo estado de "sem linha = sem logo customizado" de
+    // antes desta feature (GET já trata os dois casos igual, então isto é
+    // só limpeza, não estritamente necessário).
+    await pool.query('DELETE FROM system_logo WHERE id = 1 AND image_data IS NULL AND image_data_dark IS NULL');
+    await logAudit(getCurrentUsername(req), 'delete', 'system_logo', null, 'Logo', theme ? `Removed the ${theme} theme logo — reverted to the default Toolbox45 logo` : 'Removed custom logo — reverted to the default Toolbox45 logo (both themes)');
+    res.json({ imageData: null, theme });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'internal_error', message: err.message });

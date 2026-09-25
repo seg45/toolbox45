@@ -65,15 +65,26 @@
       // /api/system/logo responder (js/logo-settings.js, carregado lá
       // embaixo) — nesse intervalo o default pisca. Mesmo padrão de
       // 'cpa-theme'/initTheme() (js/theme.js): aplica um cache local
-      // SINCRONAMENTE aqui, antes de qualquer fetch. Chave igual a
+      // SINCRONAMENTE aqui, antes de qualquer fetch. Chaves iguais a
       // LOGO_CACHE_KEY em js/logo-settings.js (esse arquivo ainda não foi
-      // carregado nesse ponto do parse, por isso o literal duplicado).
+      // carregado nesse ponto do parse, por isso os literais duplicados).
+      // Pedido do usuário: "incluir opção para logo em dark e light mode"
+      // — só a variante CLARA importa aqui (esta página é sempre clara,
+      // não tem .hdr-logo-img.for-dark), mas mantém o mesmo script de
+      // index.html pra não divergir (o querySelectorAll da escura
+      // simplesmente não acha nada nesta página).
       (function () {
         try {
-          var cached = localStorage.getItem('cpa-logo-cache');
-          if (cached) {
-            document.querySelectorAll('.hdr-logo-img, .login-logo-img').forEach(function (img) {
-              img.src = cached;
+          var light = localStorage.getItem('cpa-logo-cache-light');
+          var dark = localStorage.getItem('cpa-logo-cache-dark');
+          if (light) {
+            document.querySelectorAll('.hdr-logo-img.for-light, .login-logo-img').forEach(function (img) {
+              img.src = light;
+            });
+          }
+          if (dark) {
+            document.querySelectorAll('.hdr-logo-img.for-dark').forEach(function (img) {
+              img.src = dark;
             });
           }
         } catch (e) { /* localStorage indisponível — mantém o default do HTML */ }

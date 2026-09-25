@@ -27,6 +27,19 @@
 // deste (theme.js lê o cache no boot; este arquivo atualiza o cache pra
 // próxima visita e, em login.html, força o valor mais recente por cima do
 // que já foi aplicado a partir de uma preferência pessoal vazada).
+//
+// Pedido do usuário: "quando alterar o tema padrão em system, o usuário
+// que não definiu o próprio tema deverá assumir o tema definido em padrão
+// de system" — sem o bloco "else" de _appearanceBoot() abaixo, um
+// navegador SEM preferência pessoal só passava a refletir um novo default
+// do admin na visita SEGUINTE (initTheme() já tinha aplicado o valor
+// ANTIGO do cache, síncrono, ANTES deste fetch responder — o fetch só
+// atualizava o cache pra próxima vez, nunca a página já carregada). Agora,
+// em index.html também (não só em login.html), se não existe
+// 'cpa-theme'/'cpa-accent' PESSOAL, o valor recém-buscado do servidor é
+// aplicado na hora — mas sem gravar como preferência pessoal (senão a
+// escolha do usuário ficaria "travada" pra sempre no valor que o admin
+// tinha neste boot, deixando de acompanhar futuras mudanças do default).
 // ════════════════════════════════════════════════
 
 const APPEARANCE_ORG_THEME_KEY = 'cpa-org-theme';
@@ -64,6 +77,31 @@ async function _appearanceBoot() {
     document.documentElement.setAttribute('data-theme', theme);
     if (typeof applyAccentColor === 'function') applyAccentColor(accentColor);
     if (typeof _resetAccentIfWhite === 'function' && theme === 'light') _resetAccentIfWhite();
+  } else {
+    // index.html — ver comentário acima. Só toca no que o usuário NUNCA
+    // escolheu pessoalmente; cada um (tema/cor) é independente, porque são
+    // preferências salvas separadamente ('cpa-theme'/'cpa-accent').
+    let hasPersonalTheme = false, hasPersonalAccent = false;
+    try {
+      hasPersonalTheme = !!localStorage.getItem('cpa-theme');
+      hasPersonalAccent = !!localStorage.getItem('cpa-accent');
+    } catch (e) {}
+    if (!hasPersonalTheme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      if (typeof syncThemeToggleUI === 'function') syncThemeToggleUI(theme);
+    }
+    if (!hasPersonalAccent) {
+      if (typeof applyAccentColor === 'function') applyAccentColor(accentColor);
+      if (typeof syncAccentColorUI === 'function') syncAccentColorUI(accentColor);
+    }
+    // Sempre por último, e a partir do tema JÁ AO VIVO na página (pessoal
+    // ou recém-aplicado acima) — cobre o caso em que só a COR era default
+    // (tema pessoal já era claro) e o default de cor do admin é "white"
+    // (só válido no tema escuro, ver comentário no preset "white" em
+    // js/theme.js).
+    if (!hasPersonalAccent && document.documentElement.getAttribute('data-theme') === 'light' && typeof _resetAccentIfWhite === 'function') {
+      _resetAccentIfWhite();
+    }
   }
 }
 _appearanceBoot();
