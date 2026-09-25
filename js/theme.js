@@ -38,7 +38,26 @@ function _cpaOrgDefault(key, fallback) {
 (function initTheme() {
   let saved = null;
   try { saved = localStorage.getItem('cpa-theme'); } catch (e) {}
-  applyTheme(saved || _cpaOrgDefault('cpa-org-theme', 'light'));
+  if (saved) {
+    applyTheme(saved);
+  } else {
+    // BUG raiz do "tela dos usuarios continua com tema diferente do
+    // padrão": applyTheme() SEMPRE grava em localStorage (ver acima) —
+    // antes deste fix, quando não havia preferência pessoal, o fallback
+    // pro default do admin (_cpaOrgDefault) passava por applyTheme() e
+    // era persistido em 'cpa-theme' como se fosse uma escolha pessoal
+    // de verdade, JÁ NO PRIMEIRO PAINT da página, antes de qualquer
+    // outro código (_appearanceBoot() em js/appearance-settings.js,
+    // reapplyAfterUserSync() em js/user-sync.js) ter chance de rodar.
+    // Isso "batizava" cpa-theme silenciosamente pra todo mundo sem tema
+    // próprio, tornando inúteis os outros dois fixes da mesma classe de
+    // bug (eles checam "já existe cpa-theme?" — e a resposta já era
+    // sempre "sim", gravada por ESTA função segundos antes). Por isso
+    // aqui só aplica visualmente (sem chamar applyTheme()), do mesmo
+    // jeito que initAccentColor() logo abaixo já fazia com
+    // applyAccentColor() (visual) vs. setAccentColor() (visual + grava).
+    document.documentElement.setAttribute('data-theme', _cpaOrgDefault('cpa-org-theme', 'light'));
+  }
 })();
 
 // ════════════════════════════════════════════════
