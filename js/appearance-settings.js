@@ -69,10 +69,36 @@ async function _appearanceBoot() {
 _appearanceBoot();
 
 // ── Settings -> System -> "Default theme & colors" (super_admin-only) ──
-// Grupo inline na aba System (não é modal, igual ao antigo "Export log
-// file") — muda um ESTADO PENDENTE local (_sysAppearancePending*) até o
-// admin clicar Save; nada é enviado ao servidor antes disso, pro admin
+// Modal (#appearanceSettingsOverlay em index.html), mesmo padrão de
+// Logo/SSL Certificate — pedido do usuário: "organizar melhor essa
+// página" (antes o toggle/swatches/Save ficavam soltos direto na aba, ver
+// histórico completo no comentário do set-group #sysGroupAppearance em
+// index.html). Muda um ESTADO PENDENTE local (_sysAppearancePending*) até
+// o admin clicar Save; nada é enviado ao servidor antes disso, pro admin
 // poder experimentar tema/cor sem afetar ninguém enquanto decide.
+function openAppearanceSettingsModal() {
+  const overlay = document.getElementById('appearanceSettingsOverlay');
+  if (!overlay) return;
+  overlay.classList.add('show');
+  loadSysAppearance();
+}
+
+function closeAppearanceSettingsModal() {
+  const overlay = document.getElementById('appearanceSettingsOverlay');
+  if (overlay) overlay.classList.remove('show');
+}
+
+// Click-outside-to-close + Escape, mesmo padrão de logo-settings.js/
+// ssl-certificate.js/oauth-settings.js.
+document.addEventListener('DOMContentLoaded', () => {
+  const overlay = document.getElementById('appearanceSettingsOverlay');
+  if (overlay) overlay.addEventListener('click', ev => { if (ev.target.id === 'appearanceSettingsOverlay') overlay.classList.remove('show'); });
+});
+document.addEventListener('keydown', ev => {
+  if (ev.key !== 'Escape') return;
+  const overlay = document.getElementById('appearanceSettingsOverlay');
+  if (overlay) overlay.classList.remove('show');
+});
 let _sysAppearancePendingTheme = 'light';
 let _sysAppearancePendingAccent = 'teal';
 let _sysAppearanceLoaded = false; // evita Save habilitado antes do primeiro load
@@ -159,18 +185,4 @@ async function saveSysAppearance() {
     if (status) status.textContent = 'Failed to save. Please try again.';
     if (btn) btn.disabled = false; // ainda há uma mudança pendente não salva
   }
-}
-
-// switchSettingsPane() (js/settings-modal.js) já existe antes deste
-// arquivo ser carregado (ver ordem dos <script> em index.html) — mesmo
-// padrão de js/api-keys.js/js/oauth-settings.js/js/ssl-certificate.js:
-// envolve a função original pra carregar o valor atual sem duplicar a
-// lógica de troca de aba. Não roda em login.html (switchSettingsPane só
-// existe em index.html, onde a aba Settings -> System existe).
-if (typeof switchSettingsPane === 'function') {
-  const _appearanceOrigSwitchSettingsPane = switchSettingsPane;
-  switchSettingsPane = function (pane) {
-    _appearanceOrigSwitchSettingsPane(pane);
-    if (pane === 'system') loadSysAppearance();
-  };
 }
