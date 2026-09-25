@@ -26,6 +26,19 @@ def slugify_handle(raw: str) -> str:
     return s[:28]
 
 
+# ════════════════════════════════════════════════
+# Normalizacao/validacao de um handle ESCOLHIDO pelo usuario (PUT
+# /api/me/handle) -- diferente de slugify_handle() acima, que so gera um
+# candidato AUTOMATICO na criacao da conta. Porta exata de HANDLE_RE/
+# normalizeHandle() em server/index.js (linhas 998-1001).
+# ════════════════════════════════════════════════
+HANDLE_RE = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$")
+
+
+def normalize_handle(raw) -> str:
+    return str(raw or "").strip().lower()
+
+
 async def generate_unique_handle(conn: asyncpg.Connection, raw_base: str) -> str:
     base = slugify_handle(raw_base)
     for i in range(1000):

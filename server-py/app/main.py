@@ -17,7 +17,15 @@ MESMA tabela sessions/cookie tb45_session da fatia 2. Config efetiva
 (banco > variavel de ambiente, ver app/oauth.py) recarregada uma vez no
 boot, logo depois de init_db().
 
-As demais ~85 rotas do server/index.js ainda nao existem aqui -- ver
+Fatia 4 (/api/me + /api/commands): GET/PUT /api/me* (ver
+app/routers/me.py) e GET/POST/PUT/DELETE /api/commands* (ver
+app/routers/commands.py) -- o nucleo funcional do app (a tela principal
+inteira depende de GET /api/commands). Introduz a infraestrutura de
+autenticacao/autorizacao compartilhada por TODA rota protegida daqui em
+diante (app/deps.py: API key > sessao, require_user/require_admin/
+require_super_admin) e o log de auditoria compartilhado (app/audit.py).
+
+As demais ~80 rotas do server/index.js ainda nao existem aqui -- ver
 roadmap no plano de migracao (Project toolbox45).
 """
 import logging
@@ -30,6 +38,8 @@ from fastapi.responses import JSONResponse
 
 from . import db, oauth
 from .routers import auth as auth_router
+from .routers import commands as commands_router
+from .routers import me as me_router
 from .routers import oauth as oauth_router
 
 logging.basicConfig(level=logging.INFO)
@@ -50,7 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await db.close_db()
 
 
-app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase3", lifespan=lifespan)
+app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase4", lifespan=lifespan)
 
 
 # ════════════════════════════════════════════════
@@ -86,6 +96,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 app.include_router(auth_router.router)
 app.include_router(oauth_router.router)
+app.include_router(me_router.router)
+app.include_router(commands_router.router)
 
 
 @app.get("/api/health")
