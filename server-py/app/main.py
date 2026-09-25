@@ -25,7 +25,14 @@ autenticacao/autorizacao compartilhada por TODA rota protegida daqui em
 diante (app/deps.py: API key > sessao, require_user/require_admin/
 require_super_admin) e o log de auditoria compartilhado (app/audit.py).
 
-As demais ~80 rotas do server/index.js ainda nao existem aqui -- ver
+Fatia 5 (pastas + notas): GET/POST/PUT/DELETE /api/folders* (17 rotas, ver
+app/routers/folders.py e app/routers/notes.py) -- arvore de subpastas
+(self-referencing parent_id), drag-and-drop (mover pasta/comando/nota sem
+sair da pasta-mae, ver get_root_ancestor_id() em app/folders.py),
+copiar/exportar/importar pasta inteira (recursivo) e as notas dentro de
+pasta (reaproveita sanitize_note_html(), ja portado na fatia 4).
+
+As demais ~63 rotas do server/index.js ainda nao existem aqui -- ver
 roadmap no plano de migracao (Project toolbox45).
 """
 import logging
@@ -39,7 +46,9 @@ from fastapi.responses import JSONResponse
 from . import db, oauth
 from .routers import auth as auth_router
 from .routers import commands as commands_router
+from .routers import folders as folders_router
 from .routers import me as me_router
+from .routers import notes as notes_router
 from .routers import oauth as oauth_router
 
 logging.basicConfig(level=logging.INFO)
@@ -60,7 +69,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await db.close_db()
 
 
-app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase4", lifespan=lifespan)
+app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase5", lifespan=lifespan)
 
 
 # ════════════════════════════════════════════════
@@ -98,6 +107,8 @@ app.include_router(auth_router.router)
 app.include_router(oauth_router.router)
 app.include_router(me_router.router)
 app.include_router(commands_router.router)
+app.include_router(folders_router.router)
+app.include_router(notes_router.router)
 
 
 @app.get("/api/health")
