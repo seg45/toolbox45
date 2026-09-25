@@ -735,6 +735,47 @@ async function runMigrations() {
   } catch (err) {
     console.error('[db] Falha ao migrar about_purpose/about_when/about_obs para details:', err.message);
   }
+
+  // Limpeza ÚNICA de dados (não repetível) — pedido do usuário após o bug
+  // "a tela dos usuários continua com tema diferente do padrão": antes do
+  // fix em initTheme() (js/theme.js, commit 6ecb98b), TODO usuário sem
+  // preferência pessoal de tema tinha, no primeiro carregamento da página,
+  // o default do admin gravado em 'cpa-theme' como se fosse uma escolha
+  // pessoal de verdade (mesmo bug corrigido antes em reapplyAfterUserSync(),
+  // js/user-sync.js) — e essa gravação também era sincronizada para cá
+  // (tabela user_data, ver PUT /api/user-data em server/index.js). Depois
+  // do fix, esse valor "contaminado" continua preso tanto no navegador
+  // quanto aqui, então o usuário nunca mais volta a acompanhar o default do
+  // admin, mesmo já corrigido o bug que o causou.
+  //
+  // Não há como distinguir, com certeza, um 'cpa-theme' contaminado de um
+  // que o usuário realmente escolheu de propósito (ex.: alguém que
+  // deliberadamente ativou o modo escuro antes deste fix existir) — o
+  // usuário pediu a limpeza mesmo ciente dessa perda. Por isso isto roda
+  // UMA ÚNICA VEZ (guardado pela linha sentinela abaixo), nunca de novo em
+  // boots seguintes — senão apagaria também preferências reais que
+  // usuários venham a escolher DEPOIS desta limpeza. O lado do navegador
+  // (localStorage, para quem não abrir a página de novo tão cedo) é limpo
+  // à parte, uma vez por navegador, em initTheme() (js/theme.js).
+  try {
+    const SENTINEL_USER = '__migrations__';
+    const SENTINEL_KEY = 'cpa_theme_reset_v1';
+    const { rows: alreadyRan } = await pool.query(
+      'SELECT 1 FROM user_data WHERE username = $1 AND data_key = $2',
+      [SENTINEL_USER, SENTINEL_KEY]
+    );
+    if (!alreadyRan.length) {
+      const { rowCount } = await pool.query(`DELETE FROM user_data WHERE data_key = 'cpa-theme'`);
+      await pool.query(
+        `INSERT INTO user_data (username, data_key, value, updated_at) VALUES ($1, $2, 'done', NOW())
+         ON CONFLICT (username, data_key) DO NOTHING`,
+        [SENTINEL_USER, SENTINEL_KEY]
+      );
+      console.log(`[db] Limpeza única de 'cpa-theme' contaminado: ${rowCount} preferência(s) de tema removida(s) — usuários sem escolha própria voltam a acompanhar o default do admin.`);
+    }
+  } catch (err) {
+    console.error('[db] Falha na limpeza única de cpa-theme:', err.message);
+  }
 }
 
 // Garante que sempre existe pelo menos uma conta local com role='super_admin'

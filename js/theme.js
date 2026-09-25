@@ -36,6 +36,20 @@ function _cpaOrgDefault(key, fallback) {
   try { return localStorage.getItem(key) || fallback; } catch (e) { return fallback; }
 }
 (function initTheme() {
+  // Limpeza ÚNICA (uma vez por navegador) do 'cpa-theme' contaminado por
+  // usuários sem tema próprio, gravado por ESTA função antes do fix acima
+  // — ver o comentário completo mais abaixo e a limpeza espelhada do lado
+  // do servidor em runMigrations() (server/db.js). 'cpa-theme-reset-v1' é
+  // uma chave nova, só local (não listada em USER_SYNCED_KEYS de
+  // js/user-sync.js), então não sincroniza nem precisa: o lado servidor já
+  // foi limpo à parte, uma única vez, no primeiro boot do backend com este
+  // fix.
+  try {
+    if (!localStorage.getItem('cpa-theme-reset-v1')) {
+      localStorage.removeItem('cpa-theme');
+      localStorage.setItem('cpa-theme-reset-v1', '1');
+    }
+  } catch (e) {}
   let saved = null;
   try { saved = localStorage.getItem('cpa-theme'); } catch (e) {}
   if (saved) {
