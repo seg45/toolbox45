@@ -45,8 +45,11 @@
    em uma única imagem bem mais larga que alta, por isso height fixo (era
    42x42 quadrado) + width:auto, mantendo a altura de antes. object-fit:
    contain continua como rede de segurança pro logo customizado (Settings ->
-   System -> Logo, ver js/logo-settings.js), que pode ter outra proporção. */
-.login-logo-img { height: 42px; width: auto; object-fit: contain; display: block; }
+   System -> Logo, ver js/logo-settings.js), que pode ter outra proporção.
+   Pedido do usuário: "diminuir um pouco o tamanho da imagem padrão" —
+   42px -> 36px, mesma proporção de redução aplicada no header (32px ->
+   28px, ver .hdr-logo-img em css/layout.css). */
+.login-logo-img { height: 36px; width: auto; object-fit: contain; display: block; }
 .login-card .set-group { margin-top: 14px; }
 .login-submit-btn { margin-top: 16px; width: 100%; text-align: center; padding: 9px 14px; }
 .login-error { text-align: center; }

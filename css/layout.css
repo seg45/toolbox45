@@ -25,8 +25,13 @@
    em uma única imagem bem mais larga que alta, por isso height fixo (era
    32x32 quadrado) + width:auto, mantendo a altura de antes. object-fit:
    contain continua como rede de segurança pro logo customizado (Settings ->
-   System -> Logo, ver js/logo-settings.js), que pode ter outra proporção. */
-.hdr-logo-img { height: 32px; width: auto; object-fit: contain; display: block; }
+   System -> Logo, ver js/logo-settings.js), que pode ter outra proporção.
+   Pedido do usuário: "diminuir um pouco o tamanho da imagem padrão" — como
+   agora o ícone e o texto são uma imagem só, a única forma de encolher só
+   o ícone (mantendo o "Toolbox45" no tamanho de sempre) seria mudar o
+   arquivo em si; encolher a imagem inteira (32px -> 28px) foi a opção mais
+   simples e é o que este pedido pede. */
+.hdr-logo-img { height: 28px; width: auto; object-fit: contain; display: block; }
 /* Pedido do usuário: "no modo escuro utilize o logo branco" — o mark teal
    sólido (logo-toolbox45.png) ficava pouco visível em cima do fundo escuro
    do tema dark. Dois <img> (mesmo tamanho, mesma posição — só um visível
