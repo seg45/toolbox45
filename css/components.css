@@ -1550,7 +1550,7 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
   display: flex; align-items: center; justify-content: center;
 }
 
-/* ─── IP CALCULATOR MODAL (botão #ipcOpenBtn no header, ver js/ipcalc.js) ───
+/* ─── IP CALCULATOR MODAL (item "IP Calc" dentro do menu "Tools" no header, ver js/ipcalc.js) ───
    Pedido do usuário: estilo de uma calculadora de sub-rede clássica —
    rótulo em verde + valor + a mesma dotted-quad em BINÁRIO ao lado (rede
    destacada, host esmaecido), máscara em vermelho, tipo de endereço em azul
@@ -1733,21 +1733,27 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
    parameter" — ou seja, alinhar o botão com o início da área de conteúdo
    principal (mesma posição horizontal de onde "Parameter"/.content-toolbar
    começa, à direita da sidebar), não só "mais espaço depois da logo"
-   (tentativa anterior, margin-left:18px, removida).
-   position:absolute tira o botão do fluxo flex do .hdr (que dependeria da
+   (tentativa anterior, margin-left:18px, removida). Depois "crie um menu
+   Tools... deixe após o botão links" — a âncora que antes vivia em
+   #linksDD foi pro WRAPPER .hdr-tools-group (#linksDD e #toolsDD, ver
+   index.html), que os organiza lado a lado (flex, gap) e os posiciona
+   juntos, então "Tools" nasce automaticamente alinhado "após o Links" sem
+   precisar de outro cálculo de left.
+   position:absolute tira o wrapper do fluxo flex do .hdr (que dependeria da
    largura variável da logo — logo customizado em Settings pode ter
    proporção diferente da default, ver comentário da .hdr-logo em
    index.html) e ancora via left: var(--sidebar-w) (mesma variável usada
    por .sb-divider-toggle em layout.css) + 14px, o mesmo padding-left do
-   .content-toolbar logo abaixo (ver layout.css) — resultado: o botão fica
+   .content-toolbar logo abaixo (ver layout.css) — resultado: o grupo fica
    sempre alinhado com "Parameter", mesmo que a largura da sidebar ou da
    logo mude. .hdr tem position:sticky (containing block válido p/
-   position:absolute) e os demais itens do header (IP Calc/conta/
-   engrenagem) continuam presos à direita por .hdr-gap normalmente, já que
-   .linksDD sair do fluxo não afeta o flex deles. */
-#linksDD {
+   position:absolute) e os demais itens do header (conta/engrenagem)
+   continuam presos à direita por .hdr-gap normalmente, já que o wrapper
+   sair do fluxo não afeta o flex deles. */
+.hdr-tools-group {
   position: absolute; left: calc(var(--sidebar-w) + 14px); top: 50%;
   transform: translateY(-50%);
+  display: flex; align-items: center; gap: 8px;
 }
 #linksDDPanel { min-width: 240px; max-width: 320px; padding: 6px; }
 #linksDDPanel .sb-row svg { color: var(--teal); flex-shrink: 0; }

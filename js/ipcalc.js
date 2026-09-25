@@ -1,6 +1,6 @@
 // ════════════════════════════════════════════════
-// IP CALCULATOR — botão no header (ao lado do menu de conta, ver
-// #ipcOpenBtn em index.html), abre um modal (#ipCalcOverlay) com:
+// IP CALCULATOR — item "IP Calc" dentro do menu "Tools" no header (ver
+// #toolsDD/#toolsDDPanel em index.html), abre um modal (#ipCalcOverlay) com:
 // 1) cálculo de rede a partir de IP + máscara (CIDR "/24" ou dotted
 //    "255.255.255.0") — endereço de rede, broadcast, máscara, wildcard,
 //    faixa de hosts utilizáveis, classe (A/B/C/D/E) e tipo (privado

@@ -89,32 +89,57 @@
       })();
     </script>
   </div>
-  <!-- Botão "Links" — pedido do usuário: "crie ao lado do IP Calc uma
-       estrutura igual dos favoritos dos browsers, onde o usuário pode
-       inserir links e nomear", reposicionado logo depois com "deixe o
-       botão de link no início" — agora logo após o logo, ANTES do
-       .hdr-gap (que empurra IP Calc/conta/engrenagem pro canto direito).
-       Mesmas cores do IP Calc (.ipc-header-btn, ver mais abaixo).
-       Dropdown estilo "favoritos de navegador" — puramente PESSOAL, sem
-       conceito de compartilhamento/admin aqui (ver `links` em
-       schema.sql, /api/links em server/index.js e js/links.js). Só
-       carrega a lista na PRIMEIRA vez que abre (loadLinksIfNeeded()),
-       não no carregamento da página — muita gente pode nunca usar isso.
-       Painel abre alinhado à ESQUERDA do botão (default do .dd-panel
-       genérico) — diferente de quando ficava ao lado do IP Calc, onde
-       precisava abrir pra a direita (right:0) pra não vazar da tela. -->
-  <div class="dd" id="linksDD">
-    <button type="button" class="ipc-header-btn" id="linksOpenBtn" onclick="toggleDropdown('linksDD'); loadLinksIfNeeded();" title="Links">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-      <span>Links</span>
-    </button>
-    <div class="dd-panel" id="linksDDPanel" style="left:0; right:auto; min-width:240px; max-width:320px;">
-      <div class="sb-row lk-add-row" onclick="closeAllDropdowns(); openLinkEditor('create')">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-        <span>Add link</span>
+  <!-- Wrapper dos menus "Links" e "Tools" no header. Histórico do "Links":
+       pedido do usuário "crie ao lado do IP Calc uma estrutura igual dos
+       favoritos dos browsers, onde o usuário pode inserir links e nomear",
+       reposicionado com "deixe o botão de link no início" e depois
+       "coloque na mesma direção de parameter" (alinhado com o início do
+       .content-toolbar). Dropdown "Links" é estilo "favoritos de
+       navegador" — puramente PESSOAL, sem conceito de compartilhamento/
+       admin (ver `links` em schema.sql, /api/links em server/index.js e
+       js/links.js); só carrega a lista na PRIMEIRA vez que abre
+       (loadLinksIfNeeded()), não no carregamento da página.
+       Pedido do usuário mais recente: "crie um menu com nome Tools com o
+       mesmo estilo do botão links, deixe após o botão links, e mova o IP
+       Calc para dentro desse menu" — dropdown "Tools" ao lado do "Links",
+       mesmo .ipc-header-btn, por ora só com o item "IP Calc" (era um botão
+       próprio no header; js/ipcalc.js não mudou, openIpCalcModal() segue
+       controlando o mesmo #ipCalcOverlay de sempre, só mudou de onde é
+       chamado); nome genérico "Tools" (escolha do usuário) deixa espaço
+       pra outras ferramentas aqui no futuro.
+       Os dois dropdowns moram juntos neste wrapper (flex, gap:8px) porque
+       só ELE é posicionado com position:absolute (ver .hdr-tools-group em
+       components.css), ancorado em left:calc(var(--sidebar-w) + 14px),
+       mesma coluna de "Parameter"/.content-toolbar — assim "Tools" nasce
+       automaticamente alinhado logo após "Links", sem precisar calcular o
+       left de cada um separadamente (o que dependeria da largura variável
+       do botão "Links", que muda conforme idioma/tamanho de fonte). -->
+  <div class="hdr-tools-group">
+    <div class="dd" id="linksDD">
+      <button type="button" class="ipc-header-btn" id="linksOpenBtn" onclick="toggleDropdown('linksDD'); loadLinksIfNeeded();" title="Links">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <span>Links</span>
+      </button>
+      <div class="dd-panel" id="linksDDPanel" style="left:0; right:auto; min-width:240px; max-width:320px;">
+        <div class="sb-row lk-add-row" onclick="closeAllDropdowns(); openLinkEditor('create')">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>Add link</span>
+        </div>
+        <div id="linksDDList"></div>
+        <div class="set-hint" id="linksDDEmpty" style="display:none; padding:6px 8px 2px;">No links yet.</div>
       </div>
-      <div id="linksDDList"></div>
-      <div class="set-hint" id="linksDDEmpty" style="display:none; padding:6px 8px 2px;">No links yet.</div>
+    </div>
+    <div class="dd" id="toolsDD">
+      <button type="button" class="ipc-header-btn" id="toolsOpenBtn" onclick="toggleDropdown('toolsDD')" title="Tools">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <span>Tools</span>
+      </button>
+      <div class="dd-panel" id="toolsDDPanel" style="left:0; right:auto; min-width:170px;">
+        <div class="sb-row" onclick="closeAllDropdowns(); openIpCalcModal()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10.5" x2="8" y2="10.5"/><line x1="12" y1="10.5" x2="12" y2="10.5"/><line x1="16" y1="10.5" x2="16" y2="10.5"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="17.5" x2="16" y2="17.5"/></svg>
+          <span>IP Calc</span>
+        </div>
+      </div>
     </div>
   </div>
   <div class="hdr-gap"></div>
@@ -125,17 +150,6 @@
        nova página inicial da aplicação (ver o gate no topo do <head> deste
        arquivo e js/login.js) — de lá dá pra entrar com outra credencial
        local ou via Windows authentication. -->
-  <!-- Botão IPCalc — pedido do usuário: calculadora de rede (IP+máscara,
-       split de sub-rede, referência RFC 1918), num botão ao lado do menu de
-       conta, abrindo um modal (ver #ipCalcOverlay mais abaixo e
-       js/ipcalc.js). Cores iguais ao botão "+ Add" das subpastas
-       (.sec-folder-add-btn em db-render-engine.js/components.css — fundo
-       tingido/--teal-bg no escuro, branco/--surf no claro, borda e texto
-       --teal) — pedido do usuário, ver .ipc-header-btn em components.css. -->
-  <button class="ipc-header-btn" id="ipcOpenBtn" onclick="openIpCalcModal()" title="IP Calculator">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10.5" x2="8" y2="10.5"/><line x1="12" y1="10.5" x2="12" y2="10.5"/><line x1="16" y1="10.5" x2="16" y2="10.5"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="17.5" x2="16" y2="17.5"/></svg>
-    <span>IP Calc</span>
-  </button>
   <!-- Pedido do usuário: "coloque user account e user preferences em
        configurações do usuário ao clicar no nome do login... utilize um
        layout igual muitos sistemas usam" — antes este dropdown só tinha o
@@ -2607,7 +2621,7 @@
   </div>
 </div>
 
-<!-- ══ IP CALCULATOR MODAL — ver botão #ipcOpenBtn no header e js/ipcalc.js.
+<!-- ══ IP CALCULATOR MODAL — ver item "IP Calc" no menu "Tools" do header e js/ipcalc.js.
      Calcula rede/broadcast/máscara/wildcard/faixa de hosts a partir de
      IP+máscara (CIDR ou dotted), faz split de sub-rede (ex.: /24 -> N x
      /25) e traz a tabela de referência RFC 1918 (redes privadas). ══ -->
