@@ -579,8 +579,42 @@ function persistCollapsedSections() {
 }
 let COLLAPSED_SECTIONS = loadCollapsedSections();
 
+// Renderização preguiçosa de seções de Tópico — pedido do usuário: "a
+// aplicação está lenta para exibir os comandos" (medido no teste de
+// performance: ~10.000 comandos sintéticos, ~25s pra exibir a lista geral
+// como admin — a rede levava só ~5s, o resto era o navegador montando HTML
+// de TODAS as seções, inclusive as recolhidas, que ficam ocultas só por
+// CSS/display:none mas continuavam sendo construídas). Guarda, por chave de
+// seção, uma função que monta o corpo (cards) sob demanda — só é chamada
+// quando a seção de fato é expandida (toggleSection/expandAllSections), em
+// vez de sempre no render(). Limpo no início de cada render() (ver
+// clearLazySectionBuilders() em js/render.js) pra não acumular closures de
+// um render anterior (rows/values antigos) apontando pra chaves que podem
+// nem existir mais na passada atual.
+const _lazySectionBuilders = new Map();
+function clearLazySectionBuilders() { _lazySectionBuilders.clear(); }
+
+// Constrói o corpo de UMA seção que ainda está marcada como preguiçosa
+// (data-lazy="1" — corpo nunca foi montado) e remove a marca. No-op se a
+// seção já tem o corpo pronto (expandida desde o render, ou já expandida
+// antes). Compartilhado por toggleSection() e expandAllSections() abaixo.
+function _buildLazySectionBodyIfNeeded(el) {
+  if (!el || el.dataset.lazy !== '1') return;
+  const key = el.dataset.secKey;
+  const build = key && _lazySectionBuilders.get(key);
+  if (build) {
+    const body = el.querySelector('.sec-body');
+    if (body) body.innerHTML = build();
+    _lazySectionBuilders.delete(key);
+  }
+  delete el.dataset.lazy;
+}
+
 // Bloco recolhível genérico — usado tanto para a seção de um Tópico quanto,
 // no modo "Agrupar por Versão", para o bloco inteiro de uma combinação Versão/Ambiente.
+// `bodyHtml` já vem pronto (uso "eager", sempre construído) — ver
+// collapsibleGroupLazy() abaixo para a variante que adia a construção do
+// corpo quando a seção nasce recolhida.
 function collapsibleGroup(key, headerHtml, bodyHtml, extraClass) {
   const collapsed = COLLAPSED_SECTIONS.has(key);
   // O clique de recolher/expandir ficava no cabeçalho INTEIRO (.sec-title) —
@@ -600,20 +634,62 @@ function collapsibleGroup(key, headerHtml, bodyHtml, extraClass) {
   </div>`;
 }
 
+// Mesmo shell HTML de collapsibleGroup() acima, mas recebe as ROWS ainda cruas
+// + a função que transforma cada uma num card, em vez do HTML já pronto —
+// se a seção nasce recolhida (COLLAPSED_SECTIONS), NÃO roda `buildCard` em
+// cada row agora: só registra um builder em _lazySectionBuilders e marca
+// data-lazy="1", deixando o corpo vazio até o usuário expandir de verdade
+// (toggleSection/_buildLazySectionBodyIfNeeded acima). Isso é o que evita
+// gastar tempo (resolução de placeholders, escape, etc.) com seções que o
+// usuário nem está olhando.
+function collapsibleGroupLazy(key, headerHtml, rows, buildCard, extraClass) {
+  const collapsed = COLLAPSED_SECTIONS.has(key);
+  let bodyHtml;
+  if (collapsed) {
+    _lazySectionBuilders.set(key, () => rows.map(buildCard).join(''));
+    bodyHtml = '';
+  } else {
+    bodyHtml = rows.map(buildCard).join('');
+  }
+  return `<div class="section${extraClass ? ' ' + extraClass : ''}${collapsed ? ' collapsed' : ''}" data-sec-key="${key}"${collapsed ? ' data-lazy="1"' : ''}>
+    <div class="sec-title">
+      <svg class="sec-chevron" width="8" height="8" viewBox="0 0 10 10" fill="none" onclick="toggleSection('${key}')"><path d="M1 2l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ${headerHtml}
+    </div>
+    <div class="sec-body">${bodyHtml}</div>
+  </div>`;
+}
+
 // `key` identifica a seção de forma estável entre re-renders (ex.: o próprio tópico,
 // ou "R82__standalone__capture" quando aninhada dentro de um bloco de Versão) para que
 // o estado recolhido/expandido sobreviva a filtros e reaberturas do app.
-function section(icon, title, cards, key) {
-  if (!cards.length) return '';
+// `items` é um array de HTML já pronto (uso tradicional, ex.: buildEnvCards
+// em js/render.js — poucos itens, não vale a pena tornar preguiçoso) OU,
+// quando `buildCard` é passado, um array de ROWS cruas que só viram HTML se
+// a seção estiver (ou vier a ficar) expandida — ver buildTopicSection em
+// js/db-render-engine.js, o caso que realmente importa em volume.
+// Retorna { html, count } em vez de só a string: callers que precisam saber
+// QUANTOS cards uma seção tem (ex.: "Group by: Creator/Versão" em
+// js/render.js, que antes contavam ocorrências de `<div class="card"` no
+// HTML já montado) agora usam esse `count` direto, sem depender de o corpo
+// ter sido de fato construído.
+function section(icon, title, items, key, buildCard) {
+  const count = items.length;
+  if (!count) return { html: '', count: 0 };
   const k = key || title;
   const iconHtml = icon ? `${icon} ` : '';
-  return collapsibleGroup(k, `${iconHtml}${title} <span class="sec-count">${cards.length}</span>`, cards.join(''));
+  const headerHtml = `${iconHtml}${title} <span class="sec-count">${count}</span>`;
+  const html = typeof buildCard === 'function'
+    ? collapsibleGroupLazy(k, headerHtml, items, buildCard)
+    : collapsibleGroup(k, headerHtml, items.join(''));
+  return { html, count };
 }
 
 function toggleSection(key) {
   const el = document.querySelector(`.section[data-sec-key="${key}"]`);
   if (!el) return;
   const willCollapse = !el.classList.contains('collapsed');
+  if (!willCollapse) _buildLazySectionBodyIfNeeded(el);
   el.classList.toggle('collapsed', willCollapse);
   if (willCollapse) COLLAPSED_SECTIONS.add(key); else COLLAPSED_SECTIONS.delete(key);
   persistCollapsedSections();
@@ -629,6 +705,10 @@ function collapseAllSections() {
 }
 function expandAllSections() {
   document.querySelectorAll('#out .section').forEach(el => {
+    // "Expand all" precisa mesmo montar tudo (é um pedido explícito do
+    // usuário pra ver tudo de uma vez) — a preguiça só evita esse custo
+    // enquanto a seção continua recolhida/fora de vista.
+    _buildLazySectionBodyIfNeeded(el);
     el.classList.remove('collapsed');
     if (el.dataset.secKey) COLLAPSED_SECTIONS.delete(el.dataset.secKey);
   });

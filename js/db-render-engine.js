@@ -404,19 +404,44 @@ function buildEnvCards(rows, ce, values) {
     .filter(Boolean);
 }
 
+// Diz se uma row vai virar um card SEM montar o HTML de fato — espelha
+// exatamente a única condição em que buildCardHtmlForRow() devolve null (row
+// exige IP+porta e não tem variante "empty" com conteúdo; o outro caminho
+// sempre produz um card via card({...})). Usado por buildTopicSection() pra
+// saber a CONTAGEM de uma seção sem pagar o custo de resolveTokens/escape
+// por row — necessário porque, com a seção preguiçosa (ver
+// collapsibleGroupLazy em terminal-renderer.js), o HTML de uma seção
+// recolhida só é montado se/quando o usuário expandir, mas o número em
+// "<span class="sec-count">" precisa aparecer certo desde já.
+function rowWillProduceCard(row, values) {
+  const hasIpPort = !!(values.ip && values.port);
+  if (row.requires_ip_port && !hasIpPort) {
+    return !!(row.lines && row.lines.empty && row.lines.empty.length);
+  }
+  return true;
+}
+
 // One topic section (icon + title + its cards), mirroring render.js's per-topic blocks.
 // `key` (optional) gives the collapsible section a stable identity — see section() in
 // terminal-renderer.js — needed so collapse state doesn't collide across stacked
 // Versão/Ambiente combo blocks that repeat the same topic.
+//
+// Pedido do usuário: "a aplicação está lenta para exibir os comandos" — antes,
+// esta função já montava o HTML de TODOS os cards do tópico aqui (via
+// .map(buildCardHtmlForRow)), mesmo para seções recolhidas que ficam ocultas
+// só por CSS (ver .section.collapsed .sec-body em css/components.css). Com
+// milhares de comandos sintéticos isso ficou perceptível (~20s de trabalho
+// do navegador). Agora só filtra as rows (barato) e passa ROWS + a função de
+// montagem pra section(), que decide — via collapsibleGroupLazy — se monta
+// os cards agora (seção expandida) ou só quando o usuário expandir.
 function buildTopicSection(rows, topic, icon, title, values, hasIPs, key) {
   // Um comando pode pertencer a mais de um Tópico (row.topics) — aparece em cada
   // seção correspondente. `row.topic` (singular) é o fallback para linhas antigas
   // que por algum motivo não tragam o array `topics` do backend.
-  const cards = rows
+  const filtered = rows
     .filter(r => (r.topics || [r.topic]).includes(topic))
-    .map(r => buildCardHtmlForRow(r, values, hasIPs))
-    .filter(Boolean);
-  return section(icon, title, cards, key);
+    .filter(r => rowWillProduceCard(r, values));
+  return section(icon, title, filtered, key, r => buildCardHtmlForRow(r, values, hasIPs));
 }
 
 // Envolve um item (card de comando/nota OU a seção HTML inteira de uma

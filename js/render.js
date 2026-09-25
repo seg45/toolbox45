@@ -17,6 +17,7 @@ function onExportPathInput() {
 }
 
 async function render() {
+  clearLazySectionBuilders();
   const src  = gv('src_ip'), dst = gv('dst_ip');
   const sp   = gv('src_port') || '0', dp = gv('dst_port') || '0';
   const proto = gv('proto') || '0', iface = gv('iface'), vsid = gv('vsid') || '0';
@@ -189,10 +190,24 @@ async function render() {
   // independente entre grupos. Usada sempre que o Group by NÃO for "My
   // folders" — inclusive dentro de Folders (VIEW_FOLDERS_HOME só filtra
   // QUAIS comandos chegam aqui, ver acima; não muda como são organizados).
+  // Pedido do usuário: "a aplicação está lenta para exibir os comandos" —
+  // buildSections() agora retorna { html, count } em vez de só a string
+  // final. O `count` soma os counts que section()/buildTopicSection já
+  // calculam de forma barata (sem montar HTML — ver rowWillProduceCard em
+  // js/db-render-engine.js), então os dois callers abaixo (Group by
+  // Creator/Versão) não precisam mais contar `<div class="card"` no HTML
+  // pronto via regex — o que exigia montar TODOS os cards de toda seção,
+  // mesmo as recolhidas, só para saber a contagem, anulando a economia da
+  // renderização preguiçosa (ver buildTopicSection/collapsibleGroupLazy).
   function buildSections(rows, keyPrefix) {
     const sections = [];
+    let count = 0;
     const envCards = buildEnvCards(rows, ce, values);
-    if (envCards.length) sections.push(section('🏗️', `Environment: ${envLabel(ce)}`, envCards, keyPrefix + 'environment'));
+    if (envCards.length) {
+      const envResult = section('🏗️', `Environment: ${envLabel(ce)}`, envCards, keyPrefix + 'environment');
+      sections.push(envResult.html);
+      count += envResult.count;
+    }
     // Agrupa `rows` por tópico UMA VEZ (Map<topic, rows[]>) em vez de deixar
     // buildTopicSection (js/db-render-engine.js) escanear o array `rows`
     // INTEIRO de novo a cada tópico do catálogo — combos (Versão×Ambiente) ×
@@ -210,10 +225,12 @@ async function render() {
     });
     topicsSorted.forEach(tp => {
       if (show(tp.key)) {
-        sections.push(buildTopicSection(rowsByTopic.get(tp.key) || [], tp.key, '', tp.label, values, hasIPs, keyPrefix + tp.key));
+        const topicResult = buildTopicSection(rowsByTopic.get(tp.key) || [], tp.key, '', tp.label, values, hasIPs, keyPrefix + tp.key);
+        sections.push(topicResult.html);
+        count += topicResult.count;
       }
     });
-    return sections.join('');
+    return { html: sections.join(''), count };
   }
 
   // Rótulo do bloco Versão/Ambiente: quando Versão/Ambiente = All, a combinação
@@ -402,8 +419,9 @@ async function render() {
       // collapsibleGroup() quebraria a string JS (\u, \r etc. são sequências de
       // escape válidas). O nome de exibição continua o original (escAttr(creator)).
       const creatorKey = creator.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const body = buildSections(subset, `${kp}${creatorKey}__`);
-      const cardCount = (body.match(/<div class="card"/g) || []).length;
+      const secResult = buildSections(subset, `${kp}${creatorKey}__`);
+      const body = secResult.html;
+      const cardCount = secResult.count;
       if (!cardCount) return '';
       return collapsibleGroup(`${cv}__${ce}__${creatorKey}`, `👤 <strong>${escAttr(creator)}</strong> <span class="sec-count">${cardCount}</span>`, body, 'section-creator');
     }).join('');
@@ -423,14 +441,15 @@ async function render() {
   // `buildFolderItemsCards`/`buildFolderSectionFromCards` continuam em uso
   // — agora só pelo ramo VIEW_FOLDERS_HOME acima.
 
-  const bodyHtml = envNote + buildSections(commands, kp);
+  const sectionsResult = buildSections(commands, kp);
+  const bodyHtml = envNote + sectionsResult.html;
 
   // "Agrupar por Versão": embrulha o bloco inteiro da combinação num agrupamento recolhível
   // próprio (rotulado com Versão/Ambiente), com as seções de Tópico aninhadas dentro. Sempre
   // exibido nesse modo — mesmo com uma única combinação — para dar o mesmo resultado visual
   // de agrupamento que o usuário teria com várias Versões marcadas.
   if (GROUP_BY === 'version') {
-    const cardCount = (bodyHtml.match(/<div class="card"/g) || []).length;
+    const cardCount = sectionsResult.count;
     if (!cardCount) return '';
     const label = `<strong>${cvLabel}</strong> / <strong>${ceLabel}</strong>`;
     return collapsibleGroup(`${cv}__${ce}`, `🔀 ${label} <span class="sec-count">${cardCount}</span>`, bodyHtml, 'section-version');
