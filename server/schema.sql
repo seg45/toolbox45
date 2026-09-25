@@ -671,6 +671,41 @@ CREATE TABLE IF NOT EXISTS shares (
 );
 CREATE INDEX IF NOT EXISTS idx_shares_grantee ON shares(grantee_username);
 
+-- ════════════════════════════════════════════════
+-- GRUPOS — pedido do usuário: "criar uma estrutura de grupos onde os
+-- usuários dos grupos podem ver todos comandos [e pastas] de quem está no
+-- grupo. somente super admin podem gerenciar grupos" (ver requireSuperAdmin
+-- em GET/POST/PUT/DELETE /api/groups*, server/index.js). Complementa (não
+-- substitui) o compartilhamento individual em `shares` acima — os dois
+-- mecanismos são independentes e ADITIVOS (OR) na hora de decidir
+-- visibilidade, ver GET /api/commands, GET /api/commands/:id, GET
+-- /api/folders/all e POST /api/folders/:id/copy em server/index.js
+-- (mesmos 4 pontos que já checavam `shares` para esse fim).
+--
+-- Simétrico e tudo-ou-nada: qualquer membro de um grupo vê os comandos E
+-- as pastas de QUALQUER outro membro do mesmo grupo — diferente de
+-- `shares`, que é direcional (grantor -> grantee) e tem toggles
+-- Folders/Commands separados por concessão. Não há esses toggles aqui de
+-- propósito (pedido do usuário confirmado: grupo cobre os dois juntos).
+--
+-- group_members é N:N (não `users.group_id`) porque um usuário pode
+-- pertencer a vários grupos ao mesmo tempo (pedido do usuário confirmado).
+-- ════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS groups (
+  id         SERIAL PRIMARY KEY,
+  name       TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS group_members (
+  group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (group_id, username)
+);
+CREATE INDEX IF NOT EXISTS idx_group_members_username ON group_members(username);
+
 -- Sessões de login local — o cookie `tb45_session` guarda só o token (chave
 -- primária desta tabela); nenhum dado sensível viaja no cookie em si. Uma
 -- sessão local tem prioridade sobre a identificação NTLM enquanto for válida

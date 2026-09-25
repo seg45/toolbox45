@@ -1207,9 +1207,12 @@ app.get('/api/commands', async (req, res) => {
     const params = [];
     // Privado por padrão (pedido do usuário — ver comentário em `shares` em
     // schema.sql): um usuário comum só vê comandos de referência (System/
-    // sem dono), os PRÓPRIOS comandos, e os de quem compartilhou com ele
-    // (share_commands=true). Admin continua vendo tudo, sem exceção — igual
-    // a antes desta mudança.
+    // sem dono), os PRÓPRIOS comandos, os de quem compartilhou com ele
+    // (share_commands=true) e os de quem está no MESMO GRUPO que ele (ver
+    // `groups`/`group_members` em schema.sql — pedido do usuário: "criar
+    // uma estrutura de grupos onde os usuários dos grupos podem ver todos
+    // comandos de quem está no grupo"). Admin continua vendo tudo, sem
+    // exceção — igual a antes desta mudança.
     if (!isAdmin) {
       params.push(username);
       const p = params.length;
@@ -1219,6 +1222,11 @@ app.get('/api/commands', async (req, res) => {
         OR EXISTS (
           SELECT 1 FROM shares sh
           WHERE sh.grantor_username = commands.created_by AND sh.grantee_username = $${p} AND sh.share_commands = true
+        )
+        OR EXISTS (
+          SELECT 1 FROM group_members gm_me
+          JOIN group_members gm_owner ON gm_owner.group_id = gm_me.group_id
+          WHERE gm_me.username = $${p} AND gm_owner.username = commands.created_by
         )
       )`;
     }
@@ -1283,15 +1291,23 @@ app.get('/api/commands/:id', async (req, res) => {
     const username = getCurrentUsername(req);
     const isAdmin = roleRank(await getCurrentRole(req)) >= 1;
     // Mesma regra de visibilidade de GET /api/commands (privado por
-    // padrão) — 404 (não 403: "não vaza a distinção", mesma convenção do
-    // resto da API) quando o comando é de outro usuário que não
-    // compartilhou com quem pediu, e quem pediu não é admin.
+    // padrão, agora incluindo grupos — ver `group_members` em
+    // schema.sql) — 404 (não 403: "não vaza a distinção", mesma convenção
+    // do resto da API) quando o comando é de outro usuário que não
+    // compartilhou/não está no mesmo grupo de quem pediu, e quem pediu
+    // não é admin.
     if (!isAdmin && row.created_by && row.created_by !== 'System' && row.created_by !== username) {
-      const { rows: shareRows } = await pool.query(
-        'SELECT 1 FROM shares WHERE grantor_username = $1 AND grantee_username = $2 AND share_commands = true',
+      const { rows: visRows } = await pool.query(
+        `SELECT 1 WHERE EXISTS (
+           SELECT 1 FROM shares WHERE grantor_username = $1 AND grantee_username = $2 AND share_commands = true
+         ) OR EXISTS (
+           SELECT 1 FROM group_members gm_me
+           JOIN group_members gm_owner ON gm_owner.group_id = gm_me.group_id
+           WHERE gm_me.username = $2 AND gm_owner.username = $1
+         )`,
         [row.created_by, username]
       );
-      if (!shareRows.length) return res.status(404).json({ error: 'not_found', message: `Command '${req.params.id}' not found` });
+      if (!visRows.length) return res.status(404).json({ error: 'not_found', message: `Command '${req.params.id}' not found` });
     }
     const handleMap = isAdmin ? null : await getHandleMap();
     res.json(await shapeCommand(row, username, { username, isAdmin, handleMap }));
@@ -1502,6 +1518,122 @@ app.delete('/api/shares/:id', async (req, res) => {
 });
 
 // ════════════════════════════════════════════════
+// GRUPOS — pedido do usuário: "criar uma estrutura de grupos onde os
+// usuários dos grupos podem ver todos comandos [e pastas] de quem está no
+// grupo. somente super admin podem gerenciar grupos" — ver comentário
+// completo em `groups`/`group_members`, server/schema.sql. Todas as rotas
+// abaixo são requireSuperAdmin: nem Admin comum gerencia grupos (só o
+// efeito de visibilidade se aplica a todo mundo, não a gestão). O efeito
+// em si (visibilidade cruzada de comandos/pastas entre membros) mora em
+// GET /api/commands, GET /api/commands/:id, GET /api/folders/all e POST
+// /api/folders/:id/copy (busca por "group_members" nesse arquivo).
+// ════════════════════════════════════════════════
+app.get('/api/groups', requireSuperAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT g.id, g.name, g.created_at, g.created_by,
+             COALESCE(array_agg(gm.username ORDER BY gm.username) FILTER (WHERE gm.username IS NOT NULL), '{}') AS members
+      FROM groups g
+      LEFT JOIN group_members gm ON gm.group_id = g.id
+      GROUP BY g.id
+      ORDER BY g.name
+    `);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.post('/api/groups', requireSuperAdmin, async (req, res) => {
+  try {
+    const name = (req.body && typeof req.body.name === 'string') ? req.body.name.trim() : '';
+    if (!name) return res.status(400).json({ error: 'validation_error', message: '"name" is required' });
+    const { rows: existing } = await pool.query('SELECT id FROM groups WHERE name = $1', [name]);
+    if (existing.length) return res.status(409).json({ error: 'conflict', message: `A group named "${name}" already exists` });
+    const username = getCurrentUsername(req);
+    const { rows } = await pool.query(
+      'INSERT INTO groups (name, created_by) VALUES ($1, $2) RETURNING id, name, created_at, created_by',
+      [name, username]
+    );
+    await logAudit(username, 'create', 'group', String(rows[0].id), name);
+    res.status(201).json(Object.assign({}, rows[0], { members: [] }));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.put('/api/groups/:id', requireSuperAdmin, async (req, res) => {
+  try {
+    const name = (req.body && typeof req.body.name === 'string') ? req.body.name.trim() : '';
+    if (!name) return res.status(400).json({ error: 'validation_error', message: '"name" is required' });
+    const { rows: found } = await pool.query('SELECT id, name FROM groups WHERE id = $1', [req.params.id]);
+    if (!found.length) return res.status(404).json({ error: 'not_found', message: `Group '${req.params.id}' not found` });
+    const { rows: dup } = await pool.query('SELECT id FROM groups WHERE name = $1 AND id <> $2', [name, req.params.id]);
+    if (dup.length) return res.status(409).json({ error: 'conflict', message: `A group named "${name}" already exists` });
+    await pool.query('UPDATE groups SET name = $1 WHERE id = $2', [name, req.params.id]);
+    const username = getCurrentUsername(req);
+    if (found[0].name !== name) await logAudit(username, 'update', 'group', req.params.id, name, `Renamed from "${found[0].name}"`);
+    res.json({ id: Number(req.params.id), name });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.delete('/api/groups/:id', requireSuperAdmin, async (req, res) => {
+  try {
+    const { rows: found } = await pool.query('SELECT id, name FROM groups WHERE id = $1', [req.params.id]);
+    if (!found.length) return res.status(404).json({ error: 'not_found', message: `Group '${req.params.id}' not found` });
+    await pool.query('DELETE FROM groups WHERE id = $1', [req.params.id]); // cascades group_members
+    await logAudit(getCurrentUsername(req), 'delete', 'group', req.params.id, found[0].name);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// Adiciona um membro (username REAL, não handle — esta é uma tela
+// super_admin, mesma convenção de Manage users, que também trabalha com
+// username real em vez de handle mascarado). ON CONFLICT DO NOTHING: pedir
+// pra adicionar quem já é membro não é erro, só idempotente.
+app.post('/api/groups/:id/members', requireSuperAdmin, async (req, res) => {
+  try {
+    const memberUsername = (req.body && typeof req.body.username === 'string') ? req.body.username.trim() : '';
+    if (!memberUsername) return res.status(400).json({ error: 'validation_error', message: '"username" is required' });
+    const { rows: found } = await pool.query('SELECT id, name FROM groups WHERE id = $1', [req.params.id]);
+    if (!found.length) return res.status(404).json({ error: 'not_found', message: `Group '${req.params.id}' not found` });
+    const { rows: userRows } = await pool.query('SELECT username FROM users WHERE username = $1', [memberUsername]);
+    if (!userRows.length) return res.status(404).json({ error: 'not_found', message: `User '${memberUsername}' not found` });
+    await pool.query(
+      'INSERT INTO group_members (group_id, username) VALUES ($1, $2) ON CONFLICT (group_id, username) DO NOTHING',
+      [req.params.id, memberUsername]
+    );
+    await logAudit(getCurrentUsername(req), 'update', 'group', req.params.id, found[0].name, `Added member: ${memberUsername}`);
+    const { rows: members } = await pool.query('SELECT username FROM group_members WHERE group_id = $1 ORDER BY username', [req.params.id]);
+    res.status(201).json({ members: members.map(m => m.username) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.delete('/api/groups/:id/members/:username', requireSuperAdmin, async (req, res) => {
+  try {
+    const { rows: found } = await pool.query('SELECT id, name FROM groups WHERE id = $1', [req.params.id]);
+    if (!found.length) return res.status(404).json({ error: 'not_found', message: `Group '${req.params.id}' not found` });
+    await pool.query('DELETE FROM group_members WHERE group_id = $1 AND username = $2', [req.params.id, req.params.username]);
+    await logAudit(getCurrentUsername(req), 'update', 'group', req.params.id, found[0].name, `Removed member: ${req.params.username}`);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════
 // Folders — substitui a antiga feature "Favorites" (ver migração de dados em
 // server/db.js::runMigrations()). Cada usuário organiza comandos em pastas
 // PRÓPRIAS (nome livre) e um mesmo comando pode estar em várias pastas ao
@@ -1609,9 +1741,16 @@ app.get('/api/folders/all', async (req, res) => {
   try {
     const username = getCurrentUsername(req);
     const isAdmin = roleRank(await getCurrentRole(req)) >= 1;
+    // Privado por padrão + grupos (ver `group_members` em schema.sql —
+    // pedido do usuário: "os usuários dos grupos podem ver todos
+    // comandos [e pastas] de quem está no grupo").
     const visibilityClause = isAdmin ? '' : `
        WHERE f.username = $1 OR EXISTS (
          SELECT 1 FROM shares sh WHERE sh.grantor_username = f.username AND sh.grantee_username = $1 AND sh.share_folders = true
+       ) OR EXISTS (
+         SELECT 1 FROM group_members gm_me
+         JOIN group_members gm_owner ON gm_owner.group_id = gm_me.group_id
+         WHERE gm_me.username = $1 AND gm_owner.username = f.username
        )`;
     const { rows } = await pool.query(
       `SELECT f.id, f.username, f.name, f.sort_order, f.parent_id,
@@ -1982,11 +2121,19 @@ app.post('/api/folders/:id/copy', async (req, res) => {
     if (src.rows[0].username !== username) {
       const isAdmin = roleRank(await getCurrentRole(req)) >= 1;
       if (!isAdmin) {
-        const { rows: shareRows } = await pool.query(
-          'SELECT 1 FROM shares WHERE grantor_username = $1 AND grantee_username = $2 AND share_folders = true',
+        // + grupos (ver `group_members` em schema.sql), mesma regra de
+        // visibilidade de GET /api/folders/all.
+        const { rows: visRows } = await pool.query(
+          `SELECT 1 WHERE EXISTS (
+             SELECT 1 FROM shares WHERE grantor_username = $1 AND grantee_username = $2 AND share_folders = true
+           ) OR EXISTS (
+             SELECT 1 FROM group_members gm_me
+             JOIN group_members gm_owner ON gm_owner.group_id = gm_me.group_id
+             WHERE gm_me.username = $2 AND gm_owner.username = $1
+           )`,
           [src.rows[0].username, username]
         );
-        if (!shareRows.length) return res.status(404).json({ error: 'not_found', message: `Folder '${req.params.id}' not found` });
+        if (!visRows.length) return res.status(404).json({ error: 'not_found', message: `Folder '${req.params.id}' not found` });
       }
     }
     const baseName = src.rows[0].name;

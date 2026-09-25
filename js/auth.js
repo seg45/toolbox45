@@ -96,7 +96,7 @@ const ADMIN_ONLY_SETTINGS_GROUP_IDS = ['sysGroupDatabase', 'sysGroupSslCertifica
 // para que o super admin possa escolher o tema e cores default" —
 // visto por TODO mundo, inclusive antes do login, então mais
 // restrito que o resto de Settings -> System (admin-rank comum).
-const SUPER_ADMIN_ONLY_SETTINGS_GROUP_IDS = ['usersNavBtn', 'sysGroupAppearance'];
+const SUPER_ADMIN_ONLY_SETTINGS_GROUP_IDS = ['usersNavBtn', 'sysGroupAppearance', 'groupsNavBtn'];
 function applyAdminGating() {
   ADMIN_ONLY_SETTINGS_GROUP_IDS.forEach(id => {
     const el = document.getElementById(id);
