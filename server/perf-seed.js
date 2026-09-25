@@ -178,7 +178,7 @@ async function seed() {
       await client.query(
         `INSERT INTO users (username, password_hash, role, is_local, disabled, created_by, auth_provider, handle, approved_at)
          VALUES ($1, $2, 'user', 1, 0, 'perf-seed', 'local', $3, NOW())
-         ON CONFLICT (username) DO NOTHINF`,
+         ON CONFLICT (username) DO NOTHING`,
         [username, passwordHash, handle]
       );
       usernames.push(username);
