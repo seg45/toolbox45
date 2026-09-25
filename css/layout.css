@@ -524,6 +524,24 @@
 #addDDPanel .sb-row svg { color: var(--teal); flex-shrink: 0; }
 #addDDPanel .sb-row + .sb-row { border-top: 1px solid var(--bdr); margin-top: 4px; padding-top: 12px; }
 
+/* Menu de conta (clicar no nome no header, #hdrUserPanel) — pedido do
+   usuário: "coloque user account e user preferences em configurações do
+   usuário ao clicar no nome do login... utilize um layout igual muitos
+   sistemas usam". Mesmo tratamento de #addDDPanel logo acima (ícone
+   colorido + divisor fino entre itens, via .sb-row) — só o padding do
+   rótulo de role (#hdrUserRoleLine) ganha um divisor próprio embaixo, já
+   que ele não é um .sb-row (não é clicável). */
+#hdrUserPanel { min-width: 220px; padding: 6px; }
+#hdrUserPanel #hdrUserRoleLine { border-bottom: 1px solid var(--bdr); margin: 0 0 4px; padding: 4px 8px 10px; }
+#hdrUserPanel .sb-row { padding: 8px 10px; gap: 10px; font-size: 12.5px; color: var(--text); width: 100%; text-align: left; font-family: var(--sans); }
+#hdrUserPanel .sb-row svg { color: var(--teal); flex-shrink: 0; }
+#hdrUserPanel .sb-row + .sb-row { border-top: 1px solid var(--bdr); margin-top: 4px; padding-top: 12px; }
+/* Log out separado visualmente (vermelho discreto) — padrão comum em
+   menus de conta (GitHub/Slack/etc.) pra destacar a ação destrutiva/de
+   saída das demais opções de navegação. */
+#hdrUserPanel .hdr-user-logout, #hdrUserPanel .hdr-user-logout svg { color: var(--red); }
+#hdrUserPanel .hdr-user-logout:hover { background: var(--red-bg); }
+
 /* ─── CONTENT ─── */
 .content { padding: 14px; display: flex; flex-direction: column; gap: 16px; }
 

@@ -82,8 +82,54 @@ function switchSettingsPane(pane) {
   if (cancelBtn) cancelBtn.style.display = isPrefs ? '' : 'none';
   if (saveBtn) saveBtn.style.display = isPrefs ? '' : 'none';
 }
-function openSettingsModal() {
-  switchSettingsPane('account'); // sempre abre na primeira aba ("User account", pedido do usuário), independente de onde foi fechado da última vez
+// Pedido do usuário: "coloque user account e user preferences em
+// configurações do usuário ao clicar no nome do login... utilize um
+// layout igual muitos sistemas usam" — "User account"/"User preferences"
+// saíram da nav lateral deste modal (settings-nav-btn próprios) e viraram
+// itens do menu de conta no header (#hdrUserPanel, ver index.html), no
+// mesmo padrão de várias ferramentas (avatar/nome = conta pessoal, ícone
+// de engrenagem = configurações de sistema). O MODAL continua sendo um só
+// (reaproveita todo o CSS/estrutura já existente) — o que muda por
+// "escopo" é só QUAIS botões da nav lateral ficam visíveis:
+// - escopo "user" (aberto via #hdrUserPanel): só User account/User
+//   preferences aparecem na nav — Register/System/Database/Users somem,
+//   mesmo para quem é admin.
+// - escopo "system" (aberto via settingsBtn, o ícone de engrenagem, sem
+//   argumento): só Register/System/Database/Users aparecem (sujeitos ao
+//   gate de admin de sempre, ver applyAdminGating() em js/auth.js) — User
+//   account/User preferences somem daqui, já que agora só se acessam pelo
+//   menu de conta.
+const SETTINGS_USER_SCOPE_PANES = new Set(['account', 'prefs']);
+function _settingsApplyScope(pane) {
+  const isUserScope = SETTINGS_USER_SCOPE_PANES.has(pane);
+  document.querySelectorAll('.settings-nav-btn').forEach(b => {
+    const btnIsUserScope = SETTINGS_USER_SCOPE_PANES.has(b.dataset.pane);
+    b.style.display = (btnIsUserScope === isUserScope) ? '' : 'none';
+  });
+  // Reaplica o gate de admin por cima, só no escopo "system" — o loop
+  // acima acabou de pôr display:'' em TODOS os botões daquele escopo
+  // (inclusive registerNavBtn/usersNavBtn), então precisa rodar de novo
+  // agora para escondê-los de volta de quem não é admin/super_admin. NO
+  // escopo "user" isto teria o efeito CONTRÁRIO do desejado: um admin
+  // abrindo o menu de conta veria Register/Users reaparecerem por cima do
+  // display:'none' que acabamos de aplicar (applyAdminGating() só sabe
+  // mostrar/esconder pelo cargo, não pelo escopo do modal) — por isso fica
+  // de fora quando isUserScope.
+  if (!isUserScope && typeof applyAdminGating === 'function') applyAdminGating();
+  const title = document.getElementById('settingsModalTitle');
+  if (title) title.textContent = isUserScope ? 'Account settings' : 'Settings';
+}
+// `pane` opcional — omitido (botão de engrenagem no header) cai no escopo
+// "system" e abre em 'database' (única aba garantida com conteúdo visível
+// pra QUALQUER usuário, mesmo não-admin — Export/Import commands; "System"
+// em si fica vazia pra quem não é admin/super_admin, todos os seus grupos
+// são gated, ver ADMIN_ONLY_SETTINGS_GROUP_IDS/SUPER_ADMIN_ONLY_SETTINGS_
+// GROUP_IDS em js/auth.js). Passado explicitamente ('account'/'prefs') só
+// pelos itens novos do menu de conta, ver index.html.
+function openSettingsModal(pane) {
+  const resolvedPane = pane || 'database';
+  _settingsApplyScope(resolvedPane);
+  switchSettingsPane(resolvedPane);
   const s = loadSettings();
   const curTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
   syncThemeToggleUI(curTheme);
