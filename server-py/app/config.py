@@ -25,6 +25,31 @@ class Settings(BaseSettings):
     # este servico roda isolado ate a Fase 2 (validacao lado a lado).
     port: int = 8000
 
+    # OAuth (Google/Microsoft) -- mesmas variaveis de ambiente do Node (ver
+    # docker-compose.yml). Usadas por enquanto so por GET /api/auth/providers
+    # (fatia 2), pra refletir corretamente se estao configuradas -- os
+    # endpoints /api/auth/google*/microsoft* em si ainda nao existem neste
+    # backend (fatia 3 do roadmap). NAO reflete a config vinda do banco
+    # (system_settings, ajustavel pela UI em Settings -> System -> OAuth
+    # Integrations) -- isso fica pra quando a fatia 9 (Sistema) portar essa
+    # rota; enquanto isso, só a variavel de ambiente decide aqui, igual ao
+    # comportamento do Node antes de aplicar o override do banco.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = ""
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_redirect_uri: str = ""
+    microsoft_tenant_id: str = "common"
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret and self.google_redirect_uri)
+
+    @property
+    def microsoft_enabled(self) -> bool:
+        return bool(self.microsoft_client_id and self.microsoft_client_secret and self.microsoft_redirect_uri)
+
     def dsn(self) -> str:
         if self.database_url:
             return self.database_url
