@@ -509,7 +509,11 @@ handle de verdade (nunca mascarado).
 
 ### `POST /api/users` — **(admin)**
 Cria uma conta **local** — corpo `{ "username", "password" (≥4 caracteres), "role"? }`
-(`role` é `"user"` por padrão) → `201`. `409 conflict` se o username já existir.
+(`role` é `"user"` por padrão) → `201`. `400 validation_error` se `username` não for um
+e-mail válido (pedido do usuário: "remova o nome de usuário e trate tudo pelo email" —
+mesmo `EMAIL_RE`/normalização `.toLowerCase()` do auto-cadastro em `POST
+/api/auth/register`; contas locais já existentes sem formato de e-mail, como a `admin`
+semeada, não são migradas). `409 conflict` se o e-mail já existir.
 
 ### `PUT /api/users/:username` — **(admin)**
 Corpo parcial — qualquer combinação de `{ "role": "admin"|"user", "disabled": bool,

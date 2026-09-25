@@ -40,6 +40,11 @@ function _uaFormatDate(iso) {
 // Cache da última lista carregada — a busca (#userSearchInput) filtra em cima
 // dela sem precisar rebater na API a cada tecla (ver filterUserList()).
 let _uaAllUsers = [];
+// Pedido do usuário: "remova o nome de usuário e trate tudo pelo email" —
+// mesmo regex de EMAIL_RE em server/index.js (POST /api/auth/register),
+// só pra dar feedback imediato aqui antes do round-trip à API; a validação
+// que realmente vale é a do servidor.
+const _UA_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Conta local protegida (pedido do usuário: "Usuário admin terá o perfil
 // de Super Admin que não pode ser alterado por outro usuário") — mesmo
@@ -200,8 +205,8 @@ async function submitNewUser() {
   const password = (document.getElementById('newUserPasswordInput') || {}).value || '';
   const role = (document.getElementById('newUserRoleSelect') || {}).value || 'user';
   const err = document.getElementById('newUserErrorMsg');
-  if (!username.trim() || password.length < 4) {
-    if (err) { err.textContent = 'Username is required and password must be at least 4 characters.'; err.style.display = ''; }
+  if (!_UA_EMAIL_RE.test(username.trim()) || password.length < 4) {
+    if (err) { err.textContent = 'A valid e-mail address is required, and the password must be at least 4 characters.'; err.style.display = ''; }
     return;
   }
   try {

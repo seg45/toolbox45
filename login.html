@@ -110,8 +110,15 @@
        novo/ainda pendente — ver ?google=pending, tratado por
        _lpHandleGoogleRedirectResult()). -->
   <div id="lpLoginView">
+    <!-- Rótulo "Email" — pedido do usuário: "remova o nome de usuário e
+         trate tudo pelo email" (contas locais criadas por um super_admin em
+         Manage users agora exigem e-mail, ver POST /api/users em
+         server/index.js). O campo em si continua texto livre (não valida
+         formato de e-mail aqui) porque contas locais já existentes sem
+         formato de e-mail — a começar pela 'admin' semeada, conta raiz do
+         sistema — não foram migradas e continuam logando normalmente. -->
     <div class="set-group" style="margin-top:14px;">
-      <span class="set-label">Username</span>
+      <span class="set-label">Email</span>
       <input class="set-input" type="text" id="lpUsernameInput" autocomplete="username">
     </div>
     <div class="set-group">
@@ -127,10 +134,10 @@
        está pendente de aprovação pelo administrador. se o usuário tentar
        se cadastrar novamente com o mesmo email informar que o cadastro
        está pendente de aprovação." Usa e-mail como identificador (mesmo
-       padrão das contas Google, ver server/index.js: POST
-       /api/auth/register) — não é "Username" livre como no login local
-       acima (contas locais criadas por um super_admin em Manage users
-       continuam podendo ter qualquer username). -->
+       padrão das contas Google/Microsoft, ver server/index.js: POST
+       /api/auth/register) — mesmo padrão hoje das contas locais criadas
+       por um super_admin em Manage users (ver POST /api/users), que
+       também passaram a exigir e-mail. -->
   <div id="lpRegisterView" style="display:none;">
     <div class="set-hint login-error" id="lpRegisterErrorMsg" style="color:var(--red); display:none; margin-top:14px;"></div>
     <div class="set-group" style="margin-top:14px;">

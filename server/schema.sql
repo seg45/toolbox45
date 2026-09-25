@@ -618,8 +618,11 @@ CREATE TABLE IF NOT EXISTS users (
   -- na criação da conta, trocável depois em PUT /api/me/handle — ver
   -- server/index.js) usado para compartilhar pastas/comandos com outra
   -- pessoa (ver `shares` abaixo) e para identificar o dono de algo de OUTRO
-  -- usuário na interface, SEM nunca expor o username real (que é o e-mail,
-  -- no caso de contas Google) — pedido do usuário: "cada usuário deverá ter
+  -- usuário na interface, SEM nunca expor o username real (que é sempre
+  -- o e-mail, exceto em contas locais legadas criadas antes do pedido
+  -- "remova o nome de usuário e trate tudo pelo email" — ver POST
+  -- /api/users em server/index.js, e a 'admin' semeada, conta raiz do
+  -- sistema, nunca migrada) — pedido do usuário: "cada usuário deverá ter
   -- um nome de usuário no sistema... e o e-mail fique restrito". Único via
   -- idx_users_handle — criado só em runMigrations() (server/db.js), NUNCA
   -- aqui: numa instalação já existente `CREATE TABLE IF NOT EXISTS` acima é

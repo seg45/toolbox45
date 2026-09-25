@@ -3121,17 +3121,24 @@ app.get('/api/users', requireSuperAdmin, async (req, res) => {
   }
 });
 
+// Pedido do usuário: "remova o nome de usuário e trate tudo pelo email" —
+// contas locais criadas aqui por um super_admin agora exigem um e-mail
+// (mesmo EMAIL_RE e normalização .toLowerCase() já usados em POST
+// /api/auth/register, para bater com o padrão das contas Google/Microsoft
+// e do auto-cadastro local). Contas locais já existentes que não têm
+// formato de e-mail (a começar pela 'admin' semeada, que é a conta raiz do
+// sistema, não uma pessoa) NÃO são migradas — ficam como estão.
 app.post('/api/users', requireSuperAdmin, async (req, res) => {
   const { username, password, role } = req.body || {};
-  if (!username || typeof username !== 'string' || !username.trim()) {
-    return res.status(400).json({ error: 'validation_error', message: '"username" is required' });
+  if (!username || typeof username !== 'string' || !EMAIL_RE.test(username.trim())) {
+    return res.status(400).json({ error: 'validation_error', message: 'A valid e-mail address is required' });
   }
   if (!password || typeof password !== 'string' || password.length < 4) {
     return res.status(400).json({ error: 'validation_error', message: '"password" must be at least 4 characters' });
   }
   const roleVal = USER_ROLES.includes(role) ? role : 'user';
   try {
-    const trimmed = username.trim();
+    const trimmed = username.trim().toLowerCase();
     const { rows: existing } = await pool.query('SELECT username FROM users WHERE username = $1', [trimmed]);
     if (existing.length) return res.status(409).json({ error: 'conflict', message: `User '${trimmed}' already exists` });
     const handle = await generateUniqueHandle(pool, trimmed);
