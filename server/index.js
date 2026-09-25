@@ -1634,6 +1634,102 @@ app.delete('/api/groups/:id/members/:username', requireSuperAdmin, async (req, r
 });
 
 // ════════════════════════════════════════════════
+// LINKS — pedido do usuário: "crie ao lado do IP Calc uma estrutura igual
+// dos favoritos dos browsers, onde o usuário pode inserir links e nomear"
+// (ver #linksDD/#linksDDPanel em index.html e js/links.js). Puramente
+// PESSOAL — todas as rotas abaixo são escopadas por getCurrentUsername(req)
+// sem exceção nem para admin (ver `links` em schema.sql), diferente de
+// commands/folders, que são recursos organizacionais compartilháveis.
+// ════════════════════════════════════════════════
+// Normaliza a URL digitada: aceita domínio "nu" (ex.: "google.com", sem
+// esquema) igual um favoritos de navegador de verdade aceitaria — prefixa
+// https:// quando falta http(s)://, depois valida com o construtor global
+// `URL` do Node (lança se o resultado ainda assim não for uma URL válida).
+// Retorna null quando não dá pra normalizar (string vazia ou inválida).
+function normalizeLinkUrl(raw) {
+  let url = String(raw || '').trim();
+  if (!url) return null;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  try {
+    // eslint-disable-next-line no-new
+    new URL(url);
+  } catch (e) {
+    return null;
+  }
+  return url;
+}
+
+app.get('/api/links', async (req, res) => {
+  try {
+    const username = getCurrentUsername(req);
+    const { rows } = await pool.query(
+      'SELECT id, name, url, created_at FROM links WHERE username = $1 ORDER BY created_at ASC, id ASC',
+      [username]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.post('/api/links', async (req, res) => {
+  try {
+    const username = getCurrentUsername(req);
+    const name = (req.body && typeof req.body.name === 'string') ? req.body.name.trim() : '';
+    const url = normalizeLinkUrl(req.body && req.body.url);
+    if (!name) return res.status(400).json({ error: 'validation_error', message: '"name" is required' });
+    if (!url) return res.status(400).json({ error: 'validation_error', message: 'A valid URL is required' });
+    const { rows } = await pool.query(
+      'INSERT INTO links (username, name, url) VALUES ($1, $2, $3) RETURNING id, name, url, created_at',
+      [username, name, url]
+    );
+    await logAudit(username, 'create', 'link', String(rows[0].id), name);
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.put('/api/links/:id', async (req, res) => {
+  try {
+    const username = getCurrentUsername(req);
+    // 404 (não 403) quando o link é de outra pessoa — mesma convenção do
+    // resto da API: não vaza se o id existe (ver GET /api/commands/:id).
+    const { rows: found } = await pool.query('SELECT id FROM links WHERE id = $1 AND username = $2', [req.params.id, username]);
+    if (!found.length) return res.status(404).json({ error: 'not_found', message: `Link '${req.params.id}' not found` });
+    const name = (req.body && typeof req.body.name === 'string') ? req.body.name.trim() : '';
+    const url = normalizeLinkUrl(req.body && req.body.url);
+    if (!name) return res.status(400).json({ error: 'validation_error', message: '"name" is required' });
+    if (!url) return res.status(400).json({ error: 'validation_error', message: 'A valid URL is required' });
+    const { rows } = await pool.query(
+      'UPDATE links SET name = $1, url = $2 WHERE id = $3 RETURNING id, name, url, created_at',
+      [name, url, req.params.id]
+    );
+    await logAudit(username, 'update', 'link', req.params.id, name);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+app.delete('/api/links/:id', async (req, res) => {
+  try {
+    const username = getCurrentUsername(req);
+    const { rows: found } = await pool.query('SELECT id, name FROM links WHERE id = $1 AND username = $2', [req.params.id, username]);
+    if (!found.length) return res.status(404).json({ error: 'not_found', message: `Link '${req.params.id}' not found` });
+    await pool.query('DELETE FROM links WHERE id = $1', [req.params.id]);
+    await logAudit(username, 'delete', 'link', req.params.id, found[0].name);
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'internal_error', message: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════
 // Folders — substitui a antiga feature "Favorites" (ver migração de dados em
 // server/db.js::runMigrations()). Cada usuário organiza comandos em pastas
 // PRÓPRIAS (nome livre) e um mesmo comando pode estar em várias pastas ao

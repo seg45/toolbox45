@@ -97,6 +97,29 @@
        nova página inicial da aplicação (ver o gate no topo do <head> deste
        arquivo e js/login.js) — de lá dá pra entrar com outra credencial
        local ou via Windows authentication. -->
+  <!-- Botão "Links" — pedido do usuário: "crie ao lado do IP Calc uma
+       estrutura igual dos favoritos dos browsers, onde o usuário pode
+       inserir links e nomear" — ao lado do IP Calc (ver .ipc-header-btn
+       mais abaixo), mesmas cores dele. Dropdown estilo "favoritos de
+       navegador" — puramente PESSOAL, sem conceito de compartilhamento/
+       admin aqui (ver `links` em schema.sql, /api/links em
+       server/index.js e js/links.js). Só carrega a lista na PRIMEIRA vez
+       que abre (loadLinksIfNeeded()), não no carregamento da página —
+       muita gente pode nunca usar isso. -->
+  <div class="dd" id="linksDD">
+    <button type="button" class="ipc-header-btn" id="linksOpenBtn" onclick="toggleDropdown('linksDD'); loadLinksIfNeeded();" title="Links">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <span>Links</span>
+    </button>
+    <div class="dd-panel" id="linksDDPanel" style="left:auto; right:0; min-width:240px; max-width:320px;">
+      <div class="sb-row lk-add-row" onclick="closeAllDropdowns(); openLinkEditor('create')">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span>Add link</span>
+      </div>
+      <div id="linksDDList"></div>
+      <div class="set-hint" id="linksDDEmpty" style="display:none; padding:6px 8px 2px;">No links yet.</div>
+    </div>
+  </div>
   <!-- Botão IPCalc — pedido do usuário: calculadora de rede (IP+máscara,
        split de sub-rede, referência RFC 1918), num botão ao lado do menu de
        conta, abrindo um modal (ver #ipCalcOverlay mais abaixo e
@@ -2691,6 +2714,34 @@
   </div>
 </div>
 
+<!-- ══ "Add/Edit link" — dropdown "Links" no header (favoritos pessoais,
+     ver #linksDD/#linksDDPanel acima e js/links.js). Mesmo modal serve pra
+     criar e editar (openLinkEditor('create') / openLinkEditor('edit', id)),
+     mesmo padrão do editor de comandos (openCommandEditor). ══ -->
+<div class="modal-overlay" id="linkEditorOverlay">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="modal-title" id="linkEditorTitle">Add link</span>
+      <button class="modal-close" onclick="closeLinkEditor()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="set-group">
+        <span class="set-label">Name</span>
+        <input class="set-input" type="text" id="linkNameInput" autocomplete="off" placeholder="e.g. Internal wiki" maxlength="120">
+      </div>
+      <div class="set-group">
+        <span class="set-label">URL</span>
+        <input class="set-input" type="text" id="linkUrlInput" autocomplete="off" placeholder="e.g. https://wiki.seg45.com.br">
+      </div>
+      <div class="set-hint" id="linkEditorErrorMsg" style="color:var(--red); display:none;"></div>
+    </div>
+    <div class="modal-foot" style="justify-content:flex-end;">
+      <button class="btn" onclick="closeLinkEditor()">Cancel</button>
+      <button class="btn btn-primary" id="linkEditorSubmitBtn" onclick="submitLinkEditor()">Add</button>
+    </div>
+  </div>
+</div>
+
 <script src="js/user-sync.js"></script>
 <script src="js/theme.js"></script>
 <script src="js/state.js"></script>
@@ -2703,6 +2754,7 @@
 <script src="js/terminal-renderer.js"></script>
 <script src="js/net-utils.js"></script>
 <script src="js/ipcalc.js"></script>
+<script src="js/links.js"></script>
 <script src="js/query-bar.js"></script>
 <script src="js/api-client.js"></script>
 <script src="js/csv-export.js"></script>

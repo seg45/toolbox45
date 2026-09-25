@@ -1720,3 +1720,27 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
 .ipc-header-btn:hover { filter: brightness(1.08); }
 [data-theme="light"] .ipc-header-btn { background: var(--surf); }
 [data-theme="light"] .ipc-header-btn:hover { background: var(--surf); }
+
+/* Dropdown "Links" do header (#linksDD/#linksDDPanel em index.html) —
+   pedido do usuário: "crie ao lado do IP Calc uma estrutura igual dos
+   favoritos dos browsers, onde o usuário pode inserir links e nomear".
+   O botão em si já é .ipc-header-btn (mesmas cores do IP Calc ao lado,
+   ver acima); aqui só o painel/linhas, reaproveitando .dd-panel/.sb-row
+   (mesmo padrão de #addDDPanel/#hdrUserPanel, ver layout.css) em vez de
+   inventar um componente novo. */
+#linksDDPanel { min-width: 240px; max-width: 320px; padding: 6px; }
+#linksDDPanel .sb-row svg { color: var(--teal); flex-shrink: 0; }
+/* "+ Add link" fica destacado no topo, separado da lista por um divisor —
+   mesma técnica de #hdrUserPanel .sb-row + .sb-row (border-top na segunda
+   linha em diante), só que aqui é sempre a PRIMEIRA linha que carrega a
+   borda (a lista de baixo é montada dinamicamente por js/links.js, então
+   não dá pra contar com "+ .sb-row" genérico sem também separar os
+   próprios links um do outro). */
+#linksDDPanel .lk-add-row { border-bottom: 1px solid var(--bdr); margin-bottom: 4px; padding-bottom: 10px; }
+.lk-row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Editar/excluir um link só aparecem no hover da própria linha — mesmo
+   padrão de .sec-title:hover .sec-folder-actions (ações de uma pasta no
+   cabeçalho da seção), reaproveitando o mesmo botão .sec-folder-btn
+   (16x16, transparente, --surf3 no hover) em vez de um novo estilo. */
+.lk-row-actions { display: none; align-items: center; gap: 2px; flex-shrink: 0; margin-left: auto; }
+.lk-row:hover .lk-row-actions { display: flex; }

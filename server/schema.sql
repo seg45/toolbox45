@@ -709,6 +709,26 @@ CREATE TABLE IF NOT EXISTS group_members (
 );
 CREATE INDEX IF NOT EXISTS idx_group_members_username ON group_members(username);
 
+-- ════════════════════════════════════════════════
+-- LINKS — pedido do usuário: "crie ao lado do IP Calc uma estrutura igual
+-- dos favoritos dos browsers, onde o usuário pode inserir links e nomear"
+-- (ver #linksDD/#linksDDPanel em index.html, js/links.js e /api/links em
+-- server/index.js). Puramente PESSOAL — cada linha pertence a UM usuário
+-- (`username`), sem qualquer conceito de compartilhamento/grupo/admin
+-- aqui, igual a um favoritos de navegador de verdade (bem diferente de
+-- `commands`/`folders`, que são recursos organizacionais compartilháveis
+-- via `shares`/`groups`). GET/POST/PUT/DELETE /api/links sempre escopados
+-- por getCurrentUsername(req), sem exceção nem para admin.
+-- ════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS links (
+  id         SERIAL PRIMARY KEY,
+  username   TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+  name       TEXT NOT NULL,
+  url        TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_links_username ON links(username);
+
 -- Sessões de login local — o cookie `tb45_session` guarda só o token (chave
 -- primária desta tabela); nenhum dado sensível viaja no cookie em si. Uma
 -- sessão local tem prioridade sobre a identificação NTLM enquanto for válida

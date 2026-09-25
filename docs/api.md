@@ -390,6 +390,34 @@ casos).
 
 ---
 
+## Links (`/api/links`)
+
+Favoritos pessoais — pedido do usuário: "crie ao lado do IP Calc uma estrutura igual
+dos favoritos dos browsers, onde o usuário pode inserir links e nomear". Puramente
+PESSOAL: cada usuário só vê/gerencia os PRÓPRIOS links, sem nenhum conceito de
+compartilhamento/grupo/admin aqui (diferente de comandos/pastas) — igual a um
+favoritos de navegador de verdade. Ver `links` em `server/schema.sql` e o dropdown
+"Links" no header (`js/links.js`).
+
+### `GET /api/links`
+Lista os links do usuário atual, em ordem de criação. `200` `[{ "id": 5, "name": "Wiki
+interna", "url": "https://wiki.seg45.com.br", "created_at": "..." }, ...]`.
+
+### `POST /api/links`
+Cria um link — corpo `{ "name", "url" }` → `201` com o objeto criado. `url` aceita um
+domínio "nu" sem esquema (ex.: `google.com`) — `https://` é prefixado automaticamente
+antes de validar. `400 validation_error` se `name` estiver vazio ou `url` não for uma
+URL válida mesmo depois de normalizada.
+
+### `PUT /api/links/:id`
+Corpo `{ "name", "url" }` (mesmas regras do POST). `404 not_found` se o id não existir
+ou pertencer a outro usuário (não distinguimos os dois casos).
+
+### `DELETE /api/links/:id`
+`204`. `404 not_found` nas mesmas condições do PUT.
+
+---
+
 ## Login local e usuários
 
 ### `POST /api/auth/login`
