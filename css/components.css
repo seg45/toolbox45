@@ -1728,13 +1728,27 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
    ver acima); aqui só o painel/linhas, reaproveitando .dd-panel/.sb-row
    (mesmo padrão de #addDDPanel/#hdrUserPanel, ver layout.css) em vez de
    inventar um componente novo. */
-/* Pedido do usuário: "coloque o botão do link mais pra frente" — o botão
-   já era o primeiro item depois da logo (só com o gap:10px padrão do
-   .hdr, ver layout.css), mas ficava colado demais nela; margin-left extra
-   aqui afasta o botão da logo sem mudar a ordem dos elementos nem empurrar
-   IP Calc/conta/engrenagem (que continuam presos à direita por
-   .hdr-gap, ver index.html). */
-#linksDD { margin-left: 18px; }
+/* Pedido do usuário: "coloque o botão do link mais pra frente", depois
+   refinado com screenshot + linha vermelha: "coloque na mesma direção de
+   parameter" — ou seja, alinhar o botão com o início da área de conteúdo
+   principal (mesma posição horizontal de onde "Parameter"/.content-toolbar
+   começa, à direita da sidebar), não só "mais espaço depois da logo"
+   (tentativa anterior, margin-left:18px, removida).
+   position:absolute tira o botão do fluxo flex do .hdr (que dependeria da
+   largura variável da logo — logo customizado em Settings pode ter
+   proporção diferente da default, ver comentário da .hdr-logo em
+   index.html) e ancora via left: var(--sidebar-w) (mesma variável usada
+   por .sb-divider-toggle em layout.css) + 14px, o mesmo padding-left do
+   .content-toolbar logo abaixo (ver layout.css) — resultado: o botão fica
+   sempre alinhado com "Parameter", mesmo que a largura da sidebar ou da
+   logo mude. .hdr tem position:sticky (containing block válido p/
+   position:absolute) e os demais itens do header (IP Calc/conta/
+   engrenagem) continuam presos à direita por .hdr-gap normalmente, já que
+   .linksDD sair do fluxo não afeta o flex deles. */
+#linksDD {
+  position: absolute; left: calc(var(--sidebar-w) + 14px); top: 50%;
+  transform: translateY(-50%);
+}
 #linksDDPanel { min-width: 240px; max-width: 320px; padding: 6px; }
 #linksDDPanel .sb-row svg { color: var(--teal); flex-shrink: 0; }
 /* "+ Add link" fica destacado no topo, separado da lista por um divisor —
