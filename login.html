@@ -181,6 +181,18 @@
   </button>
 </div>
 
+<!-- Rodapé "Developed by SEG45" — pedido do usuário: "na página de login
+     coloque no rodape a informação Developed by SEG45", mesmo crédito já
+     existente na sidebar do app principal (.sb-credit, ver index.html) —
+     aqui como irmão de .login-card (não dentro dela), centralizado
+     ABAIXO do card (ver .login-body/.login-credit em css/login.css).
+     Reaproveita .sb-credit-txt (css/components.css, já carregado nesta
+     página) pro texto/cor — mesma cor/contraste claro/escuro do crédito
+     da sidebar, sem duplicar aquela regra aqui. -->
+<a class="login-credit" href="https://seg45.com.br" target="_blank" rel="noopener noreferrer">
+  <span class="sb-credit-txt">Developed by SEG45</span>
+</a>
+
 <script src="js/theme.js"></script>
 <!-- js/theme.js acima é carregado só pela cor de destaque (accent —
      applyAccentColor(), independente de tema, ver js/theme.js) — mas seu

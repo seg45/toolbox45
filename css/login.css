@@ -8,13 +8,31 @@
 .login-body {
   margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
   font-family: var(--sans);
-  display: flex; align-items: center; justify-content: center; padding: 24px;
+  /* flex-direction: column -- pedido do usuario: "na pagina de login
+     coloque no rodape a informacao Developed by SEG45" -- .login-body so
+     tinha UM filho (.login-card) antes disto, entao a direcao row
+     (default) nunca importava; com o credito como segundo filho (irmao
+     de .login-card, ver login.html), column e o que empilha os dois
+     verticalmente (card em cima, credito embaixo) mantendo os dois
+     centralizados na tela (align-items:center agora centraliza no eixo
+     horizontal; justify-content:center centraliza o BLOCO dos dois no
+     eixo vertical). */
+  display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px;
 }
 .login-card {
   width: min(360px, 100%); background: var(--surf); border: 1px solid var(--bdr);
   border-radius: 12px; padding: 28px 26px 24px; box-shadow: 0 20px 60px rgba(0,0,0,.35);
   display: flex; flex-direction: column;
 }
+/* Rodape "Developed by SEG45" -- ver comentario completo em login.html.
+   .sb-credit-txt (css/components.css) cuida do texto/cor (mesmo tom da
+   sidebar, com contraste correto em cada tema); esta classe so cuida do
+   espacamento/opacidade do LINK em si, ja que o layout aqui (centralizado
+   ABAIXO do card) nao tem nada em comum com o .sb-credit da sidebar
+   (borda superior, margin-top:auto empurrando pro fundo de um container
+   com altura fixa). */
+.login-credit { margin-top: 16px; text-decoration: none; opacity: .85; transition: opacity .12s; }
+.login-credit:hover { opacity: 1; }
 /* Logo oficial (mesmo arquivo .png do header, ver .hdr-logo/.hdr-logo-img
    em css/layout.css) — regra duplicada aqui (em vez de carregar
    layout.css inteiro, que traz a grade do app/sidebar que esta página não
