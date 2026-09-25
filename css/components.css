@@ -21,6 +21,15 @@
 .modal-close:hover { color: var(--text); background: var(--surf2); }
 .modal-body { padding: 16px; display: flex; flex-direction: column; gap: 15px; }
 .set-group { display: flex; flex-direction: column; gap: 6px; }
+/* Pedido do usuário: "deixe um pequeno espaço entre as configurações" —
+   Settings -> System (Logo/Default theme & colors/SSL Certificate/OAuth/
+   API access) tinha cada seção colada na próxima, sem respiro entre elas
+   (só o gap:6px acima, que é o espaço INTERNO de cada .set-group, entre
+   o label e o botão/campo). Aplica só entre irmãos diretos de
+   .settings-pane — não altera o espaçamento das outras abas do modal
+   Settings/dos modais internos, que já usam seu próprio ritmo (ex.:
+   "#settingsOverlay .set-group { gap: 4px; }" mais abaixo). */
+.settings-pane > .set-group + .set-group { margin-top: 14px; }
 .set-label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); }
 /* Rótulo + campo na mesma linha (em vez de empilhados) — usado no modal de
    Configurações para reduzir a altura total (ex.: "Home page [Command
