@@ -5,10 +5,14 @@
 // opção para logo em dark e light mode". Duas variantes independentes
 // (GET/PUT/DELETE /api/system/logo em server/index.js, com um parâmetro
 // `theme`: 'light'|'dark'): a CLARA substitui o logo do header em tema
-// claro E o da tela de login (que é sempre clara — não tem preferência
-// pessoal, ver comentário em login.html); a ESCURA só substitui o logo do
-// header em tema escuro. Definir uma não exige nem apaga a outra — sem a
-// escura definida, o header em dark mode cai no default estático
+// claro E o da tela de login em tema claro; a ESCURA substitui o logo do
+// header em tema escuro E o da tela de login em tema escuro — bug
+// relatado: "o logo no modo dark não está sendo aplicado na tela de
+// login" (a tela de login SEGUE o tema padrão do admin, dark ou claro —
+// ver _appearanceBoot() em js/appearance-settings.js — nunca foi "sempre
+// clara" como um comentário antigo aqui dizia). Definir uma variante não
+// exige nem apaga a outra — sem a escura definida, tanto o header quanto
+// o login em dark mode caem no default estático
 // (img/logo-toolbox45-white.png). O rodapé "Developed by SEG45" é só
 // texto, sem imagem — não é tocado por nada aqui.
 //
@@ -22,13 +26,15 @@
 // existe — em login.html elas simplesmente nunca são invocadas.
 // ════════════════════════════════════════════════
 
-// Defaults originais (2 arquivos — claro/escuro no header, 1 arquivo na
-// tela de login, que sempre usa a versão "clara") — usados tanto pra
-// aplicar o padrão quando não há logo customizado quanto pro Reset.
+// Defaults originais (2 arquivos — claro/escuro — reaproveitados tanto no
+// header quanto na tela de login, já que os dois agora trocam de variante
+// pelo mesmo [data-theme]) — usados tanto pra aplicar o padrão quando não
+// há logo customizado quanto pro Reset.
 const LOGO_DEFAULT_SRC = {
   headerDark: 'img/logo-toolbox45-white.png?v=2',
   headerLight: 'img/logo-toolbox45.png?v=2',
-  login: 'img/logo-toolbox45.png?v=2',
+  loginDark: 'img/logo-toolbox45-white.png?v=2',
+  loginLight: 'img/logo-toolbox45.png?v=2',
 };
 
 // Pedido do usuário: "ao ficar atualizando a tela a imagem default fica
@@ -53,17 +59,21 @@ function _logoWriteCache(theme, dataUrl) {
 
 // Aplica as duas variantes (customizada, data URL, ou null pra voltar ao
 // padrão) em TODOS os <img> de logo presentes na página atual —
-// index.html tem .hdr-logo-img (2, claro/escuro), login.html tem
-// .login-logo-img (1, sempre a variante clara); querySelector simplesmente
-// não acha nada na página que não tiver o elemento, então esta função
-// funciona sem checar qual página é.
+// index.html tem .hdr-logo-img.for-dark/.for-light, login.html tem
+// .login-logo-img.for-dark/.for-light (mesmo mecanismo nas duas páginas
+// desde o fix de "o logo no modo dark não está sendo aplicado na tela de
+// login" — antes login.html só tinha uma variante clara fixa);
+// querySelector simplesmente não acha nada na página que não tiver o
+// elemento, então esta função funciona sem checar qual página é.
 function _logoApplyToDom(lightUrl, darkUrl) {
   const headerDark = document.querySelector('.hdr-logo-img.for-dark');
   const headerLight = document.querySelector('.hdr-logo-img.for-light');
-  const login = document.querySelector('.login-logo-img');
+  const loginDark = document.querySelector('.login-logo-img.for-dark');
+  const loginLight = document.querySelector('.login-logo-img.for-light');
   if (headerDark) headerDark.src = darkUrl || LOGO_DEFAULT_SRC.headerDark;
   if (headerLight) headerLight.src = lightUrl || LOGO_DEFAULT_SRC.headerLight;
-  if (login) login.src = lightUrl || LOGO_DEFAULT_SRC.login;
+  if (loginDark) loginDark.src = darkUrl || LOGO_DEFAULT_SRC.loginDark;
+  if (loginLight) loginLight.src = lightUrl || LOGO_DEFAULT_SRC.loginLight;
 }
 
 // Estado em memória do logo customizado atual (null = nenhum, usa o
@@ -257,7 +267,7 @@ async function saveLogoSettings(theme) {
 function deleteLogoSettings(theme) {
   const label = theme === 'dark' ? 'dark' : 'light';
   openConfirmModal(
-    `Reset the ${label} theme logo to the default Toolbox45 logo? ${theme === 'dark' ? 'This only affects the app header in dark theme.' : 'This affects the app header in light theme and the login page.'}`,
+    `Reset the ${label} theme logo to the default Toolbox45 logo? This affects the app header and the login page, whenever ${label} theme is active.`,
     { danger: true }
   ).then(async ok => {
     if (!ok) return;

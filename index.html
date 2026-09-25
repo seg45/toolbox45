@@ -65,20 +65,23 @@
       // carregado nesse ponto do parse, por isso os literais duplicados).
       // Pedido do usuário: "incluir opção para logo em dark e light mode"
       // — duas chaves agora (antes era uma só aplicada em TODOS os <img>);
-      // cada uma só no(s) elemento(s) certo(s) — a clara também vale pro
-      // .login-logo-img (login.html tem o mesmo script, variante só clara,
-      // já que a tela de login é sempre clara).
+      // cada uma só no(s) elemento(s) certo(s). Bug relatado depois: "o
+      // logo no modo dark não está sendo aplicado na tela de login" — a
+      // tela de login SEGUE o tema padrão do admin (não é sempre clara
+      // como um comentário antigo aqui dizia), então login.html agora tem
+      // .login-logo-img.for-dark/.for-light igual ao header, e cada cache
+      // vai pros dois lugares do tema certo.
       (function () {
         try {
           var light = localStorage.getItem('cpa-logo-cache-light');
           var dark = localStorage.getItem('cpa-logo-cache-dark');
           if (light) {
-            document.querySelectorAll('.hdr-logo-img.for-light, .login-logo-img').forEach(function (img) {
+            document.querySelectorAll('.hdr-logo-img.for-light, .login-logo-img.for-light').forEach(function (img) {
               img.src = light;
             });
           }
           if (dark) {
-            document.querySelectorAll('.hdr-logo-img.for-dark').forEach(function (img) {
+            document.querySelectorAll('.hdr-logo-img.for-dark, .login-logo-img.for-dark').forEach(function (img) {
               img.src = dark;
             });
           }
@@ -1438,7 +1441,7 @@
            duplicar cada função. -->
       <div class="set-group">
         <span class="set-label">Light theme logo</span>
-        <span class="set-hint">Used in the app header when light theme is active, and on the login page (always shown in light theme).</span>
+        <span class="set-hint">Used in the app header and on the login page whenever light theme is active (the login page follows the default theme set below).</span>
         <div class="audit-log-wrap" id="logoCurrentWrapLight" style="padding:10px 12px;display:flex;align-items:center;gap:12px;">
           <img id="logoCurrentPreviewLight" alt="Current light theme logo" style="width:48px;height:48px;object-fit:contain;">
           <div id="logoCurrentInfoLight" style="font-size:12.5px;line-height:1.6;color:var(--muted);">Loading…</div>
@@ -1459,7 +1462,7 @@
 
       <div class="set-group">
         <span class="set-label">Dark theme logo</span>
-        <span class="set-hint">Used in the app header when dark theme is active. Falls back to the default white Toolbox45 mark if not set — the login page never uses this (it's always light theme).</span>
+        <span class="set-hint">Used in the app header and on the login page whenever dark theme is active. Falls back to the default white Toolbox45 mark if not set.</span>
         <div class="audit-log-wrap" id="logoCurrentWrapDark" style="padding:10px 12px;display:flex;align-items:center;gap:12px;">
           <img id="logoCurrentPreviewDark" alt="Current dark theme logo" style="width:48px;height:48px;object-fit:contain;">
           <div id="logoCurrentInfoDark" style="font-size:12.5px;line-height:1.6;color:var(--muted);">Loading…</div>

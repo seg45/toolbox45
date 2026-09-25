@@ -52,11 +52,18 @@
 <div class="login-card">
   <!-- Logo oficial do app (mesmo arquivo do header, ver .hdr-logo em
        index.html/css/layout.css) — mark + "Toolbox45" já achatados em uma
-       única imagem (ver comentário completo em index.html); tela de login
-       sempre clara, então só a variante teal (img/logo-toolbox45.png) é
-       usada aqui. -->
+       única imagem (ver comentário completo em index.html). Bug relatado
+       pelo usuário: "o logo no modo dark não está sendo aplicado na tela
+       de login" — a tela de login SEGUE o tema padrão do admin (dark/
+       light, ver _appearanceBoot() em js/appearance-settings.js), não é
+       sempre clara como um comentário antigo aqui dizia; agora tem as
+       duas variantes, claro/escuro, trocadas por [data-theme] — mesmo
+       mecanismo do header (ver .hdr-logo-img/.for-dark/.for-light em
+       css/layout.css, espelhado aqui em css/login.css já que esta página
+       não carrega layout.css). -->
   <div class="login-brand">
-    <img class="login-logo-img" src="img/logo-toolbox45.png?v=2" alt="Toolbox45">
+    <img class="login-logo-img for-dark" src="img/logo-toolbox45-white.png?v=2" alt="Toolbox45">
+    <img class="login-logo-img for-light" src="img/logo-toolbox45.png?v=2" alt="Toolbox45">
     <script>
       // Pedido do usuário: "ao ficar atualizando a tela a imagem default
       // fica aparecendo rapidamente antes de exibir a imagem atual" — o(s)
@@ -68,22 +75,23 @@
       // SINCRONAMENTE aqui, antes de qualquer fetch. Chaves iguais a
       // LOGO_CACHE_KEY em js/logo-settings.js (esse arquivo ainda não foi
       // carregado nesse ponto do parse, por isso os literais duplicados).
-      // Pedido do usuário: "incluir opção para logo em dark e light mode"
-      // — só a variante CLARA importa aqui (esta página é sempre clara,
-      // não tem .hdr-logo-img.for-dark), mas mantém o mesmo script de
-      // index.html pra não divergir (o querySelectorAll da escura
-      // simplesmente não acha nada nesta página).
+      // Bug relatado: "o logo no modo dark não está sendo aplicado na
+      // tela de login" — antes só a variante clara era aplicada aqui
+      // (.login-logo-img sem .for-dark/.for-light); agora, igual ao
+      // header, cada cache vai só no(s) elemento(s) do tema certo —
+      // [data-theme] (já setado no <head>, ver topo do arquivo) decide
+      // qual <img> aparece (ver css/login.css).
       (function () {
         try {
           var light = localStorage.getItem('cpa-logo-cache-light');
           var dark = localStorage.getItem('cpa-logo-cache-dark');
           if (light) {
-            document.querySelectorAll('.hdr-logo-img.for-light, .login-logo-img').forEach(function (img) {
+            document.querySelectorAll('.hdr-logo-img.for-light, .login-logo-img.for-light').forEach(function (img) {
               img.src = light;
             });
           }
           if (dark) {
-            document.querySelectorAll('.hdr-logo-img.for-dark').forEach(function (img) {
+            document.querySelectorAll('.hdr-logo-img.for-dark, .login-logo-img.for-dark').forEach(function (img) {
               img.src = dark;
             });
           }
