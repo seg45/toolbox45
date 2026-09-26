@@ -32,7 +32,15 @@ sair da pasta-mae, ver get_root_ancestor_id() em app/folders.py),
 copiar/exportar/importar pasta inteira (recursivo) e as notas dentro de
 pasta (reaproveita sanitize_note_html(), ja portado na fatia 4).
 
-As demais ~63 rotas do server/index.js ainda nao existem aqui -- ver
+Fatia 6 (links + compartilhamento + grupos): GET/POST/PUT/DELETE
+/api/links* (app/routers/links.py, self-service, sem admin bypass),
+GET/POST/DELETE /api/shares (app/routers/shares.py, direcional por
+*handle*, dois toggles independentes share_folders/share_commands via
+UPSERT) e GET/POST/PUT/DELETE /api/groups* (app/routers/groups.py, 6
+rotas, todas atras de require_super_admin -- grupos sao simetricos e
+tudo-ou-nada, membership N:N via group_members).
+
+As demais ~44 rotas do server/index.js ainda nao existem aqui -- ver
 roadmap no plano de migracao (Project toolbox45).
 """
 import logging
@@ -47,9 +55,12 @@ from . import db, oauth
 from .routers import auth as auth_router
 from .routers import commands as commands_router
 from .routers import folders as folders_router
+from .routers import groups as groups_router
+from .routers import links as links_router
 from .routers import me as me_router
 from .routers import notes as notes_router
 from .routers import oauth as oauth_router
+from .routers import shares as shares_router
 
 logging.basicConfig(level=logging.INFO)
 
@@ -69,7 +80,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await db.close_db()
 
 
-app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase5", lifespan=lifespan)
+app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase6", lifespan=lifespan)
 
 
 # ════════════════════════════════════════════════
@@ -109,6 +120,9 @@ app.include_router(me_router.router)
 app.include_router(commands_router.router)
 app.include_router(folders_router.router)
 app.include_router(notes_router.router)
+app.include_router(links_router.router)
+app.include_router(shares_router.router)
+app.include_router(groups_router.router)
 
 
 @app.get("/api/health")
