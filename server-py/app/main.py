@@ -57,8 +57,25 @@ Vendor->System->Version, vinculos N:N Version<->Environment e
 Environment<->Topic com substituicao completa (sem audit log, unica
 excecao do dominio inteiro).
 
-As demais ~13 rotas do server/index.js ainda nao existem aqui -- ver
-roadmap no plano de migracao (Project toolbox45).
+Fatia 9 (sistema): GET (publico, sem auth) + PUT/DELETE (require_admin)
+/api/system/logo (temas claro/escuro independentes, ver
+app/image_dimensions.py pro parser de PNG/JPEG/WEBP sem lib externa); GET
+(publico) + PUT (require_super_admin, mais restrito que os irmaos desta
+fatia -- afeta a aparencia global vista ate antes do login) /api/system/
+appearance; GET/PUT /api/global-settings e /api/user-data (require_user,
+qualquer usuario autenticado); GET/PUT/DELETE /api/system/oauth[/:provider]
+(require_admin, ver app/routers/system.py); GET/POST/DELETE /api/api-keys*
+(require_admin, ver app/routers/api_keys.py, reaproveita hash_api_key()/
+generate_api_key() de app/deps.py ja usados desde a fatia 4); GET/POST/
+DELETE /api/system/ssl-certificate + bootstrap TLS no boot (ver
+app/tls.py -- gera certificado autoassinado via subprocess openssl, MESMO
+comando do Node, so checa EXISTENCIA de arquivo pra decidir se gera, nunca
+validade/conteudo -- o backup/renovacao periodica fica pra fatia 10).
+Modelo de autorizacao desta fatia e NAO uniforme (primeira vez na
+migracao) -- ver tabela de rotas no plano de migracao (Project toolbox45).
+
+As demais rotas do server/index.js ainda nao existem aqui -- ver roadmap
+no plano de migracao (Project toolbox45).
 """
 import logging
 from contextlib import asynccontextmanager
@@ -68,7 +85,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from . import db, oauth
+from . import db, oauth, tls
+from .routers import api_keys as api_keys_router
 from .routers import auth as auth_router
 from .routers import catalog as catalog_router
 from .routers import commands as commands_router
@@ -79,6 +97,7 @@ from .routers import me as me_router
 from .routers import notes as notes_router
 from .routers import oauth as oauth_router
 from .routers import shares as shares_router
+from .routers import system as system_router
 from .routers import users as users_router
 
 logging.basicConfig(level=logging.INFO)
@@ -95,11 +114,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # app/oauth.py) DEPOIS do pool existir, mesma ordem do
     # reloadOAuthConfig() no startup IIFE do Node.
     await oauth.reload_oauth_config()
+    # Bootstrap TLS (gera cert/key autoassinados se ainda nao existirem) --
+    # MESMA posicao no boot do ensureTlsBootstrap() do Node (depois do
+    # reload de OAuth, antes do healthcheck responder).
+    await tls.ensure_tls_bootstrap()
     yield
     await db.close_db()
 
 
-app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase8", lifespan=lifespan)
+app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase9", lifespan=lifespan)
 
 
 # ════════════════════════════════════════════════
@@ -144,6 +167,8 @@ app.include_router(shares_router.router)
 app.include_router(groups_router.router)
 app.include_router(users_router.router)
 app.include_router(catalog_router.router)
+app.include_router(system_router.router)
+app.include_router(api_keys_router.router)
 
 
 @app.get("/api/health")
