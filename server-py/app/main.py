@@ -40,7 +40,16 @@ UPSERT) e GET/POST/PUT/DELETE /api/groups* (app/routers/groups.py, 6
 rotas, todas atras de require_super_admin -- grupos sao simetricos e
 tudo-ou-nada, membership N:N via group_members).
 
-As demais ~44 rotas do server/index.js ainda nao existem aqui -- ver
+Fatia 7 (administracao de usuarios): GET/POST/PUT/DELETE /api/users*
+(ver app/routers/users.py) -- todas as 4 rotas exigem require_super_admin
+(nem 'admin' comum alcanca). Conta 'admin' e protegida (role/disabled
+fixos, nunca pode ser excluida) e ha uma guarda de lockout
+(count_enabled_admins) que recusa remover o ultimo admin/super_admin
+habilitado, via mudanca de role, disabled ou exclusao. Reaproveita
+EMAIL_RE (app/routers/auth.py), hash_password (app/security.py) e
+generate_unique_handle (app/handles.py) ja portados nas fatias 2/4.
+
+As demais ~40 rotas do server/index.js ainda nao existem aqui -- ver
 roadmap no plano de migracao (Project toolbox45).
 """
 import logging
@@ -61,6 +70,7 @@ from .routers import me as me_router
 from .routers import notes as notes_router
 from .routers import oauth as oauth_router
 from .routers import shares as shares_router
+from .routers import users as users_router
 
 logging.basicConfig(level=logging.INFO)
 
@@ -80,7 +90,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await db.close_db()
 
 
-app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase6", lifespan=lifespan)
+app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase7", lifespan=lifespan)
 
 
 # ════════════════════════════════════════════════
@@ -123,6 +133,7 @@ app.include_router(notes_router.router)
 app.include_router(links_router.router)
 app.include_router(shares_router.router)
 app.include_router(groups_router.router)
+app.include_router(users_router.router)
 
 
 @app.get("/api/health")
