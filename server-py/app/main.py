@@ -49,7 +49,15 @@ habilitado, via mudanca de role, disabled ou exclusao. Reaproveita
 EMAIL_RE (app/routers/auth.py), hash_password (app/security.py) e
 generate_unique_handle (app/handles.py) ja portados nas fatias 2/4.
 
-As demais ~40 rotas do server/index.js ainda nao existem aqui -- ver
+Fatia 8 (catalogo administrativo): GET /api/catalogs (leitura em lote, so
+require_user) + CRUD de vendors/systems/versions/environments/topics/
+parameters/prompts/exports (ver app/routers/catalog.py e app/catalog.py) --
+27 rotas de escrita, TODAS atras de require_admin. Hierarquia estrita
+Vendor->System->Version, vinculos N:N Version<->Environment e
+Environment<->Topic com substituicao completa (sem audit log, unica
+excecao do dominio inteiro).
+
+As demais ~13 rotas do server/index.js ainda nao existem aqui -- ver
 roadmap no plano de migracao (Project toolbox45).
 """
 import logging
@@ -62,6 +70,7 @@ from fastapi.responses import JSONResponse
 
 from . import db, oauth
 from .routers import auth as auth_router
+from .routers import catalog as catalog_router
 from .routers import commands as commands_router
 from .routers import folders as folders_router
 from .routers import groups as groups_router
@@ -90,7 +99,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await db.close_db()
 
 
-app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase7", lifespan=lifespan)
+app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase8", lifespan=lifespan)
 
 
 # ════════════════════════════════════════════════
@@ -134,6 +143,7 @@ app.include_router(links_router.router)
 app.include_router(shares_router.router)
 app.include_router(groups_router.router)
 app.include_router(users_router.router)
+app.include_router(catalog_router.router)
 
 
 @app.get("/api/health")
