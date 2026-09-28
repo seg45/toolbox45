@@ -1,19 +1,21 @@
 // ════════════════════════════════════════════════
-// App shell (Fase 3, fatia 2) — compõe Header + `.app` (Sidebar + área de
-// conteúdo, ainda vazia) + modal de Configurações, substituindo o
-// placeholder da fatia 1. Mesma estrutura de DOM do index.html original:
-// <header class="hdr"> é irmã de <div class="app">, não filha dela.
+// App shell (Fase 3, fatia 2 + fatia 3a) — compõe Header + `.app` (Sidebar +
+// área de conteúdo) + modal de Configurações. Mesma estrutura de DOM do
+// index.html original: <header class="hdr"> é irmã de <div class="app">,
+// não filha dela.
 //
 // A área principal (barra de parâmetros, toolbar "Group by"/"Add",
-// `<div class="content" id="out">`) é a "MAIN" do index.html original —
-// fica só como um placeholder vazio aqui: é o motor de comandos
-// (js/query-bar.js + js/db-render-engine.js + js/render.js) que a
-// preenche de verdade, escopo da fatia 3 (Comandos núcleo).
+// `<div class="content" id="out">`) agora é CommandsContent.tsx (fatia 3a —
+// motor de comandos, porta de js/query-bar.js (stopgap)/js/db-render-
+// engine.js/js/render.js). CommandsContent É o próprio `.content#out`, não
+// um filho dele.
 // ════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { useSettings } from '../lib/settingsStore';
 import { fetchCatalogs, type Catalogs } from '../lib/catalogs';
+import { useLiveFilters } from '../lib/liveFilters';
+import { CommandsContent } from './commands/CommandsContent';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { SettingsModal, type SettingsPane } from './SettingsModal';
@@ -21,6 +23,7 @@ import { SettingsModal, type SettingsPane } from './SettingsModal';
 export function AppShell() {
   const auth = useAuth();
   const { settings, update } = useSettings();
+  const liveFilters = useLiveFilters(settings);
   const [catalogs, setCatalogs] = useState<Catalogs | null>(null);
   const [settingsOpen, setSettingsOpen] = useState<SettingsPane | null>(null);
 
@@ -56,12 +59,11 @@ export function AppShell() {
           catalogs={catalogs}
           settings={settings}
           update={update}
+          liveFilters={liveFilters}
           onToggleCollapsed={() => update({ showSidebar: !settings.showSidebar })}
         />
         <div className="main">
-          <div className="content" id="out">
-            {/* Preenchido pela fatia 3 (Comandos núcleo). */}
-          </div>
+          <CommandsContent settings={settings} updateSettings={update} catalogs={catalogs} liveFilters={liveFilters} />
         </div>
       </div>
       {settingsOpen && (

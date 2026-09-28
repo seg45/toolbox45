@@ -2,16 +2,19 @@
 // Sidebar (nav.sidebar) — porta de index.html linhas 197-409 + js/state.js
 // (mecânica genérica de dropdown/multi-select) + js/settings.js (toggles).
 //
-// ESCOPO DESTA FATIA: busca (só UI — sem resultado, não há comandos
-// carregados ainda), linha "Folders" (estática — viewAllFolders() é
-// fatia 5), os 5 dropdowns de filtro alimentados por dados reais de
-// GET /api/catalogs (seleção funciona e fica em sincronia com o espelho
-// do modal de Preferences, via useSettings() compartilhado — mas ainda
-// sem nenhum efeito de filtragem, ver comentário em PreferencesPane.tsx),
-// o bloco "Options" (4 toggles) e o botão de fixar/colapsar a sidebar.
+// Busca + os 5 dropdowns de filtro (Vendor/System/Version/Environment/
+// Topic) são ligados a useLiveFilters() (liveFilters.ts, fatia 3a) — o
+// filtro AO VIVO que persiste em 'cpa-sidebar-filters', separado do default
+// de Preferences (useSettings()/'cpa-settings') — ver comentário completo em
+// liveFilters.ts. Isso substitui a ligação (incorreta, ver instruções da
+// fatia 3a) direto em useSettings() que a fatia 2 usava provisoriamente.
+//
+// Tudo o mais (linha "Folders" — estática, viewAllFolders() é fatia 5 —,
+// o bloco "Options" com os 4 toggles, e o botão de fixar/colapsar a
+// sidebar) continua ligado a useSettings() exatamente como antes.
 // ════════════════════════════════════════════════
-import { useState } from 'react';
 import type { Catalogs } from '../lib/catalogs';
+import type { useLiveFilters } from '../lib/liveFilters';
 import type { Settings } from '../lib/settingsStore';
 import { FilterDropdown } from './FilterDropdown';
 import { Toggle } from './SegControls';
@@ -47,14 +50,16 @@ export function Sidebar({
   catalogs,
   settings,
   update,
+  liveFilters,
   onToggleCollapsed,
 }: {
   catalogs: Catalogs | null;
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
+  liveFilters: ReturnType<typeof useLiveFilters>;
   onToggleCollapsed: () => void;
 }) {
-  const [searchValue, setSearchValue] = useState('');
+  const { filters, update: updateFilters } = liveFilters;
 
   const vendorOptions = (catalogs?.vendors || []).map(v => ({ key: v.key, label: v.label, color: v.color }));
   const sysOptions = (catalogs?.systems || []).map(v => ({ key: v.key, label: v.label, color: v.color }));
@@ -74,11 +79,11 @@ export function Sidebar({
             className="cmd-search"
             placeholder="Search"
             autoComplete="off"
-            value={searchValue}
-            onChange={e => setSearchValue(e.target.value)}
+            value={filters.search}
+            onChange={e => updateFilters({ search: e.target.value })}
           />
-          {searchValue && (
-            <button type="button" className="cmd-search-clear" title="Clear search" onClick={() => setSearchValue('')}>✕</button>
+          {filters.search && (
+            <button type="button" className="cmd-search-clear" title="Clear search" onClick={() => updateFilters({ search: '' })}>✕</button>
           )}
         </div>
 
@@ -93,18 +98,18 @@ export function Sidebar({
           </div>
         </div>
 
-        <FilterDropdown icon={ICONS.vendor} headingLabel="Vendor" options={vendorOptions} selected={settings.vendor} onChange={v => update({ vendor: v })} />
-        <FilterDropdown icon={ICONS.system} headingLabel="System" options={sysOptions} selected={settings.sys} onChange={v => update({ sys: v })} />
-        <FilterDropdown icon={ICONS.version} headingLabel="Version" options={versionOptions} selected={settings.version} onChange={v => update({ version: v })} />
-        <FilterDropdown icon={ICONS.environment} headingLabel="Environment" options={envOptions} selected={settings.env} onChange={v => update({ env: v })} />
-        <FilterDropdown icon={ICONS.topic} headingLabel="Topic" options={topicOptions} selected={settings.type} onChange={v => update({ type: v })} />
+        <FilterDropdown icon={ICONS.vendor} headingLabel="Vendor" options={vendorOptions} selected={filters.vendor} onChange={v => updateFilters({ vendor: v })} />
+        <FilterDropdown icon={ICONS.system} headingLabel="System" options={sysOptions} selected={filters.system} onChange={v => updateFilters({ system: v })} />
+        <FilterDropdown icon={ICONS.version} headingLabel="Version" options={versionOptions} selected={filters.version} onChange={v => updateFilters({ version: v })} />
+        <FilterDropdown icon={ICONS.environment} headingLabel="Environment" options={envOptions} selected={filters.environment} onChange={v => updateFilters({ environment: v })} />
+        <FilterDropdown icon={ICONS.topic} headingLabel="Topic" options={topicOptions} selected={filters.topic} onChange={v => updateFilters({ topic: v })} />
 
         <div className="sb-block sb-block-filter sb-block-clearfilters">
           <button
             type="button"
             className="btn btn-ghost sb-clear-filters-btn"
             style={{ width: '100%', fontSize: 11 }}
-            onClick={() => update({ vendor: [], sys: [], version: [], env: [], type: [] })}
+            onClick={() => updateFilters({ vendor: [], system: [], version: [], environment: [], topic: [] })}
           >
             Clear filters
           </button>
