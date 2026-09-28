@@ -11,6 +11,31 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# postgresql-client (pg_dump/pg_restore, fatia 10 -- Backup & Restore, ver
+# app/backup.py) -- instalado a partir do repositorio OFICIAL do PostgreSQL
+# (apt.postgresql.org), fixando a MESMA major version do servidor real
+# (toolbox45-db, Postgres 16 -- ver docker-compose.yml), em vez do pacote
+# generico "postgresql-client" do Debian (que na imagem base atual,
+# python:3.12-slim/trixie, resolve pra v17 -- funciona contra um servidor
+# v16, mas emite um aviso de "unrecognized configuration parameter
+# transaction_timeout" no restore, porque o dump de um client mais novo usa
+# um parametro de sessao que so existe no Postgres 17). Testado localmente
+# (dump + restore reais contra um Postgres 16) com o client v16 exato: zero
+# erros/avisos -- ver comentario equivalente em app/backup.py.
+#
+# openssl (fatia 9 -- SSL Certificate, ver app/tls.py) ja vem na imagem base
+# (nao precisa de apt-get separado, confirmado na validacao da fatia 9).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates gnupg curl \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client-16 \
+    && apt-get purge -y --auto-remove gnupg curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY server-py/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 

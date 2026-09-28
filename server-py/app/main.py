@@ -74,9 +74,25 @@ validade/conteudo -- o backup/renovacao periodica fica pra fatia 10).
 Modelo de autorizacao desta fatia e NAO uniforme (primeira vez na
 migracao) -- ver tabela de rotas no plano de migracao (Project toolbox45).
 
+Fatia 10 (backup/restore + audit log): as 7 rotas de Configuracoes ->
+"Backup & Restore" (GET/POST /api/backups, GET /api/backups/:filename/
+download, DELETE /api/backups/:filename, POST /api/backups/:filename/
+restore, GET/PUT /api/backup-schedule -- ver app/backup.py e
+app/routers/backup.py) + GET /api/audit-log -- TODAS atras de
+require_admin (padrao uniforme, ao contrario da fatia 9). Usa `pg_dump`/
+`pg_restore` via subprocess (precisa de `postgresql-client` na imagem, ver
+server-py/Dockerfile) em vez de qualquer driver Python, mesma tecnica ja
+usada pro `openssl` da fatia 9. O agendamento automatico
+(diario/semanal/mensal) roda como uma asyncio.Task de fundo
+(backup.scheduled_backup_loop(), iniciada no lifespan abaixo, equivalente
+ao setInterval(checkScheduledBackup, 60_000) do Node) -- cancelada
+corretamente no shutdown.
+
 As demais rotas do server/index.js ainda nao existem aqui -- ver roadmap
 no plano de migracao (Project toolbox45).
 """
+import asyncio
+import contextlib
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -85,9 +101,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from . import db, oauth, tls
+from . import backup, db, oauth, tls
 from .routers import api_keys as api_keys_router
 from .routers import auth as auth_router
+from .routers import backup as backup_router
 from .routers import catalog as catalog_router
 from .routers import commands as commands_router
 from .routers import folders as folders_router
@@ -118,11 +135,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # MESMA posicao no boot do ensureTlsBootstrap() do Node (depois do
     # reload de OAuth, antes do healthcheck responder).
     await tls.ensure_tls_bootstrap()
+    # Job de agendamento de backup (equivalente ao par
+    # setInterval(checkScheduledBackup, 60_000) + checkScheduledBackup()
+    # imediato do Node) -- roda em segundo plano pelo resto da vida do
+    # processo, cancelado explicitamente no shutdown logo abaixo.
+    backup_task = asyncio.create_task(backup.scheduled_backup_loop())
     yield
+    backup_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await backup_task
     await db.close_db()
 
 
-app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase9", lifespan=lifespan)
+app = FastAPI(title="Toolbox45 API (Python)", version="0.1.0-fase10", lifespan=lifespan)
 
 
 # ════════════════════════════════════════════════
@@ -169,6 +194,7 @@ app.include_router(users_router.router)
 app.include_router(catalog_router.router)
 app.include_router(system_router.router)
 app.include_router(api_keys_router.router)
+app.include_router(backup_router.router)
 
 
 @app.get("/api/health")
