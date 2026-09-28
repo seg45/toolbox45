@@ -1,7 +1,7 @@
 {
   "name": "toolbox45-frontend-react",
   "private": true,
-  "version": "0.1.0-fase3-fatia1",
+  "version": "0.2.0-fase3-fatia2",
   "type": "module",
   "scripts": {
     "dev": "vite",

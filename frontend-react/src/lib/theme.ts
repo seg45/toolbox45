@@ -43,3 +43,93 @@ export function applyAccentColor(key: string): void {
 export function resolveAccentForTheme(theme: 'light' | 'dark', accent: string): string {
   return theme === 'light' && accent === 'white' ? DEFAULT_ACCENT : accent;
 }
+
+// ════════════════════════════════════════════════
+// PREFERÊNCIA PESSOAL (fatia 2 — Settings → User preferences) — porta de
+// initTheme()/initAccentColor()/toggleModalTheme()/setAccentColor() do
+// js/theme.js original, como um hook React em vez do padrão imperativo
+// (ler/gravar 'cpa-theme'/'cpa-accent' diretamente e reaplicar em vários
+// elementos do DOM manualmente).
+//
+// Semente inicial: se este navegador ainda não tem NENHUMA preferência
+// pessoal salva, usa o default do admin (cache 'cpa-org-theme'/
+// 'cpa-org-accent', já semeado por bootLoginAppearance() em
+// appearanceBoot.ts) — mesma regra do original (_cpaOrgDefault). Uma vez
+// que o usuário mexe no toggle/nos swatches, a preferência pessoal passa
+// a existir e o default do admin nunca mais é consultado pra ele.
+// ════════════════════════════════════════════════
+import { useCallback, useState } from 'react';
+
+const THEME_KEY = 'cpa-theme';
+const ACCENT_KEY = 'cpa-accent';
+
+function readPersonalTheme(): 'light' | 'dark' | null {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    return v === 'dark' || v === 'light' ? v : null;
+  } catch {
+    return null;
+  }
+}
+function readPersonalAccent(): string | null {
+  try {
+    return localStorage.getItem(ACCENT_KEY);
+  } catch {
+    return null;
+  }
+}
+function orgDefault(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function usePersonalTheme() {
+  const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
+    const resolved = readPersonalTheme() || (orgDefault('cpa-org-theme', 'light') as 'light' | 'dark');
+    applyTheme(resolved);
+    return resolved;
+  });
+  const [accent, setAccentState] = useState<string>(() => {
+    let resolved = readPersonalAccent() || orgDefault('cpa-org-accent', DEFAULT_ACCENT);
+    const currentTheme = readPersonalTheme() || (orgDefault('cpa-org-theme', 'light') as 'light' | 'dark');
+    resolved = resolveAccentForTheme(currentTheme, resolved);
+    applyAccentColor(resolved);
+    return resolved;
+  });
+
+  // applyTheme() sempre PERSISTE (ver comentário no original) — é o que
+  // torna útil pro toggle de tema de verdade. setTheme() aqui é chamado
+  // só a partir de uma ação explícita do usuário (toggle no modal), nunca
+  // no boot — o valor inicial acima já aplica visualmente sem gravar
+  // nada de novo quando cai no fallback do admin.
+  const setTheme = useCallback((next: 'light' | 'dark') => {
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch { /* best-effort */ }
+    setThemeState(next);
+    // "white" só existe no tema escuro — troca automática pro padrão ao
+    // voltar pro claro, mesma regra do original (_resetAccentIfWhite).
+    if (next === 'light') {
+      setAccentState(prevAccent => {
+        if (prevAccent !== 'white') return prevAccent;
+        applyAccentColor(DEFAULT_ACCENT);
+        try { localStorage.setItem(ACCENT_KEY, DEFAULT_ACCENT); } catch { /* best-effort */ }
+        return DEFAULT_ACCENT;
+      });
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  }, [theme, setTheme]);
+
+  const setAccent = useCallback((key: string) => {
+    applyAccentColor(key);
+    try { localStorage.setItem(ACCENT_KEY, key); } catch { /* best-effort */ }
+    setAccentState(key);
+  }, []);
+
+  return { theme, accent, toggleTheme, setAccent };
+}
