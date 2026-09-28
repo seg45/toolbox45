@@ -3,11 +3,13 @@
 // `<div class="content" id="out">{/* Preenchido pela fatia 3 */}</div>` de
 // AppShell.tsx (este componente É o `.content#out`, não um filho dele).
 //
-// Orquestra: SimpleQueryFields (stopgap dos 9 campos + parâmetros
-// customizados) + ContentToolbar (Group by / Expand all / Collapse all) +
-// fetchCommands() (loading/erro) + renderPipeline.buildRenderTree() +
-// a árvore de comboBlocks/sections/cards + a nota de truncamento de
-// MAX_COMBOS + o estado vazio final de busca sem resultado.
+// Orquestra: QueryBar (fatia 3b — campo de query unificado com tags,
+// chips fixos/Others e histórico, ver query-bar.js; substitui o stopgap
+// SimpleQueryFields.tsx da fatia 3a) + ContentToolbar (Group by / Expand
+// all / Collapse all) + fetchCommands() (loading/erro) +
+// renderPipeline.buildRenderTree() + a árvore de comboBlocks/sections/cards
+// + a nota de truncamento de MAX_COMBOS + o estado vazio final de busca
+// sem resultado.
 //
 // Porta de render() em js/render.js (a parte de orquestração/DOM — a lógica
 // de dados já foi portada em renderPipeline.ts).
@@ -22,7 +24,7 @@ import type { Settings } from '../../lib/settingsStore';
 import { CollapsibleSection } from './CollapsibleSection';
 import { CommandCard } from './CommandCard';
 import { ContentToolbar } from './ContentToolbar';
-import { SimpleQueryFields } from './SimpleQueryFields';
+import { QueryBar } from './QueryBar';
 
 export function CommandsContent({
   settings,
@@ -37,8 +39,10 @@ export function CommandsContent({
 }) {
   const [commands, setCommands] = useState<Command[] | null>(null);
   const [loadError, setLoadError] = useState(false);
-  // Os 9 campos hardcoded + parâmetros customizados (ver SimpleQueryFields.tsx) —
-  // estado "lifted" simples, sem tags/histórico (isso é a fatia 3b).
+  // Um valor por parâmetro do catálogo (não só os 9 hardcoded), resolvido
+  // pela QueryBar a partir das tags confirmadas + o que está sendo
+  // digitado — estado "lifted" aqui, exatamente como SimpleQueryFields.tsx
+  // fazia na fatia 3a (mesmo contrato de shape; só a UI que o produz mudou).
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const collapsedSections = useCollapsedSections();
 
@@ -194,7 +198,7 @@ export function CommandsContent({
 
   return (
     <div className={`content${settings.showCardDetails ? '' : ' compact-cards'}`} id="out">
-      <SimpleQueryFields values={fieldValues} onChange={(k, v) => setFieldValues(prev => ({ ...prev, [k]: v }))} catalogs={catalogs} />
+      <QueryBar onChange={setFieldValues} catalogs={catalogs} />
       <ContentToolbar
         groupBy={settings.groupBy}
         onChangeGroupBy={v => updateSettings({ groupBy: v })}

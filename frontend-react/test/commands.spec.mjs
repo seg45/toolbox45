@@ -170,15 +170,21 @@ async function mockLoggedInAdmin(page) {
   await page.route('**/api/system/logo', route => route.fulfill({ json: { imageData: null, imageDataDark: null } }));
 }
 
-function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-async function sqfInput(page, label) {
-  // hasText com string faz substring match ("IP" bateria em "Source IP" também)
-  // — ancora numa regex de igualdade exata do texto do <label> (só o <span>
-  // do rótulo tem texto; o <input> não contribui texto nenhum).
-  return page.locator('.sqf-bar label', { hasText: new RegExp(`^${escapeRegex(label)}$`) }).locator('input');
+// Fatia 3b substituiu o stopgap SimpleQueryFields.tsx (grade de <input>
+// rotulados) pela QueryBar real (campo único "campo:valor" -> tags no
+// Enter, ver test/querybar.spec.mjs para a suíte dedicada). Os cenários
+// abaixo só precisam preencher parâmetros pra ver o efeito no comando
+// renderizado — helper mínimo: digita "key:value ..." no campo único e
+// confirma com Enter (mesmo cria mais de uma tag de uma vez, como o
+// original permite).
+async function setQueryFields(page, pairs) {
+  const text = Object.entries(pairs)
+    .map(([k, v]) => `${k}:${v}`)
+    .join(' ');
+  const input = page.locator('.cpq-input');
+  await input.click();
+  await input.fill(text);
+  await input.press('Enter');
 }
 
 const browser = await chromium.launch();
@@ -217,8 +223,7 @@ await withPage(browser, async page => {
   await mockLoggedInAdmin(page);
   await page.goto(`${BASE}/index.html`);
   await page.waitForSelector('.card[data-cmd-id="6"]');
-  await (await sqfInput(page, 'Source IP')).fill('10.0.0.1');
-  await (await sqfInput(page, 'Destination IP')).fill('10.0.0.2');
+  await setQueryFields(page, { src_ip: '10.0.0.1', dst_ip: '10.0.0.2' });
   await assertEventually(
     async () => {
       const t = await page.locator('.card[data-cmd-id="6"] .term').innerText();
@@ -242,8 +247,7 @@ await withPage(browser, async page => {
   assert(desc3 === 'Fill IP and Port fields above to see this command', 'cenário 4: variante vazia mostrada quando IP/Porta em branco');
   assert(await page.isVisible('.card[data-cmd-id="3"] .ln-info'), 'cenário 4: linha de aviso "empty" visível');
 
-  await (await sqfInput(page, 'IP')).fill('192.168.1.10');
-  await (await sqfInput(page, 'Port')).fill('443');
+  await setQueryFields(page, { ip: '192.168.1.10', port: '443' });
   await assertEventually(
     async () => (await page.locator('.card[data-cmd-id="3"] .card-desc').innerText()) === 'Check connection state for host',
     'cenário 4: variante real mostrada assim que IP e Porta são preenchidos'
@@ -300,9 +304,15 @@ await withPage(browser, async page => {
   await mockLoggedInAdmin(page);
   await page.goto(`${BASE}/index.html`);
   await page.waitForSelector('.card[data-cmd-id="1"]');
+  // Fatia 3b acrescentou um debounce de 120ms à caixa de busca da sidebar
+  // (CmdSearchBox.tsx, mesmo padrão já usado pela QueryBar — ver
+  // instruções da fatia) — a filtragem de verdade só é aplicada depois
+  // desse atraso, então as duas checagens abaixo precisam de
+  // assertEventually (o comando 2, que já estava visível ANTES da busca,
+  // não serve mais como sinal de que o debounce já disparou).
   await page.fill('.cmd-search', 'tlist');
-  await assertEventually(async () => await page.isVisible('.card[data-cmd-id="2"]'), 'cenário 8: busca por "tlist" mantém o comando 2 visível');
-  assert(!(await page.isVisible('.card[data-cmd-id="1"]')), 'cenário 8: busca por "tlist" esconde o comando 1 (não bate)');
+  await assertEventually(async () => !(await page.isVisible('.card[data-cmd-id="1"]')), 'cenário 8: busca por "tlist" esconde o comando 1 (não bate)');
+  assert(await page.isVisible('.card[data-cmd-id="2"]'), 'cenário 8: busca por "tlist" mantém o comando 2 visível');
 
   await page.fill('.cmd-search', 'zzz-nao-existe');
   await assertEventually(async () => page.isVisible('text=No commands found'), 'cenário 8: "No commands found" aparece quando nada bate');
@@ -343,8 +353,7 @@ await withPage(
     await mockLoggedInAdmin(page);
     await page.goto(`${BASE}/index.html`);
     await page.waitForSelector('.card[data-cmd-id="6"]');
-    await (await sqfInput(page, 'Source IP')).fill('10.9.9.1');
-    await (await sqfInput(page, 'Destination IP')).fill('10.9.9.2');
+    await setQueryFields(page, { src_ip: '10.9.9.1', dst_ip: '10.9.9.2' });
     await assertEventually(async () => (await page.locator('.card[data-cmd-id="6"] .term').innerText()).includes('10.9.9.1'), 'cenário 10: pré-condição — IPs substituídos antes de copiar');
 
     const pageErrors = [];

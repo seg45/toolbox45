@@ -16,6 +16,7 @@
 import type { Catalogs } from '../lib/catalogs';
 import type { useLiveFilters } from '../lib/liveFilters';
 import type { Settings } from '../lib/settingsStore';
+import { CmdSearchBox } from './CmdSearchBox';
 import { FilterDropdown } from './FilterDropdown';
 import { Toggle } from './SegControls';
 
@@ -40,9 +41,6 @@ const ICONS = {
   ),
   folders: (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.2h8.5A1.5 1.5 0 0 1 21 8.7v9.8A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5v-12z" /></svg>
-  ),
-  search: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
   ),
 };
 
@@ -72,20 +70,7 @@ export function Sidebar({
   return (
     <nav className="sidebar">
       <div className="sidebar-inner">
-        <div className="cmd-search-wrap">
-          <span className="cmd-search-icon" aria-hidden="true">{ICONS.search}</span>
-          <input
-            type="text"
-            className="cmd-search"
-            placeholder="Search"
-            autoComplete="off"
-            value={filters.search}
-            onChange={e => updateFilters({ search: e.target.value })}
-          />
-          {filters.search && (
-            <button type="button" className="cmd-search-clear" title="Clear search" onClick={() => updateFilters({ search: '' })}>✕</button>
-          )}
-        </div>
+        <CmdSearchBox search={filters.search} onSearchChange={v => updateFilters({ search: v })} />
 
         <div className="sb-block">
           <div className="sb-list">
