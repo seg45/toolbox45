@@ -58,7 +58,10 @@ export class ApiError extends Error {
   }
 }
 
-async function parseErrorBody(res: Response): Promise<{ error?: string; message?: string }> {
+// Exportado (a partir da fatia 4) para outros módulos de API (ex.:
+// commands.ts::createCommand/updateCommand/deleteCommand) reaproveitarem o
+// MESMO parsing de corpo de erro, em vez de duplicar a função.
+export async function parseErrorBody(res: Response): Promise<{ error?: string; message?: string }> {
   try {
     return await res.json();
   } catch {

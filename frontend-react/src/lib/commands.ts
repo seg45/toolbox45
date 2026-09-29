@@ -1,12 +1,13 @@
 // ════════════════════════════════════════════════
 // COMANDOS (/api/commands) — tipos + fetch, porta de js/api-client.js
-// (fetchCommands/invalidateCommandsCache — createCommand/updateCommand/
-// deleteCommand ficam fora do escopo desta fatia, entram na fatia 4).
+// (fetchCommands/invalidateCommandsCache + createCommand/updateCommand/
+// deleteCommand, acrescentados na fatia 4 — Editor de comandos).
 //
 // Formato ({CommandLine}/{Command}) porta 1:1 de _shape_row/_shape_line em
 // server-py/app/commands.py — já validado contra o backend real, não
 // adivinhado.
 // ════════════════════════════════════════════════
+import { ApiError, parseErrorBody } from './api';
 
 export interface CommandLine {
   line_type: 'cmd' | 'note' | 'warn' | 'info' | 'ok' | 'image';
@@ -65,4 +66,92 @@ export async function fetchCommands(): Promise<Command[]> {
     });
   _commandsCache = promise;
   return promise;
+}
+
+// ════════════════════════════════════════════════
+// create/update/delete (fatia 4 — Editor de comandos) — contrato validado
+// contra server-py/app/routers/commands.py (POST/PUT/DELETE /api/commands),
+// já 100% implementado desde a Fase 1: nenhuma mudança de API é necessária
+// aqui, só consumir o contrato já existente.
+//
+// `lines` no payload é uma lista ÚNICA e achatada (não mais separada em
+// default/empty, como no formato de LEITURA de {Command} acima) — cada linha
+// carrega seu próprio `sort_order` (índice dentro da sua variante) e
+// `variant` ('default' | 'empty'), dizendo ao backend a qual das duas listas
+// ela pertence.
+// ════════════════════════════════════════════════
+export interface CommandLinePayload {
+  sort_order: number;
+  line_type: CommandLine['line_type'];
+  prompt: string | null;
+  content: string;
+  export_template: string | null;
+  image_data: string | null;
+  variant: 'default' | 'empty';
+}
+
+export interface CommandPayload {
+  topics: string[];
+  placeholder_resolver: string | null;
+  name: string;
+  name_empty: string | null;
+  desc: string;
+  desc_empty: string | null;
+  details: string;
+  vendors: string[];
+  systems: string[];
+  versions: string[];
+  environments: string[];
+  lines: CommandLinePayload[];
+}
+
+// invalidateCommandsCache() sempre roda num `finally` — mesmo padrão do JS
+// original: tanto sucesso quanto falha invalidam o cache, porque mesmo uma
+// falha (ex.: 409/403 depois de o backend já ter validado outra coisa) não
+// garante que o estado no servidor não mudou; um próximo fetchCommands()
+// sempre busca dados frescos em vez de arriscar servir uma lista desatualizada.
+export async function createCommand(payload: CommandPayload): Promise<Command> {
+  try {
+    const res = await fetch('/api/commands', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const body = await parseErrorBody(res);
+      throw new ApiError(res.status, body.message || 'Failed to save the command. Please try again.', body.error);
+    }
+    return res.json();
+  } finally {
+    invalidateCommandsCache();
+  }
+}
+
+export async function updateCommand(id: number, payload: CommandPayload): Promise<Command> {
+  try {
+    const res = await fetch(`/api/commands/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const body = await parseErrorBody(res);
+      throw new ApiError(res.status, body.message || 'Failed to save the command. Please try again.', body.error);
+    }
+    return res.json();
+  } finally {
+    invalidateCommandsCache();
+  }
+}
+
+export async function deleteCommand(id: number): Promise<void> {
+  try {
+    const res = await fetch(`/api/commands/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await parseErrorBody(res);
+      throw new ApiError(res.status, body.message || 'Failed to delete the command. Please try again.', body.error);
+    }
+  } finally {
+    invalidateCommandsCache();
+  }
 }

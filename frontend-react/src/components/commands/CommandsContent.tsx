@@ -13,18 +13,30 @@
 //
 // Porta de render() em js/render.js (a parte de orquestração/DOM — a lógica
 // de dados já foi portada em renderPipeline.ts).
+//
+// Fatia 4 (Editor de comandos) acrescentou aqui: o estado de "qual editor
+// está aberto" (`editor`) e uma função de refresh (invalida cache + refetch
+// + setCommands) passada como callback pro modal salvar/deletar, pro
+// ContentToolbar (botão Add) e pro CommandCard (botões Edit/Duplicate) —
+// mesmo espírito de AppShell.tsx com settingsOpen/setSettingsOpen pro modal
+// de Configurações. Mora aqui (não em AppShell.tsx) porque é aqui que o
+// estado `commands`/`setCommands`/fetchCommands() já vivia.
 // ════════════════════════════════════════════════
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Catalogs } from '../../lib/catalogs';
 import { useCollapsedSections } from '../../lib/collapsedSections';
-import { fetchCommands, type Command } from '../../lib/commands';
+import { fetchCommands, invalidateCommandsCache, type Command } from '../../lib/commands';
 import type { useLiveFilters } from '../../lib/liveFilters';
 import { buildRenderTree, type ComboBlockData, type SectionData } from '../../lib/renderPipeline';
 import type { Settings } from '../../lib/settingsStore';
 import { CollapsibleSection } from './CollapsibleSection';
 import { CommandCard } from './CommandCard';
+import { CommandEditorModal, type EditorMode } from './CommandEditorModal';
 import { ContentToolbar } from './ContentToolbar';
 import { QueryBar } from './QueryBar';
+
+type EditorState = { mode: EditorMode; id?: number };
 
 export function CommandsContent({
   settings,
@@ -45,6 +57,7 @@ export function CommandsContent({
   // fazia na fatia 3a (mesmo contrato de shape; só a UI que o produz mudou).
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const collapsedSections = useCollapsedSections();
+  const [editor, setEditor] = useState<EditorState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +76,21 @@ export function CommandsContent({
       cancelled = true;
     };
   }, []);
+
+  // Callback de refresh passado pro CommandEditorModal (salvar/excluir) —
+  // invalida o cache de fetchCommands() e busca a lista de novo, refletindo
+  // na tela sem precisar de um reload de página.
+  async function refreshCommands() {
+    invalidateCommandsCache();
+    try {
+      const data = await fetchCommands();
+      setCommands(data);
+      setLoadError(false);
+    } catch (err) {
+      console.error('Failed to reload commands from API', err);
+      setLoadError(true);
+    }
+  }
 
   const renderResult = useMemo(() => {
     if (!commands) return null;
@@ -106,7 +134,18 @@ export function CommandsContent({
         headerContent={header}
         collapsed={collapsed}
         onToggleChevron={() => collapsedSections.toggle(sec.key)}
-        renderBody={() => sec.cards.map(c => <CommandCard key={c.id} card={c} catalogs={catalogs} showImages={settings.showImages} />)}
+        renderBody={() =>
+          sec.cards.map(c => (
+            <CommandCard
+              key={c.id}
+              card={c}
+              catalogs={catalogs}
+              showImages={settings.showImages}
+              onEdit={id => setEditor({ mode: 'edit', id })}
+              onDuplicate={id => setEditor({ mode: 'duplicate', id })}
+            />
+          ))
+        }
       />
     );
   }
@@ -204,6 +243,7 @@ export function CommandsContent({
         onChangeGroupBy={v => updateSettings({ groupBy: v })}
         onExpandAll={() => collapsedSections.expandAll(allSectionKeys)}
         onCollapseAll={() => collapsedSections.collapseAll(allSectionKeys)}
+        onAddCommand={() => setEditor({ mode: 'create' })}
       />
       {renderResult?.truncatedNote && (
         <div className="env-note" style={{ borderColor: 'rgba(251,191,36,.3)', background: 'rgba(251,191,36,.06)', color: 'var(--yellow)' }}>
@@ -217,6 +257,27 @@ export function CommandsContent({
           <p>No commands found for "{liveFilters.filters.search}".</p>
         </div>
       )}
+      {editor &&
+        (editor.mode === 'create' || (commands && commands.some(c => c.id === editor.id))) &&
+        // Portal pro <body> — `.main` (ancestral direto deste componente)
+        // define `position: relative; z-index: 1` (ver comentário "─── MAIN
+        // ───" em layout.css), o que cria um stacking context próprio e
+        // prendia o `.modal-overlay` (z-index: 500) ABAIXO da `.sidebar`
+        // (z-index: 10, num stacking context irmão) — diferente de
+        // SettingsModal/ConfirmProvider, que já nascem como irmãos de
+        // `.app` em AppShell.tsx, fora desse contexto. Sem o portal, a
+        // sidebar ficava clicável por cima do editor (bug real, achado ao
+        // rodar os testes desta fatia).
+        createPortal(
+          <CommandEditorModal
+            mode={editor.mode}
+            sourceRow={editor.mode === 'create' ? undefined : commands?.find(c => c.id === editor.id)}
+            catalogs={catalogs}
+            onClose={() => setEditor(null)}
+            onSaved={refreshCommands}
+          />,
+          document.body
+        )}
     </div>
   );
 }

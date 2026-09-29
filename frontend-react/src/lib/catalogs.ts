@@ -48,6 +48,13 @@ export interface Catalogs {
   environments: (CatalogEntry & { system: string; vendor: string })[];
   topics: TopicEntry[];
   parameters: ParameterEntry[];
+  // Adicionados na fatia 4 (Editor de comandos) — dropdowns "Prompt" e
+  // "Export" do passo 3 (Command lines). O backend já devolvia os dois
+  // (GET /api/catalogs, ver server-py/app/routers/catalog.py) desde a Fase 1;
+  // só não estavam tipados aqui porque nenhuma fatia anterior precisava
+  // deles (ver comentário original acima em ParameterEntry).
+  prompts: CatalogEntry[];
+  exports: CatalogEntry[];
 }
 
 export async function fetchCatalogs(): Promise<Catalogs> {

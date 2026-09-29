@@ -8,10 +8,10 @@
 // Reaproveita SegSingle (SegControls.tsx) pro dropdown "Group by", mesmo
 // componente já usado no espelho de Preferences (PreferencesPane.tsx).
 //
-// O dropdown "Add" (Add command/Add folder) fica de fora — depende do
-// editor de comandos (fatia 4) e de pastas (fatia 5) — mesmo padrão de
-// comentário de escopo adiado já usado em Header.tsx para os dropdowns
-// Links/Tools.
+// "Add" (fatia 4): só "Add command" por enquanto — sem dropdown, já que
+// "Add folder" (fatia 5, Pastas) ainda não existe; quando essa fatia
+// chegar, este botão simples vira um dropdown (mesmo padrão de escopo
+// adiado já usado em Header.tsx para os dropdowns Links/Tools).
 // ════════════════════════════════════════════════
 import type { Settings } from '../../lib/settingsStore';
 import { SegSingle } from '../SegControls';
@@ -27,11 +27,13 @@ export function ContentToolbar({
   onChangeGroupBy,
   onExpandAll,
   onCollapseAll,
+  onAddCommand,
 }: {
   groupBy: Settings['groupBy'];
   onChangeGroupBy: (v: Settings['groupBy']) => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
+  onAddCommand: () => void;
 }) {
   return (
     <div className="content-toolbar">
@@ -51,8 +53,17 @@ export function ContentToolbar({
           <path d="M2 14.5l6-5 6 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      {/* Dropdown "Add" (Add command / Add folder) adiado — fatia 4 (editor
-          de comandos) / fatia 5 (pastas). */}
+      {/* .ctb-cmd-actions/.ctb-cmd-btn.admin-highlight já existiam prontos em
+          css/layout.css (pill sólido na cor de destaque) — CSS deixado
+          preparado desde antes desta fatia para este exato botão. Vira um
+          dropdown "Add" (Add command / Add folder, ver #addDDPanel já
+          estilizado em layout.css) quando a fatia 5 (Pastas) chegar; por
+          ora, um botão simples — só "Add command" está no escopo. */}
+      <div className="ctb-cmd-actions">
+        <button type="button" className="btn ctb-cmd-btn admin-highlight" onClick={onAddCommand}>
+          + Add command
+        </button>
+      </div>
     </div>
   );
 }

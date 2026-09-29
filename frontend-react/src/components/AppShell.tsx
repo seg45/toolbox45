@@ -9,12 +9,20 @@
 // motor de comandos, porta de js/query-bar.js (stopgap)/js/db-render-
 // engine.js/js/render.js). CommandsContent É o próprio `.content#out`, não
 // um filho dele.
+//
+// ConfirmProvider (fatia 4 — Editor de comandos, ver src/lib/useConfirm.tsx)
+// monta a ÚNICA instância do modal de confirmação genérico da árvore, no
+// mesmo nível que já envolve o modal de Configurações, pra poder ser
+// chamada de qualquer componente filho via useConfirm() (o
+// CommandEditorModal precisa dela pra "fechar sem salvar" E pra "excluir
+// comando").
 // ════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { useSettings } from '../lib/settingsStore';
 import { fetchCatalogs, type Catalogs } from '../lib/catalogs';
 import { useLiveFilters } from '../lib/liveFilters';
+import { ConfirmProvider } from '../lib/useConfirm';
 import { CommandsContent } from './commands/CommandsContent';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
@@ -52,7 +60,7 @@ export function AppShell() {
   }
 
   return (
-    <>
+    <ConfirmProvider>
       <Header onOpenSettings={setSettingsOpen} />
       <div className={`app${!settings.showSidebar ? ' sidebar-collapsed' : ''}`}>
         <Sidebar
@@ -76,6 +84,6 @@ export function AppShell() {
           updateSettings={update}
         />
       )}
-    </>
+    </ConfirmProvider>
   );
 }
