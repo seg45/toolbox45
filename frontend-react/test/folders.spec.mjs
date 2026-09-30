@@ -261,14 +261,25 @@ function folderById(page, id) {
 }
 
 // Cabeçalho (.sec-title) de uma pasta por ID, escopado via
-// `:scope > .section > .sec-title` — igual a folderHeaderByName(), mas
-// imune a mudanças no texto (nome vira <input> em modo de edição) e sem
-// depender do nome atual da pasta. É o jeito seguro de interagir com
-// botões/inputs do PRÓPRIO cabeçalho (✎/Accept/Cancel/Delete/input de
-// nome/dropdown "+ Add") sem colidir com os de uma subpasta aninhada, já
-// que `.sec-title` nunca contém `.sec-body` (onde vivem as subpastas).
+// `:scope > .sec-title` — igual a folderHeaderByName(), mas imune a
+// mudanças no texto (nome vira <input> em modo de edição) e sem depender
+// do nome atual da pasta. É o jeito seguro de interagir com botões/inputs
+// do PRÓPRIO cabeçalho (✎/Accept/Cancel/Delete/input de nome/dropdown
+// "+ Add") sem colidir com os de uma subpasta aninhada, já que `.sec-title`
+// nunca contém `.sec-body` (onde vivem as subpastas).
+//
+// Fatia 5b: `data-folder-id`/`data-root-folder-id` passaram a viver no
+// PRÓPRIO `<div class="section">` (via CollapsibleSection.tsx::
+// rootDataAttrs), não mais num `<div>` wrapper por fora dele como na fatia
+// 5a — necessário pra `.sec-body[data-folder-body-id]` (útil ao
+// drag-and-drop, ver src/lib/useFolderDrag.ts) ficar um nível mais raso,
+// filho DIRETO do elemento com `data-folder-id` (`:scope >`), igual ao
+// original (buildFolderSectionFromCards grava os três atributos nos MESMOS
+// elementos — `.section`/`.sec-title`/`.sec-body` — nunca num wrapper a
+// mais). `folderById(page, id)` (abaixo) já é, portanto, o próprio
+// `.section` — daí só mais UM `:scope >` até `.sec-title`, não dois.
 function folderHeaderById(page, id) {
-  return folderById(page, id).locator(':scope > .section > .sec-title');
+  return folderById(page, id).locator(':scope > .sec-title');
 }
 
 async function classListHas(locator, cls) {

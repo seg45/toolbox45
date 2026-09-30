@@ -144,6 +144,104 @@ export function removeCommandFromFolder(folderId: number, commandId: number): Pr
   });
 }
 
+// ════════════════════════════════════════════════
+// FATIA 5b — drag-and-drop (reordenar/mover) + escopo cross-user
+// ════════════════════════════════════════════════
+
+// Muda o `parent_id` de uma subpasta — porta de PUT /api/folders/:id/move
+// (ver _fldMoveItemAcrossFolders em js/folders.js). Usado pelo
+// drag-and-drop quando o item arrastado é uma SUBPASTA inteira (não um
+// comando) sendo movida pra dentro de outra pasta/subpasta da MESMA árvore
+// — o backend recusa (400) se o destino estiver fora da árvore de topo de
+// onde a subpasta já estava (ver getRootAncestorId no original), mas isso
+// já é bloqueado antes mesmo de chegar aqui pelo próprio mecanismo de drag
+// (useFolderDrag.ts: nunca deixa soltar fora do rootFolderId).
+// Sem try/await no chamador de propósito (mesmo padrão de
+// addCommandToFolder/removeCommandFromFolder acima) NÃO se aplica aqui:
+// mover uma subpasta precisa que o caller SAIBA se deu certo antes de
+// persistir a ordem do destino (ver persistFolderMove em
+// CommandsContent.tsx), por isso devolve uma Promise que rejeita em erro,
+// em vez de engolir a falha como as duas funções de membership acima.
+export async function moveFolder(id: number, newParentId: number): Promise<void> {
+  try {
+    const res = await fetch(`/api/folders/${id}/move`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent_id: newParentId }),
+    });
+    if (!res.ok) {
+      const body = await parseErrorBody(res);
+      throw new ApiError(res.status, body.message || 'Failed to move folder.', body.error);
+    }
+  } finally {
+    invalidateFoldersCache();
+  }
+}
+
+// Persiste a ordem final (comandos + subpastas intercalados) do corpo de
+// UMA pasta — porta de PUT /api/folders/:id/reorder (ver
+// reorderFolderItems em js/folders.js). Sem notas nesta fatia (5b, igual
+// 5a) — `order` aqui só carrega {type:'command'|'folder', id}, nunca
+// 'note', mas o tipo aceita o FolderOrderItem inteiro (compatível com o
+// que o servidor devolve em GET /api/folders) para não precisar de um tipo
+// paralelo só para isso.
+export function reorderFolderItems(folderId: number, order: FolderOrderItem[]): Promise<void> {
+  return fetch(`/api/folders/${folderId}/reorder`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ order }),
+  }).then(res => {
+    if (!res.ok) throw new Error(`reorderFolderItems: HTTP ${res.status}`);
+  });
+}
+
+// Pasta de QUALQUER usuário (cross-user, ver ALL_USERS_FOLDERS/
+// reloadAllUsersFoldersFromServer em js/folders.js) — mesmo shape de
+// `Folder`, só com `username` do dono a mais. `commandIds`/`order` aqui
+// refletem a membership de verdade da pasta (ao contrário de
+// `command.folder_ids`, que só reflete as pastas do usuário que está
+// olhando a tela — ver comentário de folderScope em
+// src/lib/foldersPipeline.ts sobre por que o pipeline cross-user precisa
+// usar `folder.commandIds`, não `command.folder_ids`, pra montar a árvore).
+export interface FolderWithOwner extends Folder {
+  username: string;
+}
+
+interface FolderApiRowWithOwner extends FolderApiRow {
+  username: string;
+}
+
+// Busca as pastas de TODOS os usuários (GET /api/folders/all) — porta de
+// reloadAllUsersFoldersFromServer() (js/folders.js). Diferente de
+// fetchFolders() acima, SEM cache de módulo: carregada sob demanda (só
+// quando o escopo dentro de Folders deixa de ser "mine" — ver
+// ensureAllUsersFoldersLoaded em CommandsContent.tsx), e a lista inteira é
+// pequena o bastante (só metadados de pasta, não comandos) para não valer a
+// pena a complexidade extra de invalidação que fetchFolders() tem.
+export async function fetchAllUsersFolders(): Promise<FolderWithOwner[]> {
+  const res = await fetch('/api/folders/all');
+  if (!res.ok) throw new Error(`fetchAllUsersFolders: HTTP ${res.status}`);
+  const rows: FolderApiRowWithOwner[] = await res.json();
+  return (rows || []).map(row => ({ ...shapeFolder(row), username: row.username }));
+}
+
+// Copia uma pasta de OUTRO usuário pra lista de pastas PRÓPRIAS — porta de
+// POST /api/folders/:id/copy (ver copyFolderFromUser em js/folders.js). O
+// backend cria uma pasta NOVA com os mesmos comandos/ordem; a pasta
+// original de quem foi copiada não é alterada.
+export async function copyFolderFromUser(folderId: number): Promise<Folder> {
+  try {
+    const res = await fetch(`/api/folders/${folderId}/copy`, { method: 'POST' });
+    if (!res.ok) {
+      const body = await parseErrorBody(res);
+      throw new ApiError(res.status, body.message || 'Failed to copy folder.', body.error);
+    }
+    return shapeFolder(await res.json());
+  } finally {
+    invalidateFoldersCache();
+  }
+}
+
 // ── Árvore (subpastas, aninhamento ilimitado) — porta de buildFolderTree()
 // em js/folders.js. Raízes: "Favorites" sempre primeiro, depois em ordem
 // alfabética (sort_order não é gerenciado pelo usuário pra pastas de topo);

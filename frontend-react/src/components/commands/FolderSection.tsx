@@ -1,9 +1,9 @@
 // ════════════════════════════════════════════════
 // Seção de uma pasta (ícone + nome/input + contagem + controles de edição +
-// dropdown "+ Add" + itens) — porta de buildFolderSectionFromCards()
-// (js/db-render-engine.js). Recursivo: uma subpasta é, ela mesma, um
-// FolderSection aninhado dentro do corpo da seção da pasta-mãe (mesmo papel
-// de renderFolderNode() em js/render.js).
+// dropdown "+ Add"/botão "⧉ Copy" + itens) — porta de
+// buildFolderSectionFromCards() (js/db-render-engine.js). Recursivo: uma
+// subpasta é, ela mesma, um FolderSection aninhado dentro do corpo da seção
+// da pasta-mãe (mesmo papel de renderFolderNode() em js/render.js).
 //
 // Reaproveita CollapsibleSection (mecânica de recolher/expandir — só no
 // ícone .sec-chevron) passando o cabeçalho INTEIRO (ícone + nome/input +
@@ -12,13 +12,22 @@
 // colapso por engano (mesma garantia do original, onde só `.sec-chevron`
 // tem o onclick de toggle).
 //
-// SEM drag-and-drop (fora do escopo desta fatia — itens são só lidos na
-// ordem de folder.order, nunca reordenados aqui) e SEM notas ("+ Add" só
-// oferece "Subfolder", decisão deliberada de escopo — ver instruções da
-// tarefa).
+// Fatia 5b acrescentou: `node.isOwn` (pasta de outro usuário — escopo
+// cross-user, ver src/lib/folderScope.ts — é só leitura: SEM nome
+// editável/Delete/dropdown "+ Add"/alça de arrastar, com um único botão
+// "⧉ Copy this folder to your own Folders" no lugar de "+ Add") e
+// drag-and-drop de verdade (cada item — card OU seção de subpasta inteira —
+// ganha uma alça ⠿ quando `active` = node.isOwn && editMode, envolvido num
+// `.folder-item-row` com os atributos `data-container-id`/`data-item-type`/
+// `data-item-id`/`data-root-folder-id` que src/lib/useFolderDrag.ts lê via
+// DOM — ver comentário lá sobre a decisão de manipular o DOM diretamente
+// durante o `dragover`, só commitando estado no `dragend`).
+//
+// SEM notas ("+ Add" só oferece "Subfolder", decisão deliberada de escopo —
+// ver instruções da tarefa, notas ficam pra uma fatia futura).
 // ════════════════════════════════════════════════
 import type { FocusEvent, KeyboardEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { Catalogs } from '../../lib/catalogs';
 import type { useCollapsedSections } from '../../lib/collapsedSections';
 import type { FolderSectionNode } from '../../lib/foldersPipeline';
@@ -103,6 +112,8 @@ export function FolderSection({
   onRename,
   onDelete,
   onCreateSubfolder,
+  onCopyFolder,
+  armDrag,
 }: {
   node: FolderSectionNode;
   isRoot: boolean;
@@ -116,14 +127,30 @@ export function FolderSection({
   onRename: (folderId: number, newName: string) => Promise<boolean>;
   onDelete: (folderId: number, name: string) => void;
   onCreateSubfolder: (parentId: number) => void;
+  // Fatia 5b — "⧉ Copy this folder to your own Folders" (só aparece quando
+  // !node.isOwn, ver rightAction abaixo).
+  onCopyFolder: (folderId: number, name: string) => void;
+  // Fatia 5b — arma a alça de arrastar (ver src/lib/useFolderDrag.ts);
+  // recebida do Provider (CommandsContent.tsx), que monta o hook UMA VEZ
+  // pra toda a árvore (não faria sentido um hook de drag por FolderSection,
+  // já que um item pode ser solto em qualquer outra pasta da MESMA árvore,
+  // não só na sua pasta-mãe direta).
+  armDrag: (handle: HTMLElement | null) => void;
 }) {
   const sectionKey = `folder-${node.folderId}`;
   const collapsed = collapsedSections.isCollapsed(sectionKey);
+  // Drag-and-drop só existe numa pasta PRÓPRIA (node.isOwn) em modo de
+  // edição — mesmo critério de `active = withActions && editMode` no
+  // original (buildFolderSectionFromCards). Pasta de outro usuário nunca
+  // entra em modo de edição de verdade (não tem botão ✎ pra ligar — ver
+  // hasLeftActions abaixo), mas a checagem explícita aqui é uma segunda
+  // barreira contra soltar algo numa pasta só-leitura por engano.
+  const active = node.isOwn && editMode;
   // "Favorites" nunca mostra nome editável nem botão excluir, mesmo dentro
   // do modo de edição — pedido do usuário replicado 1:1 do original
   // (buildFolderSectionFromCards: `isFavorites = withActions && folderName
   // === 'Favorites'`).
-  const showRenameInput = editMode && !node.isFavorites;
+  const showRenameInput = editMode && !node.isFavorites && node.isOwn;
 
   // Renomear inline — porta de _folderNameInputKeydown()/
   // _folderNameInputBlur() (js/folders.js). Enter salva (blur dispara o
@@ -151,11 +178,13 @@ export function FolderSection({
   }
 
   // editControls (✎ fora do modo / Accept+Cancel dentro dele) só existem na
-  // RAIZ (depth 0) — pedido do usuário: "a edição de subpastas e ordem dos
-  // comandos e notas deve ficar somente na pasta pai". deleteTag (✕ Delete
-  // Folder) continua em QUALQUER profundidade, mas só dentro do modo de
-  // edição e nunca para Favorites.
-  const hasLeftActions = isRoot || (editMode && !node.isFavorites);
+  // RAIZ (depth 0) de uma pasta PRÓPRIA — pedido do usuário: "a edição de
+  // subpastas e ordem dos comandos e notas deve ficar somente na pasta
+  // pai". deleteTag (✕ Delete Folder) continua em QUALQUER profundidade,
+  // mas só dentro do modo de edição, nunca para Favorites, e nunca numa
+  // pasta que não seja própria (fatia 5b: pasta de outro usuário nunca tem
+  // hasLeftActions — é sempre só-leitura, ver rightAction abaixo).
+  const hasLeftActions = node.isOwn && (isRoot || (editMode && !node.isFavorites));
 
   const header = (
     <>
@@ -223,44 +252,76 @@ export function FolderSection({
         </span>
       )}
       <span className="sec-title-divider" />
-      <AddFolderDropdown folderId={node.folderId} onCreateSubfolder={onCreateSubfolder} />
+      {/* Fatia 5b: pasta própria → dropdown "+ Add" de sempre; pasta de
+          OUTRO usuário → um único botão "⧉ Copy" no lugar (nunca os dois
+          juntos — mesma exclusividade de `withActions`/`copyable` no
+          original, `buildFolderSectionFromCards`). */}
+      {node.isOwn ? (
+        <AddFolderDropdown folderId={node.folderId} onCreateSubfolder={onCreateSubfolder} />
+      ) : (
+        <button
+          type="button"
+          className="sec-folder-btn"
+          onMouseDown={ev => ev.preventDefault()}
+          onClick={ev => { ev.stopPropagation(); onCopyFolder(node.folderId, node.name); }}
+          title="Copy this folder to your own Folders"
+        >
+          ⧉
+        </button>
+      )}
     </>
   );
 
   // `.section-editing` (destaque tracejado + mantém .sec-folder-actions
-  // visível sem precisar de hover) segue `editMode`, igual em toda a árvore
-  // (raiz e subpastas) — mesmo critério de `active` em
-  // buildFolderSectionFromCards (`active = withActions && editMode`).
-  const extraClass = editMode ? 'section-folder section-editing' : 'section-folder';
+  // visível sem precisar de hover) segue `active` (não mais `editMode` cru
+  // — fatia 5b: numa pasta de outro usuário, `editMode` herdado da raiz
+  // nunca reflete edição de verdade ali, já que não existe botão ✎ pra
+  // ligá-lo, mas usar `active` deixa a intenção explícita em vez de
+  // depender desse efeito colateral) — mesmo critério de `active =
+  // withActions && editMode` em buildFolderSectionFromCards.
+  const extraClass = active ? 'section-folder section-editing' : 'section-folder';
   // Indentação por profundidade (subpastas, aninhamento ilimitado) — inline,
   // mesmo valor (18px/nível) do original.
   const style = node.depth > 0 ? { marginLeft: node.depth * 18 } : undefined;
 
   return (
-    // `data-folder-id`/`data-root-folder-id` — mesmos atributos que o
-    // original grava no próprio `.section` (buildFolderSectionFromCards:
-    // `html.replace('<div class="section', '<div data-folder-id=... data-
-    // root-folder-id=...')`), úteis daqui a uma fatia futura (5b,
-    // drag-and-drop) e já hoje pra identificar CADA seção de pasta sem
-    // ambiguidade (uma pasta com subpastas tem várias seções aninhadas com
-    // nomes/botões parecidos no DOM).
-    <div style={style} data-folder-id={node.folderId} data-root-folder-id={node.rootFolderId}>
-      <CollapsibleSection
-        sectionKey={sectionKey}
-        headerContent={header}
-        collapsed={collapsed}
-        onToggleChevron={() => collapsedSections.toggle(sectionKey)}
-        extraClass={extraClass}
-        renderBody={() => (
-          <>
-            {/* Pasta própria SEMPRE aparece, mesmo vazia (0 comandos, 0
-                subpastas) — este aviso substitui a lista vazia, em vez de
-                deixar o corpo da seção parecendo quebrado. */}
-            {node.items.length === 0 && <p className="sec-folder-empty-msg">Empty folder.</p>}
-            {node.items.map(it =>
+    <CollapsibleSection
+      sectionKey={sectionKey}
+      headerContent={header}
+      collapsed={collapsed}
+      onToggleChevron={() => collapsedSections.toggle(sectionKey)}
+      extraClass={extraClass}
+      style={style}
+      // `data-folder-id`/`data-root-folder-id` (no wrapper `.section`),
+      // `data-folder-header-id` (no `.sec-title`) e `data-folder-body-id`
+      // (no `.sec-body`) — mesmos três atributos/mesmos elementos do
+      // original (buildFolderSectionFromCards's html.replace(...)),
+      // lidos por src/lib/useFolderDrag.ts durante o dragover (soltar no
+      // CABEÇALHO de uma pasta) e no dragend (ler a ordem final do corpo
+      // de um container). Gravados em TODA pasta, própria ou não — não têm
+      // efeito nenhum numa pasta só-leitura (nunca existe um
+      // `.folder-item-row[draggable]` pra começar um drag vindo de lá), e
+      // ficar no `rootFolderId` do useFolderDrag.ts já impede que um item
+      // arrastado da própria árvore seja solto na árvore de outra pessoa.
+      rootDataAttrs={{ 'data-folder-id': node.folderId, 'data-root-folder-id': node.rootFolderId }}
+      headerDataAttrs={{ 'data-folder-header-id': node.folderId }}
+      bodyDataAttrs={{ 'data-folder-body-id': node.folderId }}
+      renderBody={() => (
+        <>
+          {/* Pasta própria SEMPRE aparece, mesmo vazia (0 comandos, 0
+              subpastas) — este aviso substitui a lista vazia, em vez de
+              deixar o corpo da seção parecendo quebrado. Pasta de outro
+              usuário vazia nunca chega até aqui (podada na própria árvore —
+              ver buildFolderSectionTreeForOwner em foldersPipeline.ts —
+              então `node.items.length === 0` só acontece pra pastas
+              próprias, a checagem de isOwn aqui é só defensiva). */}
+          {node.items.length === 0 && node.isOwn && <p className="sec-folder-empty-msg">Empty folder.</p>}
+          {node.items.map(it => {
+            const itemType: 'command' | 'folder' = it.type === 'command' ? 'command' : 'folder';
+            const itemId = it.type === 'command' ? it.card.id : it.section.folderId;
+            const rendered =
               it.type === 'command' ? (
                 <CommandCard
-                  key={`cmd-${it.card.id}`}
                   card={it.card}
                   catalogs={catalogs}
                   showImages={showImages}
@@ -269,7 +330,6 @@ export function FolderSection({
                 />
               ) : (
                 <FolderSection
-                  key={`folder-${it.section.folderId}`}
                   node={it.section}
                   isRoot={false}
                   editMode={editMode}
@@ -282,12 +342,42 @@ export function FolderSection({
                   onRename={onRename}
                   onDelete={onDelete}
                   onCreateSubfolder={onCreateSubfolder}
+                  onCopyFolder={onCopyFolder}
+                  armDrag={armDrag}
                 />
-              )
-            )}
-          </>
-        )}
-      />
-    </div>
+              );
+            const key = itemType === 'command' ? `cmd-${itemId}` : `folder-${itemId}`;
+            // Fora do modo de edição (ou numa pasta só-leitura), o item
+            // aparece cru, sem o wrapper de drag — mesmo critério de
+            // `active` no original (`body = items.map(it => active ?
+            // wrapItemForFolderDrag(...) : it.html)`). `Fragment` (não uma
+            // `<span>`/`<div>` extra) pra não introduzir um elemento a mais
+            // no DOM só pra carregar a `key` — `.sec-body` (flex/grid,
+            // ver components.css) espera `.card`/`.section` como filhos
+            // DIRETOS.
+            if (!active) return <Fragment key={key}>{rendered}</Fragment>;
+            return (
+              <div
+                key={key}
+                className="folder-item-row"
+                data-container-id={node.folderId}
+                data-item-type={itemType}
+                data-item-id={itemId}
+                data-root-folder-id={node.rootFolderId}
+              >
+                <span
+                  className="folder-drag-handle"
+                  onMouseDown={ev => armDrag(ev.currentTarget)}
+                  title="Drag to reorder"
+                >
+                  ⠿
+                </span>
+                <div className="folder-item-row-body">{rendered}</div>
+              </div>
+            );
+          })}
+        </>
+      )}
+    />
   );
 }

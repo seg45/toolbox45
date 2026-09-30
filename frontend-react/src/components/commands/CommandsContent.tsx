@@ -36,31 +36,45 @@
 // CommandCard.tsx) ficam disponíveis nos DOIS modos — o dropdown "Add to
 // folder" de um card na visão normal já reflete/edita as mesmas pastas.
 // ════════════════════════════════════════════════
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
 import type { Catalogs } from '../../lib/catalogs';
 import { useCollapsedSections } from '../../lib/collapsedSections';
 import { fetchCommands, invalidateCommandsCache, type Command } from '../../lib/commands';
+import { useFolderScope, type FolderScope } from '../../lib/folderScope';
 import {
   addCommandToFolder,
   collectFolderAndDescendantIds,
+  copyFolderFromUser as apiCopyFolderFromUser,
   createFolder,
   deleteFolder as apiDeleteFolder,
+  fetchAllUsersFolders,
   fetchFolders,
   invalidateFoldersCache,
+  moveFolder as apiMoveFolder,
   removeCommandFromFolder,
   renameFolder as apiRenameFolder,
+  reorderFolderItems,
   type Folder,
   type FolderOrderItem,
+  type FolderWithOwner,
 } from '../../lib/folders';
 import type { useFoldersView } from '../../lib/foldersView';
-import { buildFolderSectionTree, filterFolderTree, folderTreeCardCount, type FolderSectionNode } from '../../lib/foldersPipeline';
+import {
+  buildFolderSectionTree,
+  buildFolderSectionTreeForOwner,
+  filterFolderTree,
+  folderTreeCardCount,
+  type FolderSectionNode,
+} from '../../lib/foldersPipeline';
 import { FoldersUIContext } from '../../lib/foldersUI';
 import type { useLiveFilters } from '../../lib/liveFilters';
 import { buildRenderTree, buildValues, filterCommands, type ComboBlockData, type SectionData } from '../../lib/renderPipeline';
 import type { Settings } from '../../lib/settingsStore';
 import { useConfirm } from '../../lib/useConfirm';
+import { useFolderDrag, type FolderOrderedItem } from '../../lib/useFolderDrag';
 import { useFolderPrompt } from '../../lib/useFolderPrompt';
 import { CollapsibleSection } from './CollapsibleSection';
 import { CommandCard } from './CommandCard';
@@ -70,6 +84,23 @@ import { FolderSection } from './FolderSection';
 import { QueryBar } from './QueryBar';
 
 type EditorState = { mode: EditorMode; id?: number };
+
+// Resultado de montar a árvore de Pastas pro escopo ATUAL (fatia 5b) — dois
+// formatos, espelhando os dois formatos que o próprio original produz pro
+// ramo VIEW_FOLDERS_HOME de render.js: "flat" (escopo "mine" ou
+// "user:<username>" — uma lista de raízes, sem nenhum agrupamento por
+// dono) e "grouped" (só o escopo "all" — uma lista de grupos "👤
+// <username>", cada um com suas próprias raízes). Guardado aqui (não em
+// foldersPipeline.ts) porque é puramente uma decisão de COMO RENDERIZAR, a
+// própria árvore de cada grupo já vem pronta de buildFolderSectionTree/
+// buildFolderSectionTreeForOwner.
+type FolderScopeGroup = { username: string; isOwn: boolean; nodes: FolderSectionNode[] };
+type FolderScopeRenderData = { kind: 'flat'; nodes: FolderSectionNode[] } | { kind: 'grouped'; groups: FolderScopeGroup[] };
+
+function folderScopeDataCardCount(data: FolderScopeRenderData): number {
+  if (data.kind === 'flat') return folderTreeCardCount(data.nodes);
+  return data.groups.reduce((sum, g) => sum + folderTreeCardCount(g.nodes), 0);
+}
 
 function folderCrudErrorMessage(e: unknown, fallback: string): string {
   return e instanceof ApiError ? e.message : fallback;
@@ -113,6 +144,46 @@ export function CommandsContent({
   const [openFolderMenuId, setOpenFolderMenuId] = useState<number | null>(null);
   const folderPrompt = useFolderPrompt();
   const confirmAction = useConfirm();
+  const { me } = useAuth();
+
+  // ── Fatia 5b: escopo de pastas dentro de "Folders" (My folders/usuário
+  // escolhido/All) — ver src/lib/folderScope.ts. `allUsersFolders` (GET
+  // /api/folders/all) só é buscada sob demanda (ensureAllUsersFoldersLoaded
+  // abaixo), nunca no boot — a maioria fica em "My folders", mesma decisão
+  // do original (reloadAllUsersFoldersFromServer()).
+  const folderScopeState = useFolderScope();
+  const [allUsersFolders, setAllUsersFolders] = useState<FolderWithOwner[] | null>(null);
+  const [allUsersFoldersLoadError, setAllUsersFoldersLoadError] = useState(false);
+  // Guarda contra disparar dois fetches de /api/folders/all em paralelo
+  // (dropdown aberto + scope!=='mine' no mesmo instante, ver os dois
+  // chamadores de ensureAllUsersFoldersLoaded abaixo) — não precisa ser
+  // estado (não afeta o que é renderizado, só evita trabalho duplicado).
+  const allUsersFoldersLoadingRef = useRef(false);
+  function ensureAllUsersFoldersLoaded() {
+    if (allUsersFolders !== null || allUsersFoldersLoadingRef.current) return;
+    allUsersFoldersLoadingRef.current = true;
+    fetchAllUsersFolders()
+      .then(data => {
+        setAllUsersFolders(data);
+        setAllUsersFoldersLoadError(false);
+      })
+      .catch(err => {
+        console.error('Failed to load all users folders from API', err);
+        setAllUsersFoldersLoadError(true);
+      })
+      .finally(() => {
+        allUsersFoldersLoadingRef.current = false;
+      });
+  }
+  // Cobre o caso de o escopo salvo (localStorage, ver useFolderScope) já
+  // não ser "mine" desde o boot (F5 com "All"/um usuário específico
+  // escolhido antes) — sem isso, a lista cross-user só carregaria quando o
+  // usuário abrisse o dropdown de novo, deixando a tela "presa" em Folders
+  // sem mostrar nada até essa interação.
+  useEffect(() => {
+    if (foldersView.active && folderScopeState.scope !== 'mine') ensureAllUsersFoldersLoaded();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [foldersView.active, folderScopeState.scope]);
 
   useEffect(() => {
     let cancelled = false;
@@ -316,6 +387,124 @@ export function CommandsContent({
     });
   }
 
+  // "⧉ Copy this folder to your own Folders" (fatia 5b) — porta de
+  // copyFolderFromUser() (js/folders.js). Mesmo texto de confirmação do
+  // original (reaproveita useConfirm(), já usado por deleteFolderAction
+  // acima); `danger: false` — diferente da exclusão, copiar não é uma ação
+  // destrutiva (não muda nem apaga nada da pasta original), então o botão
+  // de confirmar sai no estilo "primary" (teal) em vez de "danger"
+  // (vermelho) — pequena divergência deliberada de estilo em relação ao
+  // original, que não distinguia os dois na única modal de confirmação que
+  // tinha.
+  async function copyFolderAction(folderId: number, name: string) {
+    const ok = await confirmAction(
+      `Copy folder "${name}" to your own Folders? This creates a new folder with the same commands — it won't affect the original.`,
+      { danger: false }
+    );
+    if (!ok) return;
+    try {
+      const copied = await apiCopyFolderFromUser(folderId);
+      // A pasta copiada é uma pasta PRÓPRIA nova — entra direto em
+      // `folders` (mesmo estado que "My folders"/o dropdown "Add to
+      // folder" de cada card já leem), pra aparecer sem precisar de F5
+      // tanto se o usuário for olhar "My folders" a seguir quanto no
+      // próprio dropdown de pastas dos cards.
+      setFolders(prev => (prev ? [...prev, copied] : [copied]));
+      invalidateFoldersCache();
+    } catch (e) {
+      window.alert(folderCrudErrorMessage(e, 'Failed to copy folder. Please try again.'));
+    }
+  }
+
+  // ── Drag-and-drop (fatia 5b) — ver src/lib/useFolderDrag.ts pra decisão
+  // de arquitetura (manipulação direta do DOM durante o dragover, só
+  // commitando estado aqui no dragend). `onReorder`/`onMove` abaixo são os
+  // dois únicos pontos onde o resultado de um drag vira, de fato, um
+  // `setState`/chamada à API — tudo antes disso (mover a linha pelo DOM
+  // durante o dragover) é só visual, sem tocar em `folders`/`commands`.
+  //
+  // Reorder simples (mesma pasta, só mudou de posição) — otimista: aplica
+  // a nova ordem local na hora, PUT /reorder em paralelo (mesmo padrão de
+  // toggleCommandFolder acima — falha só loga um aviso, nunca desfaz o
+  // estado local).
+  function persistFolderReorder(containerId: number, order: FolderOrderedItem[]) {
+    setFolders(prev => (prev ? prev.map(f => (f.id === containerId ? { ...f, order: order.slice() } : f)) : prev));
+    invalidateFoldersCache();
+    reorderFolderItems(containerId, order).catch(e => console.warn('Falha ao salvar a nova ordem da pasta no servidor (mantida localmente)', e));
+  }
+
+  // Mover um item (comando OU subpasta) pra OUTRA pasta da MESMA árvore —
+  // porta de _fldMoveItemAcrossFolders()/reorderFolderItems() (js/folders.js,
+  // ramo "else" do dragend). Diferente do reorder simples acima, este
+  // ESPERA a membership/parent mudar de verdade no backend antes de
+  // persistir a ordem do destino (mesma ordem em que o original faz —
+  // _fldMoveItemAcrossFolders().then(...).then(() => reorderFolderItems(...))
+  // — ainda que aqui não seja estritamente necessário esperar pra
+  // atualizar o estado LOCAL, que já é otimista de qualquer forma; esperar
+  // só evita persistir uma ordem de reorder num container que o move
+  // acabou de falhar em popular).
+  async function persistFolderMove(itemType: 'command' | 'folder', itemId: number, oldContainerId: number, newContainerId: number, order: FolderOrderedItem[]) {
+    try {
+      if (itemType === 'command') {
+        await Promise.all([addCommandToFolder(newContainerId, itemId), removeCommandFromFolder(oldContainerId, itemId)]);
+      } else {
+        await apiMoveFolder(itemId, newContainerId);
+      }
+    } catch (e) {
+      console.warn('Falha ao mover item entre pastas no servidor', e);
+    }
+    reorderFolderItems(newContainerId, order).catch(e => console.warn('Falha ao salvar a ordem da pasta de destino no servidor', e));
+
+    // Estado local otimista — espelha os dois ajustes documentados no
+    // original: (a) folders[].commandIds/order/parentId (mesmo papel de
+    // FOLDERS local em reloadFoldersFromServer()) e (b) commands[].folder_ids
+    // (o "bug corrigido" citado nas instruções da tarefa — comment
+    // original: "notas consigo movimentar normalmente, mas continuo com
+    // problema para movimentar os comandos dentro das pastas", porque a
+    // seção de cada pasta lista comandos a partir de c.folder_ids, não de
+    // FOLDERS[].command_ids — sem atualizar os dois em conjunto aqui, um
+    // comando movido sumiria da origem mas não apareceria no destino até
+    // um F5).
+    setFolders(prev => {
+      if (!prev) return prev;
+      return prev.map(f => {
+        if (itemType === 'folder' && f.id === itemId) {
+          return { ...f, parentId: newContainerId };
+        }
+        if (itemType === 'command' && f.id === oldContainerId) {
+          const nextIds = new Set(f.commandIds);
+          nextIds.delete(itemId);
+          return { ...f, commandIds: nextIds, order: f.order.filter(o => !(o.type === 'command' && o.id === itemId)) };
+        }
+        if (f.id === newContainerId) {
+          if (itemType === 'command') {
+            const nextIds = new Set(f.commandIds);
+            nextIds.add(itemId);
+            return { ...f, commandIds: nextIds, order: order.slice() }; // `order` já é a ordem final do destino, lida do DOM no dragend
+          }
+          return { ...f, order: order.slice() };
+        }
+        return f;
+      });
+    });
+    if (itemType === 'command') {
+      setCommands(prev =>
+        prev
+          ? prev.map(c => {
+              if (c.id !== itemId) return c;
+              const ids = new Set(c.folder_ids);
+              ids.delete(oldContainerId);
+              ids.add(newContainerId);
+              return { ...c, folder_ids: [...ids] };
+            })
+          : prev
+      );
+    }
+    invalidateFoldersCache();
+  }
+
+  const { armDrag } = useFolderDrag({ onReorder: persistFolderReorder, onMove: persistFolderMove });
+
   const foldersUIValue = {
     folders,
     openCommandId: openFolderMenuId,
@@ -337,34 +526,100 @@ export function CommandsContent({
   // pasta (buildFolderSectionTree). A busca (liveFilters.filters.search) é
   // aplicada por cima, filtrando os CARDS recursivamente (ver
   // filterFolderTree/src/lib/foldersPipeline.ts).
-  const folderTree = useMemo<FolderSectionNode[] | null>(() => {
-    if (!foldersView.active || !commands || !folders) return null;
+  // Fatia 5b: os 3 escopos (mine/all/user:<username>) — porta dos 3 ramos
+  // de VIEW_FOLDERS_HOME em render.js (ver comentário de FolderScopeGroup/
+  // FolderScopeRenderData acima). "mine" segue igual à fatia 5a
+  // (buildFolderSectionTree, sem mudança); os outros dois usam
+  // buildFolderSectionTreeForOwner (foldersPipeline.ts) — "user:<x>" uma
+  // vez, "all" uma vez POR USUÁRIO (agrupado por dono, mesmo critério do
+  // original: `byUser`/`usernames.map(...)`). A busca
+  // (liveFilters.filters.search) é aplicada por cima em qualquer escopo,
+  // filtrando os CARDS recursivamente (filterFolderTree) — inclusive
+  // dentro de cada grupo do escopo "all".
+  const folderScopeData = useMemo<FolderScopeRenderData | null>(() => {
+    if (!foldersView.active || !commands) return null;
     const filtered = filterCommands(commands, settings, liveFilters.filters);
     const values = buildValues(fieldValues, settings, catalogs);
     const hasIPs = !!(values.src_ip && values.dst_ip);
-    const nodes = buildFolderSectionTree({ commands: filtered, folders, values, hasIPs, catalogParams: catalogs?.parameters || [] });
+    const catalogParams = catalogs?.parameters || [];
     const query = liveFilters.filters.search.trim().toLowerCase();
-    return query ? filterFolderTree(nodes, query, catalogs) : nodes;
-  }, [foldersView.active, commands, folders, catalogs, settings, liveFilters.filters, fieldValues]);
+    const currentUsername = me?.username;
+    const scope = folderScopeState.scope;
+
+    if (scope === 'mine') {
+      if (!folders) return null;
+      const nodes = buildFolderSectionTree({ commands: filtered, folders, values, hasIPs, catalogParams });
+      return { kind: 'flat', nodes: query ? filterFolderTree(nodes, query, catalogs) : nodes };
+    }
+
+    // "all"/"user:<username>" — precisam da lista cross-user carregada
+    // (ver ensureAllUsersFoldersLoaded); `null` aqui é lido como "ainda
+    // carregando", não como "sem pastas" (ver JSX mais abaixo).
+    if (!allUsersFolders) return null;
+
+    if (scope === 'all') {
+      const byUser = new Map<string, FolderWithOwner[]>();
+      allUsersFolders.forEach(f => {
+        const arr = byUser.get(f.username);
+        if (arr) arr.push(f);
+        else byUser.set(f.username, [f]);
+      });
+      const usernames = [...byUser.keys()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      const groups: FolderScopeGroup[] = usernames
+        .map(username => {
+          const isOwn = username === currentUsername;
+          const userFolders = byUser.get(username) || [];
+          const rawNodes = buildFolderSectionTreeForOwner({ commands: filtered, folders: userFolders, values, hasIPs, catalogParams, isOwn });
+          const nodes = query ? filterFolderTree(rawNodes, query, catalogs) : rawNodes;
+          return { username, isOwn, nodes };
+        })
+        // Grupo do usuário ATUAL sempre aparece (mesma pasta própria vazia
+        // que buildFolderNode nunca poda) mesmo com 0 pastas visíveis;
+        // grupo de outro usuário some por inteiro se ficou sem nenhuma
+        // pasta (todas vazias/podadas) — mesmo critério de
+        // `!cardCount && !hasOwnEmptyFolder` no original.
+        .filter(g => g.isOwn || g.nodes.length > 0);
+      return { kind: 'grouped', groups };
+    }
+
+    // scope === 'user:<username>' — as pastas DESSA pessoa direto, sem
+    // agrupamento "👤 username" (só faz sentido pra "all", que mistura
+    // várias pessoas na mesma tela).
+    const targetUsername = scope.slice('user:'.length);
+    const isOwn = targetUsername === currentUsername;
+    const userFolders = allUsersFolders.filter(f => f.username === targetUsername);
+    const rawNodes = buildFolderSectionTreeForOwner({ commands: filtered, folders: userFolders, values, hasIPs, catalogParams, isOwn });
+    return { kind: 'flat', nodes: query ? filterFolderTree(rawNodes, query, catalogs) : rawNodes };
+  }, [foldersView.active, commands, folders, allUsersFolders, folderScopeState.scope, catalogs, settings, liveFilters.filters, fieldValues, me?.username]);
 
   // Todas as chaves de seção atualmente na árvore — usado por Expand all/
   // Collapse all, que no original recolhem/expandem TODOS os `.section` na
   // tela (collapseAllSections()/expandAllSections()), não só as seções de
   // Tópico. Enquanto a visão "Folders" está ativa, isso inclui toda a
   // árvore de pastas/subpastas (mesmo `document.querySelectorAll('.section')`
-  // do original, que não distingue seção de Tópico de seção de pasta);
+  // do original, que não distingue seção de Tópico de seção de pasta) — no
+  // escopo "all" (fatia 5b), inclui também a chave sintética de cada grupo
+  // "👤 <username>" (`scope-user-<username>`, ver JSX mais abaixo), já que
+  // ela também é um CollapsibleSection recolhível como qualquer outra;
   // fora dela, as chaves são as de sempre (tópico/ambiente/agrupamentos de
   // Created by/Versão).
   const allSectionKeys = useMemo(() => {
     if (foldersView.active) {
-      if (!folderTree) return [];
+      if (!folderScopeData) return [];
       const keys: string[] = [];
       const walk = (nodes: FolderSectionNode[]) =>
         nodes.forEach(n => {
           keys.push(`folder-${n.folderId}`);
           walk(n.items.filter((it): it is { type: 'folder'; section: FolderSectionNode } => it.type === 'folder').map(it => it.section));
         });
-      walk(folderTree);
+      if (folderScopeData.kind === 'flat') {
+        walk(folderScopeData.nodes);
+      } else {
+        folderScopeData.groups.forEach(g => {
+          keys.push(`scope-user-${g.username}`);
+          walk(g.nodes);
+        });
+      }
       return keys;
     }
     if (!renderResult) return [];
@@ -381,7 +636,7 @@ export function CommandsContent({
       }
     });
     return keys;
-  }, [foldersView.active, folderTree, renderResult]);
+  }, [foldersView.active, folderScopeData, renderResult]);
 
   function renderSection(sec: SectionData) {
     const collapsed = collapsedSections.isCollapsed(sec.key);
@@ -503,18 +758,23 @@ export function CommandsContent({
     <div className={`content${settings.showCardDetails ? '' : ' compact-cards'}`} id="out">
       <FoldersUIContext.Provider value={foldersUIValue}>
         <QueryBar onChange={setFieldValues} catalogs={catalogs} />
-        {/* "Group by" continua visível/clicável dentro da visão "Folders" —
-            mesmo comportamento (deliberado) do original: VIEW_FOLDERS_HOME
-            "sempre retorna... nunca cai nos ramos de GROUP_BY", ou seja, a
-            seleção de Group by simplesmente não tem efeito nenhum enquanto
-            Folders está ativo. Expand all/Collapse all e "+ Add command"
-            continuam funcionais nos dois modos. */}
+        {/* Fatia 5b: "Group by" dá lugar por inteiro ao seletor de ESCOPO
+            de pastas (My folders/usuário escolhido/All) enquanto a visão
+            "Folders" está ativa — os dois dropdowns nunca ficam visíveis
+            juntos (ver ContentToolbar.tsx). Expand all/Collapse all e
+            "+ Add command" continuam funcionais nos dois modos. */}
         <ContentToolbar
           groupBy={settings.groupBy}
           onChangeGroupBy={v => updateSettings({ groupBy: v })}
           onExpandAll={() => collapsedSections.expandAll(allSectionKeys)}
           onCollapseAll={() => collapsedSections.collapseAll(allSectionKeys)}
           onAddCommand={() => setEditor({ mode: 'create' })}
+          foldersActive={foldersView.active}
+          folderScope={folderScopeState.scope}
+          onChangeFolderScope={(s: FolderScope) => folderScopeState.setScope(s)}
+          allUsersFolders={allUsersFolders}
+          currentUsername={me?.username}
+          onOpenFolderScope={ensureAllUsersFoldersLoaded}
         />
         {foldersLoadError && (
           <div className="empty">
@@ -524,14 +784,24 @@ export function CommandsContent({
         )}
         {foldersView.active ? (
           <>
-            {folderTree && folderTree.length === 0 && (
+            {allUsersFoldersLoadError && folderScopeState.scope !== 'mine' && (
               <div className="empty">
-                <div className="empty-ico">📁</div>
-                <p>No folders yet. Use "Add to folder" on any command to create one.</p>
+                <div className="empty-ico">⚠️</div>
+                <p>Failed to load folders from other users. Try a different scope.</p>
               </div>
             )}
-            {folderTree &&
-              folderTree.map(node => (
+            {folderScopeData?.kind === 'flat' && folderScopeData.nodes.length === 0 && (
+              <div className="empty">
+                <div className="empty-ico">📁</div>
+                <p>
+                  {folderScopeState.scope === 'mine'
+                    ? 'No folders yet. Use "Add to folder" on any command to create one.'
+                    : 'This user has no folders.'}
+                </p>
+              </div>
+            )}
+            {folderScopeData?.kind === 'flat' &&
+              folderScopeData.nodes.map(node => (
                 <FolderSection
                   key={`folder-${node.folderId}`}
                   node={node}
@@ -546,9 +816,64 @@ export function CommandsContent({
                   onRename={renameFolderAction}
                   onDelete={deleteFolderAction}
                   onCreateSubfolder={createSubfolder}
+                  onCopyFolder={copyFolderAction}
+                  armDrag={armDrag}
                 />
               ))}
-            {folderTree && liveFilters.filters.search.trim() && folderTreeCardCount(folderTree) === 0 && (
+            {/* Escopo "all" — um grupo recolhível "👤 <username>" por dono,
+                cada um com sua própria árvore de raízes (mesmo componente
+                CollapsibleSection usado em qualquer outra seção
+                recolhível — ver instruções da tarefa). Pastas vazias de
+                outro usuário já não chegam aqui (podadas em
+                buildFolderSectionTreeForOwner); a pasta PRÓPRIA vazia
+                ainda aparece, e o grupo do usuário atual nunca é escondido
+                por inteiro mesmo com 0 pastas (ver filter em
+                folderScopeData acima). */}
+            {folderScopeData?.kind === 'grouped' &&
+              folderScopeData.groups.map(g => {
+                const groupKey = `scope-user-${g.username}`;
+                const collapsed = collapsedSections.isCollapsed(groupKey);
+                return (
+                  <CollapsibleSection
+                    key={groupKey}
+                    sectionKey={groupKey}
+                    extraClass="section-creator"
+                    headerContent={
+                      <>
+                        👤 <strong>{g.username}</strong> <span className="sec-count">{folderTreeCardCount(g.nodes)}</span>
+                      </>
+                    }
+                    collapsed={collapsed}
+                    onToggleChevron={() => collapsedSections.toggle(groupKey)}
+                    renderBody={() =>
+                      g.nodes.length === 0 ? (
+                        <p className="sec-folder-empty-msg">No folders yet.</p>
+                      ) : (
+                        g.nodes.map(node => (
+                          <FolderSection
+                            key={`folder-${node.folderId}`}
+                            node={node}
+                            isRoot
+                            editMode={g.isOwn && folderEditRoots.has(node.rootFolderId)}
+                            collapsedSections={collapsedSections}
+                            catalogs={catalogs}
+                            showImages={settings.showImages}
+                            onEditCommand={id => setEditor({ mode: 'edit', id })}
+                            onDuplicateCommand={id => setEditor({ mode: 'duplicate', id })}
+                            onToggleRootEditMode={toggleRootEditMode}
+                            onRename={renameFolderAction}
+                            onDelete={deleteFolderAction}
+                            onCreateSubfolder={createSubfolder}
+                            onCopyFolder={copyFolderAction}
+                            armDrag={armDrag}
+                          />
+                        ))
+                      )
+                    }
+                  />
+                );
+              })}
+            {folderScopeData && liveFilters.filters.search.trim() && folderScopeDataCardCount(folderScopeData) === 0 && (
               <div className="empty">
                 <div className="empty-ico">🔍</div>
                 <p>No commands found for "{liveFilters.filters.search}".</p>
