@@ -23,16 +23,24 @@
 // DOM — ver comentário lá sobre a decisão de manipular o DOM diretamente
 // durante o `dragover`, só commitando estado no `dragend`).
 //
-// SEM notas ("+ Add" só oferece "Subfolder", decisão deliberada de escopo —
-// ver instruções da tarefa, notas ficam pra uma fatia futura).
+// Fatia 5c acrescentou Notes: "+ Add" ganhou a opção "Note" (ACIMA de
+// "Subfolder", mesma ordem do original); um item `{type:'note'}` de
+// `node.items` vira um <NoteCard> (mesmo tratamento de drag que comando/
+// subpasta — arrastável quando `active`); e uma nota NOVA ainda sem id
+// (`creatingNoteFolderId === node.folderId`) é renderizada separadamente,
+// no TOPO do corpo, FORA de `node.items`/do mecanismo de drag — mesmo
+// critério de `draftNoteHtml` no original (uma nota ainda não salva não tem
+// posição em folder.order, não há o que reordenar).
 // ════════════════════════════════════════════════
 import type { FocusEvent, KeyboardEvent } from 'react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { Catalogs } from '../../lib/catalogs';
 import type { useCollapsedSections } from '../../lib/collapsedSections';
 import type { FolderSectionNode } from '../../lib/foldersPipeline';
+import type { FolderItemType } from '../../lib/useFolderDrag';
 import { CollapsibleSection } from './CollapsibleSection';
 import { CommandCard } from './CommandCard';
+import { NoteCard } from './NoteCard';
 
 // Mesmo path SVG de folderIcon()/js/terminal-renderer.js (ver também
 // FolderMenu.tsx) — sempre "preenchido" aqui (toda pasta desta tela é
@@ -50,10 +58,18 @@ function FolderTitleIcon() {
 // Dropdown "+ Add" do cabeçalho — mesmo componente visual .dd/.dd-panel/
 // .sb-row do "Add" da toolbar principal (ver ContentToolbar.tsx/
 // FilterDropdown.tsx), só que ancorado por .sec-folder-add-dd/
-// .sec-folder-add-btn (CSS já pronto desde a fatia 1). Só "Subfolder" nesta
-// fatia — "Note" fica pra 5c (RichTextEditor.tsx já existe mas não é usado
-// aqui, ver instruções da tarefa).
-function AddFolderDropdown({ folderId, onCreateSubfolder }: { folderId: number; onCreateSubfolder: (parentId: number) => void }) {
+// .sec-folder-add-btn (CSS já pronto desde a fatia 1). "Note" ACIMA de
+// "Subfolder" — mesma ordem do original (db-render-engine.js, linha
+// ~371-378: startCreateNote() antes de promptCreateSubfolder()).
+function AddFolderDropdown({
+  folderId,
+  onCreateNote,
+  onCreateSubfolder,
+}: {
+  folderId: number;
+  onCreateNote: (folderId: number) => void;
+  onCreateSubfolder: (parentId: number) => void;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -87,6 +103,19 @@ function AddFolderDropdown({ folderId, onCreateSubfolder }: { folderId: number; 
             onClick={ev => {
               ev.stopPropagation();
               setOpen(false);
+              onCreateNote(folderId);
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+              <path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            <span>Note</span>
+          </div>
+          <div
+            className="sb-row"
+            onClick={ev => {
+              ev.stopPropagation();
+              setOpen(false);
               onCreateSubfolder(folderId);
             }}
           >
@@ -114,6 +143,14 @@ export function FolderSection({
   onCreateSubfolder,
   onCopyFolder,
   armDrag,
+  editingNoteIds,
+  creatingNoteFolderId,
+  onCreateNote,
+  onStartEditNote,
+  onCancelNoteEdit,
+  onAcceptNoteEdit,
+  onDeleteNote,
+  onCloneNote,
 }: {
   node: FolderSectionNode;
   isRoot: boolean;
@@ -136,6 +173,19 @@ export function FolderSection({
   // já que um item pode ser solto em qualquer outra pasta da MESMA árvore,
   // não só na sua pasta-mãe direta).
   armDrag: (handle: HTMLElement | null) => void;
+  // Fatia 5c — Notes: mesmo espírito de `editMode`/`folderEditRoots`
+  // (estado transitório de UI que mora em CommandsContent.tsx, ver
+  // NOTE_EDIT_MODE/NOTE_CREATE_FOLDER_ID no original) — passado por prop
+  // através da recursão (mesmo padrão já usado por todos os outros
+  // callbacks de pasta acima, em vez de um Context novo só pra isso).
+  editingNoteIds: Set<number>; // ids de notas EXISTENTES sendo editadas agora
+  creatingNoteFolderId: number | null; // folderId com um rascunho de nota nova em edição, ou null
+  onCreateNote: (folderId: number) => void;
+  onStartEditNote: (noteId: number) => void;
+  onCancelNoteEdit: (noteId: number | null, folderId: number) => void;
+  onAcceptNoteEdit: (noteId: number | null, folderId: number, html: string) => void;
+  onDeleteNote: (noteId: number, folderId: number) => void;
+  onCloneNote: (noteId: number, folderId: number) => void;
 }) {
   const sectionKey = `folder-${node.folderId}`;
   const collapsed = collapsedSections.isCollapsed(sectionKey);
@@ -257,7 +307,7 @@ export function FolderSection({
           juntos — mesma exclusividade de `withActions`/`copyable` no
           original, `buildFolderSectionFromCards`). */}
       {node.isOwn ? (
-        <AddFolderDropdown folderId={node.folderId} onCreateSubfolder={onCreateSubfolder} />
+        <AddFolderDropdown folderId={node.folderId} onCreateNote={onCreateNote} onCreateSubfolder={onCreateSubfolder} />
       ) : (
         <button
           type="button"
@@ -306,78 +356,122 @@ export function FolderSection({
       rootDataAttrs={{ 'data-folder-id': node.folderId, 'data-root-folder-id': node.rootFolderId }}
       headerDataAttrs={{ 'data-folder-header-id': node.folderId }}
       bodyDataAttrs={{ 'data-folder-body-id': node.folderId }}
-      renderBody={() => (
-        <>
-          {/* Pasta própria SEMPRE aparece, mesmo vazia (0 comandos, 0
-              subpastas) — este aviso substitui a lista vazia, em vez de
-              deixar o corpo da seção parecendo quebrado. Pasta de outro
-              usuário vazia nunca chega até aqui (podada na própria árvore —
-              ver buildFolderSectionTreeForOwner em foldersPipeline.ts —
-              então `node.items.length === 0` só acontece pra pastas
-              próprias, a checagem de isOwn aqui é só defensiva). */}
-          {node.items.length === 0 && node.isOwn && <p className="sec-folder-empty-msg">Empty folder.</p>}
-          {node.items.map(it => {
-            const itemType: 'command' | 'folder' = it.type === 'command' ? 'command' : 'folder';
-            const itemId = it.type === 'command' ? it.card.id : it.section.folderId;
-            const rendered =
-              it.type === 'command' ? (
-                <CommandCard
-                  card={it.card}
-                  catalogs={catalogs}
-                  showImages={showImages}
-                  onEdit={onEditCommand}
-                  onDuplicate={onDuplicateCommand}
-                />
-              ) : (
-                <FolderSection
-                  node={it.section}
-                  isRoot={false}
-                  editMode={editMode}
-                  collapsedSections={collapsedSections}
-                  catalogs={catalogs}
-                  showImages={showImages}
-                  onEditCommand={onEditCommand}
-                  onDuplicateCommand={onDuplicateCommand}
-                  onToggleRootEditMode={onToggleRootEditMode}
-                  onRename={onRename}
-                  onDelete={onDelete}
-                  onCreateSubfolder={onCreateSubfolder}
-                  onCopyFolder={onCopyFolder}
-                  armDrag={armDrag}
-                />
-              );
-            const key = itemType === 'command' ? `cmd-${itemId}` : `folder-${itemId}`;
-            // Fora do modo de edição (ou numa pasta só-leitura), o item
-            // aparece cru, sem o wrapper de drag — mesmo critério de
-            // `active` no original (`body = items.map(it => active ?
-            // wrapItemForFolderDrag(...) : it.html)`). `Fragment` (não uma
-            // `<span>`/`<div>` extra) pra não introduzir um elemento a mais
-            // no DOM só pra carregar a `key` — `.sec-body` (flex/grid,
-            // ver components.css) espera `.card`/`.section` como filhos
-            // DIRETOS.
-            if (!active) return <Fragment key={key}>{rendered}</Fragment>;
-            return (
-              <div
-                key={key}
-                className="folder-item-row"
-                data-container-id={node.folderId}
-                data-item-type={itemType}
-                data-item-id={itemId}
-                data-root-folder-id={node.rootFolderId}
-              >
-                <span
-                  className="folder-drag-handle"
-                  onMouseDown={ev => armDrag(ev.currentTarget)}
-                  title="Drag to reorder"
+      renderBody={() => {
+        // Rascunho de nota NOVA em edição — não é um item de `node.items`
+        // (não existe no servidor ainda, não tem posição em folder.order):
+        // entra sempre no TOPO do corpo, fora do mecanismo de drag — mesmo
+        // critério de `draftNoteHtml` no original. `key` ESTÁVEL
+        // (`note-draft-${folderId}`) — ver comentário em NoteCard.tsx sobre
+        // por que isso substitui NOTE_EDIT_DRAFTS.
+        const isDrafting = node.isOwn && creatingNoteFolderId === node.folderId;
+        const draftNote = isDrafting && (
+          <NoteCard
+            key={`note-draft-${node.folderId}`}
+            note={{ id: null, folder_id: node.folderId, description: '' }}
+            isNew
+            editing
+            isOwn
+            onStartEdit={() => {}}
+            onClone={() => {}}
+            onAccept={html => onAcceptNoteEdit(null, node.folderId, html)}
+            onCancel={() => onCancelNoteEdit(null, node.folderId)}
+            onDelete={() => {}}
+          />
+        );
+        return (
+          <>
+            {draftNote}
+            {/* Pasta própria SEMPRE aparece, mesmo vazia (0 comandos, 0
+                notas, 0 subpastas) — este aviso substitui a lista vazia, em
+                vez de deixar o corpo da seção parecendo quebrado. Não
+                aparece com um rascunho de nota nova ocupando o corpo
+                (contraditório mostrar "Empty folder." ao lado do editor de
+                uma nota que o próprio usuário acabou de abrir — mesmo
+                critério do original). Pasta de outro usuário vazia nunca
+                chega até aqui (podada na própria árvore — ver
+                buildFolderSectionTreeForOwner em foldersPipeline.ts — então
+                `node.items.length === 0` só acontece pra pastas próprias, a
+                checagem de isOwn aqui é só defensiva). */}
+            {node.items.length === 0 && node.isOwn && !isDrafting && <p className="sec-folder-empty-msg">Empty folder.</p>}
+            {node.items.map(it => {
+              const itemType: FolderItemType = it.type;
+              const itemId = it.type === 'command' ? it.card.id : it.type === 'note' ? it.note.id : it.section.folderId;
+              const rendered =
+                it.type === 'command' ? (
+                  <CommandCard
+                    card={it.card}
+                    catalogs={catalogs}
+                    showImages={showImages}
+                    onEdit={onEditCommand}
+                    onDuplicate={onDuplicateCommand}
+                  />
+                ) : it.type === 'note' ? (
+                  <NoteCard
+                    note={it.note}
+                    isNew={false}
+                    editing={editingNoteIds.has(it.note.id)}
+                    isOwn={node.isOwn}
+                    onStartEdit={() => onStartEditNote(it.note.id)}
+                    onClone={() => onCloneNote(it.note.id, node.folderId)}
+                    onAccept={html => onAcceptNoteEdit(it.note.id, node.folderId, html)}
+                    onCancel={() => onCancelNoteEdit(it.note.id, node.folderId)}
+                    onDelete={() => onDeleteNote(it.note.id, node.folderId)}
+                  />
+                ) : (
+                  <FolderSection
+                    node={it.section}
+                    isRoot={false}
+                    editMode={editMode}
+                    collapsedSections={collapsedSections}
+                    catalogs={catalogs}
+                    showImages={showImages}
+                    onEditCommand={onEditCommand}
+                    onDuplicateCommand={onDuplicateCommand}
+                    onToggleRootEditMode={onToggleRootEditMode}
+                    onRename={onRename}
+                    onDelete={onDelete}
+                    onCreateSubfolder={onCreateSubfolder}
+                    onCopyFolder={onCopyFolder}
+                    armDrag={armDrag}
+                    editingNoteIds={editingNoteIds}
+                    creatingNoteFolderId={creatingNoteFolderId}
+                    onCreateNote={onCreateNote}
+                    onStartEditNote={onStartEditNote}
+                    onCancelNoteEdit={onCancelNoteEdit}
+                    onAcceptNoteEdit={onAcceptNoteEdit}
+                    onDeleteNote={onDeleteNote}
+                    onCloneNote={onCloneNote}
+                  />
+                );
+              const key = itemType === 'command' ? `cmd-${itemId}` : itemType === 'note' ? `note-${itemId}` : `folder-${itemId}`;
+              // Fora do modo de edição (ou numa pasta só-leitura), o item
+              // aparece cru, sem o wrapper de drag — mesmo critério de
+              // `active` no original (`body = items.map(it => active ?
+              // wrapItemForFolderDrag(...) : it.html)`). `Fragment` (não uma
+              // `<span>`/`<div>` extra) pra não introduzir um elemento a mais
+              // no DOM só pra carregar a `key` — `.sec-body` (flex/grid,
+              // ver components.css) espera `.card`/`.section` como filhos
+              // DIRETOS.
+              if (!active) return <Fragment key={key}>{rendered}</Fragment>;
+              return (
+                <div
+                  key={key}
+                  className="folder-item-row"
+                  data-container-id={node.folderId}
+                  data-item-type={itemType}
+                  data-item-id={itemId}
+                  data-root-folder-id={node.rootFolderId}
                 >
-                  ⠿
-                </span>
-                <div className="folder-item-row-body">{rendered}</div>
-              </div>
-            );
-          })}
-        </>
-      )}
+                  <span className="folder-drag-handle" onMouseDown={ev => armDrag(ev.currentTarget)} title="Drag to reorder">
+                    ⠿
+                  </span>
+                  <div className="folder-item-row-body">{rendered}</div>
+                </div>
+              );
+            })}
+          </>
+        );
+      }}
     />
   );
 }

@@ -3,23 +3,28 @@
 // + js/settings-modal.js (openSettingsModal/closeSettingsModal/
 // switchSettingsPane/_settingsApplyScope).
 //
-// Nesta fatia só existem as abas "User account" e "User preferences" —
-// as abas admin-rank (Register/System/Database/Users/Groups) chegam nas
-// fatias 6-9, cada uma adicionando sua própria entrada a NAV_ITEMS (a
-// mesma ideia dos IDs em ADMIN_ONLY_SETTINGS_GROUP_IDS/SUPER_ADMIN_ONLY_
-// SETTINGS_GROUP_IDS do original, só que como um array de config em vez
-// de strings de id soltas). Por isso o conceito de "escopo" do original
-// (título/nav mudam conforme abriu pelo menu de conta ou pela
-// engrenagem) ainda não se aplica de verdade: só existem abas de escopo
-// "user", então o título fica sempre "Account settings" por ora.
+// Fatia 5c acrescentou a aba "Database" (só o grupo "Folders" — Export/
+// Import de pasta, ver DatabasePane.tsx). "Commands" (CSV do catálogo
+// inteiro) e "Database"/Backup & Restore (admin-only) do original ficam de
+// fora por ora (fatias/features próprias, ainda sem escopo definido) — só
+// esse grupo específico, sem gate de admin (mesmo critério do original:
+// pastas são dados privados de cada usuário). As demais abas admin-rank
+// (Register/System/Users/Groups) chegam nas fatias 6-9, cada uma
+// adicionando sua própria entrada a NAV_ITEMS (a mesma ideia dos IDs em
+// ADMIN_ONLY_SETTINGS_GROUP_IDS/SUPER_ADMIN_ONLY_SETTINGS_GROUP_IDS do
+// original, só que como um array de config em vez de strings de id
+// soltas). Por isso o conceito de "escopo" do original (título/nav mudam
+// conforme abriu pelo menu de conta ou pela engrenagem) ainda não se aplica
+// de verdade: o título fica sempre "Account settings" por ora.
 // ════════════════════════════════════════════════
 import { useEffect } from 'react';
 import { useSettings } from '../lib/settingsStore';
 import type { Catalogs } from '../lib/catalogs';
 import { AccountPane } from './panes/AccountPane';
+import { DatabasePane } from './panes/DatabasePane';
 import { PreferencesPane } from './panes/PreferencesPane';
 
-export type SettingsPane = 'account' | 'prefs';
+export type SettingsPane = 'account' | 'prefs' | 'database';
 
 interface NavItem {
   pane: SettingsPane;
@@ -40,6 +45,15 @@ const NAV_ITEMS: NavItem[] = [
     label: 'User preferences',
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" /></svg>
+    ),
+  },
+  // Mesmo path/ícone (cilindro) de #sysGroupDatabase's nav button em
+  // index.html — só o grupo "Folders" mora aqui (ver DatabasePane.tsx).
+  {
+    pane: 'database',
+    label: 'Database',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6" /><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg>
     ),
   },
 ];
@@ -95,14 +109,18 @@ export function SettingsModal({
                 <span>{item.label}</span>
               </button>
             ))}
-            {/* Database/Register/System/Users/Groups entram nas fatias
-                6-9, cada uma acrescentando seu próprio botão aqui,
-                gated por auth.isAdmin/auth.isSuperAdmin (fail-closed:
-                nada disso é montado enquanto /api/me não confirmar). */}
+            {/* Register/System/Users/Groups (admin-rank) entram nas
+                fatias 6-9, cada uma acrescentando seu próprio botão
+                aqui, gated por auth.isAdmin/auth.isSuperAdmin
+                (fail-closed: nada disso é montado enquanto /api/me não
+                confirmar). "Database" acima já está pronta (fatia 5c) —
+                sem gate de admin, mesmo critério do original pro grupo
+                "Folders". */}
           </nav>
           <div className="settings-content">
             {pane === 'account' && <AccountPane />}
             {pane === 'prefs' && <PreferencesPane catalogs={catalogs} settings={settings} update={updateSettings} />}
+            {pane === 'database' && <DatabasePane />}
           </div>
         </div>
       </div>

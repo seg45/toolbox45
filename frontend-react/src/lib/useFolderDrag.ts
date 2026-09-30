@@ -55,8 +55,18 @@
 // ════════════════════════════════════════════════
 import { useEffect, useRef } from 'react';
 
+// Fatia 5c: 'note' passou a ser um terceiro tipo arrastável, EXATAMENTE como
+// 'command'/'folder' já eram (mesmo mecanismo, mesma condição de habilitação
+// — só dentro do modo de edição de uma pasta própria, ver `active` em
+// FolderSection.tsx) — confirmado contra o original (db-render-engine.js:
+// `wrapItemForFolderDrag(it.html, folderId, it.type, it.id, rootFolderId)`,
+// chamado pra QUALQUER item de `items`, comando/nota/subpasta, sem
+// distinção). A LÓGICA do hook abaixo não muda em nada — só os tipos que
+// antes excluíam 'note' precisam aceitá-lo.
+export type FolderItemType = 'command' | 'folder' | 'note';
+
 export interface FolderOrderedItem {
-  type: 'command' | 'folder';
+  type: FolderItemType;
   id: number;
 }
 
@@ -67,7 +77,7 @@ export interface FolderOrderedItem {
 // perto de uma row específica de outro container, Alvo B do original).
 interface CrossTarget {
   containerId: number;
-  beforeType: 'command' | 'folder' | null;
+  beforeType: FolderItemType | null;
   beforeId: number | null;
 }
 
@@ -80,7 +90,7 @@ export function useFolderDrag(params: {
   // antiga; subpasta: PUT .../move) e, depois, persiste a ordem final do
   // DESTINO (calculada a partir da ordem atual dos irmãos lá + a
   // posição-alvo pretendida — ver CrossTarget acima).
-  onMove: (itemType: 'command' | 'folder', itemId: number, oldContainerId: number, newContainerId: number, order: FolderOrderedItem[]) => void;
+  onMove: (itemType: FolderItemType, itemId: number, oldContainerId: number, newContainerId: number, order: FolderOrderedItem[]) => void;
 }) {
   // Refs pros callbacks (não os valores em si) — evita precisar
   // re-registrar os listeners do `document` a cada render só porque
@@ -121,7 +131,7 @@ export function useFolderDrag(params: {
       return [...container.querySelectorAll(':scope > .folder-item-row')]
         .map(r => {
           const el = r as HTMLElement;
-          const type = el.dataset.itemType as 'command' | 'folder' | undefined;
+          const type = el.dataset.itemType as FolderItemType | undefined;
           const rawId = el.dataset.itemId;
           if (!type || rawId == null) return null;
           return { type, id: Number(rawId) };
@@ -200,7 +210,7 @@ export function useFolderDrag(params: {
 
       // Container diferente — só registra a posição-alvo pretendida
       // (antes/depois desta row específica) e destaca a row mirada.
-      const overType = overRow.dataset.itemType as 'command' | 'folder' | undefined;
+      const overType = overRow.dataset.itemType as FolderItemType | undefined;
       const overId = overRow.dataset.itemId;
       if (!overType || overId == null) return;
       crossTarget = {
@@ -221,7 +231,7 @@ export function useFolderDrag(params: {
         if (nextSibling && nextSibling.classList.contains('folder-item-row')) {
           crossTarget = {
             containerId: Number(overContainerId),
-            beforeType: nextSibling.dataset.itemType as 'command' | 'folder',
+            beforeType: nextSibling.dataset.itemType as FolderItemType,
             beforeId: Number(nextSibling.dataset.itemId),
           };
         } else {
@@ -241,7 +251,7 @@ export function useFolderDrag(params: {
         row.classList.remove('dragging');
         row.removeAttribute('draggable');
         setHighlight(null);
-        const itemType = row.dataset.itemType as 'command' | 'folder';
+        const itemType = row.dataset.itemType as FolderItemType;
         const itemId = Number(row.dataset.itemId);
         const oldContainerId = Number(originContainerId);
 

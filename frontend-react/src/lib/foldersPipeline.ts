@@ -16,10 +16,17 @@
 // buildRenderTree() enquanto a visão de Pastas está ativa; chama esta
 // função em vez disso.
 //
-// SEM notas (entradas `order` do tipo 'note' são descartadas — ver
-// comentário em src/lib/folders.ts), em qualquer escopo — ainda fora do
-// escopo de qualquer fatia até agora.
+// Fatia 5c acrescentou notas: `FolderItemNode` ganhou a variante
+// `{type:'note', note}` e `buildFolderNode` passou a intercalar
+// `folder.notes` no MESMO `folder.order` que já intercalava comando/
+// subpasta (entradas `{type:'note',...}` deixaram de ser descartadas — ver
+// histórico de comentário anterior sobre a fatia 5a/5b). Uma nota NOVA
+// ainda sem id (rascunho em criação, ver NoteCard.tsx/CommandsContent.tsx)
+// não passa por aqui — não tem posição salva em folder.order, e é renderizada
+// separadamente, no TOPO do corpo da seção, fora deste array (mesmo critério
+// de `draftNoteHtml` no original, ver FolderSection.tsx).
 //
+
 // Reordenar (fatia 5b, drag-and-drop) NÃO mexe neste arquivo: a ordem
 // exibida aqui sempre vem de folder.order tal como está no estado React
 // (`folders`/`allUsersFolders` em CommandsContent.tsx) — é esse ESTADO que
@@ -32,6 +39,7 @@ import type { Catalogs, ParameterEntry } from './catalogs';
 import type { Values } from './commandTemplate';
 import type { Command } from './commands';
 import { buildFolderTree, type Folder } from './folders';
+import type { Note } from './notes';
 import { buildCardDataForRow, type CardData } from './renderPipeline';
 import { stripVarMarkers } from './syntaxHighlight';
 
@@ -51,11 +59,19 @@ export interface FolderSectionNode {
   // a fatia 5a); buildFolderSectionTreeForOwner() (novo, 5b) é quem de fato
   // varia este valor por chamada.
   isOwn: boolean;
-  cardCount: number; // só comandos desta pasta (não conta subpastas) — mesmo critério do original
+  // Comandos E notas desta pasta (não conta subpastas) — mesmo critério do
+  // original (`items.filter(it => it.type !== 'folder').length`, ver
+  // buildFolderSectionFromCards/db-render-engine.js): uma nota conta pro
+  // cabeçalho igual um comando, só uma subpasta não (ela já mostra a
+  // contagem dela própria no cabeçalho dela).
+  cardCount: number;
   items: FolderItemNode[];
 }
 
-export type FolderItemNode = { type: 'command'; card: CardData } | { type: 'folder'; section: FolderSectionNode };
+export type FolderItemNode =
+  | { type: 'command'; card: CardData }
+  | { type: 'note'; note: Note }
+  | { type: 'folder'; section: FolderSectionNode };
 
 // Monta recursivamente UM nó da árvore (pasta + suas subpastas diretas) —
 // extraído de buildFolderSectionTree (fatia 5a) pra ser reaproveitado
@@ -101,25 +117,32 @@ function buildFolderNode(
 
   const rows = commandsByFolder.get(folder.id) || [];
   const cmdById = new Map(rows.map(r => [r.id, r]));
+  // `folder.notes` já vem pronto do servidor (GET /api/folders[/all], ver
+  // shapeFolder em folders.ts) — diferente de comandos/subpastas, não
+  // precisa de um Map externo (`commandsByFolder`/`childrenOf`): cada Folder
+  // já carrega as SUAS PRÓPRIAS notas.
+  const notesById = new Map(folder.notes.map(n => [n.id, n]));
 
-  // Intercala comandos + subpastas na posição salva em folder.order (porta
-  // de buildFolderItemsCards) — itens sem posição salva (comando/subpasta
-  // nova, ou pasta antiga de antes desta feature) vão pro FIM, nunca
-  // desaparecem. Entradas {type:'note',...} são descartadas por completo
-  // (fora do escopo desta fatia — ver comentário no topo do arquivo).
+  // Intercala comandos + notas + subpastas na posição salva em folder.order
+  // (porta de buildFolderItemsCards) — itens sem posição salva (comando/
+  // nota/subpasta nova, ou pasta antiga de antes desta feature) vão pro FIM,
+  // nunca desaparecem.
   const seenCmd = new Set<number>();
+  const seenNote = new Set<number>();
   const seenFolder = new Set<number>();
   folder.order.forEach(o => {
     if (o.type === 'command') seenCmd.add(o.id);
+    else if (o.type === 'note') seenNote.add(o.id);
     else if (o.type === 'folder') seenFolder.add(o.id);
   });
-  const extra: { type: 'command' | 'folder'; id: number }[] = [
+  const extra: { type: 'command' | 'note' | 'folder'; id: number }[] = [
     ...[...cmdById.keys()].filter(id => !seenCmd.has(id)).map(id => ({ type: 'command' as const, id })),
+    ...[...notesById.keys()].filter(id => !seenNote.has(id)).map(id => ({ type: 'note' as const, id })),
     ...[...childNodes.keys()].filter(id => !seenFolder.has(id)).map(id => ({ type: 'folder' as const, id })),
   ];
-  const finalOrder: { type: 'command' | 'folder'; id: number }[] = folder.order
-    .filter((o): o is { type: 'command' | 'folder'; id: number } =>
-      o.type === 'folder' ? childNodes.has(o.id) : o.type === 'command' ? cmdById.has(o.id) : false
+  const finalOrder: { type: 'command' | 'note' | 'folder'; id: number }[] = folder.order
+    .filter((o): o is { type: 'command' | 'note' | 'folder'; id: number } =>
+      o.type === 'folder' ? childNodes.has(o.id) : o.type === 'note' ? notesById.has(o.id) : cmdById.has(o.id)
     )
     .concat(extra);
 
@@ -128,6 +151,11 @@ function buildFolderNode(
     if (o.type === 'folder') {
       const section = childNodes.get(o.id);
       if (section) items.push({ type: 'folder', section });
+      return;
+    }
+    if (o.type === 'note') {
+      const note = notesById.get(o.id);
+      if (note) items.push({ type: 'note', note });
       return;
     }
     const row = cmdById.get(o.id);
@@ -148,7 +176,7 @@ function buildFolderNode(
     rootFolderId,
     isFavorites: folder.name === 'Favorites',
     isOwn,
-    cardCount: items.filter(it => it.type === 'command').length,
+    cardCount: items.filter(it => it.type !== 'folder').length,
     items,
   };
 }
@@ -261,18 +289,21 @@ function cardMatchesQuery(card: CardData, query: string): boolean {
   return parts.join(' ').toLowerCase().includes(query);
 }
 
+// Nota: uma nota nunca é escondida pela busca (não existe um critério de
+// "nota bate com a query" no original — a busca sempre olhou só pros campos
+// de um COMANDO, ver cardMatchesQuery acima) — só comandos são filtrados
+// por conteúdo; subpastas são filtradas recursivamente (podem ficar vazias,
+// mas a seção em si continua visível — ver comentário na função abaixo).
 export function filterFolderTree(nodes: FolderSectionNode[], query: string, _catalogs: Catalogs | null): FolderSectionNode[] {
   function filterNode(node: FolderSectionNode): FolderSectionNode {
     const items: FolderItemNode[] = node.items
-      .map(it =>
-        it.type === 'command'
-          ? cardMatchesQuery(it.card, query)
-            ? it
-            : null
-          : ({ type: 'folder', section: filterNode(it.section) } as const)
-      )
+      .map(it => {
+        if (it.type === 'command') return cardMatchesQuery(it.card, query) ? it : null;
+        if (it.type === 'note') return it;
+        return { type: 'folder', section: filterNode(it.section) } as const;
+      })
       .filter((it): it is FolderItemNode => !!it);
-    return { ...node, items, cardCount: items.filter(it => it.type === 'command').length };
+    return { ...node, items, cardCount: items.filter(it => it.type !== 'folder').length };
   }
   return nodes.map(filterNode);
 }

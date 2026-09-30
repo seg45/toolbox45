@@ -54,6 +54,7 @@ import {
   fetchFolders,
   invalidateFoldersCache,
   moveFolder as apiMoveFolder,
+  onFoldersChanged,
   removeCommandFromFolder,
   renameFolder as apiRenameFolder,
   reorderFolderItems,
@@ -71,10 +72,19 @@ import {
 } from '../../lib/foldersPipeline';
 import { FoldersUIContext } from '../../lib/foldersUI';
 import type { useLiveFilters } from '../../lib/liveFilters';
+import {
+  cloneNote as apiCloneNote,
+  createNote,
+  deleteNote as apiDeleteNote,
+  deriveNoteTitle,
+  moveNote as apiMoveNote,
+  updateNote,
+  type Note,
+} from '../../lib/notes';
 import { buildRenderTree, buildValues, filterCommands, type ComboBlockData, type SectionData } from '../../lib/renderPipeline';
 import type { Settings } from '../../lib/settingsStore';
 import { useConfirm } from '../../lib/useConfirm';
-import { useFolderDrag, type FolderOrderedItem } from '../../lib/useFolderDrag';
+import { useFolderDrag, type FolderItemType, type FolderOrderedItem } from '../../lib/useFolderDrag';
 import { useFolderPrompt } from '../../lib/useFolderPrompt';
 import { CollapsibleSection } from './CollapsibleSection';
 import { CommandCard } from './CommandCard';
@@ -137,6 +147,14 @@ export function CommandsContent({
   // valor da raiz da própria árvore (ver FolderSection.tsx: `editMode`
   // viaja sem mudar por toda a recursão, nunca lido por subfolderId).
   const [folderEditRoots, setFolderEditRoots] = useState<Set<number>>(new Set());
+  // Fatia 5c (Notes) — mesmo espírito de FOLDER_EDIT_MODE acima, mas pra
+  // notas: `editingNoteIds` (Set de note.id sendo editadas AGORA — notas
+  // EXISTENTES) e `creatingNoteFolderId` (id da pasta com uma nota NOVA em
+  // edição, rascunho ainda sem id no servidor, ou null) — porte de
+  // NOTE_EDIT_MODE/NOTE_CREATE_FOLDER_ID (js/folders.js). Só em memória,
+  // mesma decisão de folderEditRoots.
+  const [editingNoteIds, setEditingNoteIds] = useState<Set<number>>(new Set());
+  const [creatingNoteFolderId, setCreatingNoteFolderId] = useState<number | null>(null);
   // Qual comando tem o próprio dropdown "Add to folder" aberto — substitui
   // querySelectorAll('.folder-menu-pop.open') do original (fechar os
   // outros ao abrir um novo) por um único estado React (ver
@@ -224,6 +242,33 @@ export function CommandsContent({
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Fatia 5c — Settings → Database → Folders → "Import folder"
+  // (FolderImportModal.tsx) roda como IRMÃO deste componente (ambos filhos
+  // de AppShell.tsx, ver SettingsModal.tsx), sem acesso direto a `folders`/
+  // `setFolders`/`commands`/`setCommands`. Em vez de içar esse estado pra
+  // AppShell só por causa de um fluxo, assina o canal de
+  // src/lib/folders.ts::onFoldersChanged (emitido pelo import bem-sucedido)
+  // e refaz os DOIS fetches — mesmo efeito líquido de
+  // reloadFoldersFromServer() + invalidateCommandsCache()/fetchCommands()
+  // no original (um import de pasta também cria comandos NOVOS, que
+  // precisam aparecer fora da visão "Folders" também).
+  useEffect(() => {
+    return onFoldersChanged(() => {
+      invalidateFoldersCache();
+      fetchFolders()
+        .then(data => {
+          setFolders(data);
+          setFoldersLoadError(false);
+        })
+        .catch(err => {
+          console.error('Failed to reload folders from API', err);
+          setFoldersLoadError(true);
+        });
+      refreshCommands();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Callback de refresh passado pro CommandEditorModal (salvar/excluir) —
@@ -416,6 +461,131 @@ export function CommandsContent({
     }
   }
 
+  // ── Notes (fatia 5c) — porte de startCreateNote/startEditNote/
+  // cancelNoteEdit/acceptNoteEdit/deleteNoteConfirm/cloneNote (js/folders.js).
+  // "+ Add > Note" (cabeçalho de uma seção de pasta) — porta de
+  // startCreateNote(). Só existe UM rascunho de nota nova por vez em TODA a
+  // árvore (mesma decisão do original — NOTE_CREATE_FOLDER_ID é uma variável
+  // única, não um Set), então abrir "Note" numa pasta descarta um rascunho
+  // pendente em outra, se houver.
+  function startCreateNote(folderId: number) {
+    setCreatingNoteFolderId(folderId);
+  }
+
+  // Botão "✎ Edit" do mini-toolbar hover de uma nota existente — porta de
+  // startEditNote().
+  function startEditNote(noteId: number) {
+    setEditingNoteIds(prev => {
+      const next = new Set(prev);
+      next.add(noteId);
+      return next;
+    });
+  }
+
+  // "✕ Cancel" do modo de edição de uma nota — porta de cancelNoteEdit():
+  // descarta o rascunho sem tocar no servidor. `noteId === null` identifica
+  // o rascunho de nota NOVA (o card some do corpo da pasta); caso contrário,
+  // a nota EXISTENTE simplesmente sai do modo de edição (volta a mostrar
+  // note.description, já salvo).
+  function cancelNoteEdit(noteId: number | null, folderId: number) {
+    if (noteId != null) {
+      setEditingNoteIds(prev => {
+        const next = new Set(prev);
+        next.delete(noteId);
+        return next;
+      });
+    } else {
+      setCreatingNoteFolderId(prev => (prev === folderId ? null : prev));
+    }
+  }
+
+  // "✓ Accept" do modo de edição — porta de acceptNoteEdit(): cria (noteId
+  // null) OU atualiza (noteId existente) a nota, aguardando o servidor (ver
+  // comentário em src/lib/notes.ts sobre por que isso PRECISA ser awaited,
+  // diferente de addCommandToFolder/removeCommandFromFolder) antes de
+  // mesclar o resultado em `folders[].notes`/`order` e sair do modo de
+  // edição. A checagem "nota vazia" (sem texto E sem <img>) já rodou dentro
+  // de NoteCard.tsx antes deste callback ser chamado — aqui só falta
+  // persistir. Em caso de erro do servidor, mantém a nota aberta em edição
+  // (mesmo comportamento do original: `alert(...); return;` sem sair do
+  // modo de edição) — o conteúdo digitado não é perdido porque
+  // RichTextEditor é uncontrolled e o NoteCard não desmonta.
+  async function acceptNoteEdit(noteId: number | null, folderId: number, html: string) {
+    const title = deriveNoteTitle(html);
+    try {
+      if (noteId == null) {
+        const note = await createNote(folderId, { title, description: html });
+        setFolders(prev =>
+          prev
+            ? prev.map(f =>
+                f.id === folderId
+                  ? {
+                      ...f,
+                      notes: [...f.notes, note],
+                      order: f.order.some(o => o.type === 'note' && o.id === note.id) ? f.order : [...f.order, { type: 'note', id: note.id }],
+                    }
+                  : f
+              )
+            : prev
+        );
+        setCreatingNoteFolderId(prev => (prev === folderId ? null : prev));
+      } else {
+        const note = await updateNote(noteId, { title, description: html });
+        setFolders(prev => (prev ? prev.map(f => (f.id === note.folder_id ? { ...f, notes: f.notes.map(n => (n.id === note.id ? note : n)) } : f)) : prev));
+        setEditingNoteIds(prev => {
+          const next = new Set(prev);
+          next.delete(noteId);
+          return next;
+        });
+      }
+      invalidateFoldersCache();
+    } catch (e) {
+      window.alert(folderCrudErrorMessage(e, 'Failed to save note.'));
+    }
+  }
+
+  // "✕ Delete Note" (só visível dentro do modo de edição) — porta de
+  // deleteNoteConfirm(): mesmo texto de confirmação do original (usando o
+  // "título" derivado do conteúdo — ver deriveNoteTitle em
+  // src/lib/notes.ts), remoção OTIMISTA + DELETE fire-and-forget (mesmo
+  // padrão de deleteFolderAction/removeCommandFromFolder — o original também
+  // não espera a resposta do DELETE pra atualizar a tela).
+  async function deleteNoteAction(noteId: number, folderId: number) {
+    const note = folders?.find(f => f.id === folderId)?.notes.find(n => n.id === noteId);
+    const title = note ? deriveNoteTitle(note.description) : '';
+    const ok = await confirmAction(`Delete note "${title}"? This action cannot be undone.`);
+    if (!ok) return;
+    setEditingNoteIds(prev => {
+      const next = new Set(prev);
+      next.delete(noteId);
+      return next;
+    });
+    setFolders(prev =>
+      prev
+        ? prev.map(f =>
+            f.id === folderId
+              ? { ...f, notes: f.notes.filter(n => n.id !== noteId), order: f.order.filter(o => !(o.type === 'note' && o.id === noteId)) }
+              : f
+          )
+        : prev
+    );
+    invalidateFoldersCache();
+    apiDeleteNote(noteId).catch(e => console.warn('Falha ao excluir nota no servidor (mantida localmente)', e));
+  }
+
+  // Botão "⧉ Clone" do mini-toolbar hover — porta de cloneNote(): cria a
+  // cópia direto no servidor (título com sufixo " (copy)", decidido lá) e já
+  // reflete na tela, sem passar por um modo de edição.
+  async function cloneNoteAction(noteId: number, folderId: number) {
+    try {
+      const note = await apiCloneNote(noteId);
+      setFolders(prev => (prev ? prev.map(f => (f.id === folderId ? { ...f, notes: [...f.notes, note], order: [...f.order, { type: 'note', id: note.id }] } : f)) : prev));
+      invalidateFoldersCache();
+    } catch (e) {
+      window.alert(folderCrudErrorMessage(e, 'Failed to clone note.'));
+    }
+  }
+
   // ── Drag-and-drop (fatia 5b) — ver src/lib/useFolderDrag.ts pra decisão
   // de arquitetura (manipulação direta do DOM durante o dragover, só
   // commitando estado aqui no dragend). `onReorder`/`onMove` abaixo são os
@@ -443,10 +613,16 @@ export function CommandsContent({
   // atualizar o estado LOCAL, que já é otimista de qualquer forma; esperar
   // só evita persistir uma ordem de reorder num container que o move
   // acabou de falhar em popular).
-  async function persistFolderMove(itemType: 'command' | 'folder', itemId: number, oldContainerId: number, newContainerId: number, order: FolderOrderedItem[]) {
+  // Fatia 5c: `itemType` ganhou 'note' — folder_id ÚNICO (diferente da
+  // membership N:N de comando), PUT /api/notes/:id/move (ver
+  // src/lib/notes.ts::moveNote) — mesmo espírito de apiMoveFolder (subpasta,
+  // parent_id único) logo abaixo.
+  async function persistFolderMove(itemType: FolderItemType, itemId: number, oldContainerId: number, newContainerId: number, order: FolderOrderedItem[]) {
     try {
       if (itemType === 'command') {
         await Promise.all([addCommandToFolder(newContainerId, itemId), removeCommandFromFolder(oldContainerId, itemId)]);
+      } else if (itemType === 'note') {
+        await apiMoveNote(itemId, newContainerId);
       } else {
         await apiMoveFolder(itemId, newContainerId);
       }
@@ -456,17 +632,24 @@ export function CommandsContent({
     reorderFolderItems(newContainerId, order).catch(e => console.warn('Falha ao salvar a ordem da pasta de destino no servidor', e));
 
     // Estado local otimista — espelha os dois ajustes documentados no
-    // original: (a) folders[].commandIds/order/parentId (mesmo papel de
-    // FOLDERS local em reloadFoldersFromServer()) e (b) commands[].folder_ids
-    // (o "bug corrigido" citado nas instruções da tarefa — comment
-    // original: "notas consigo movimentar normalmente, mas continuo com
-    // problema para movimentar os comandos dentro das pastas", porque a
-    // seção de cada pasta lista comandos a partir de c.folder_ids, não de
-    // FOLDERS[].command_ids — sem atualizar os dois em conjunto aqui, um
-    // comando movido sumiria da origem mas não apareceria no destino até
-    // um F5).
+    // original: (a) folders[].commandIds/order/parentId/notes (mesmo papel
+    // de FOLDERS local em reloadFoldersFromServer()) e (b)
+    // commands[].folder_ids (o "bug corrigido" citado nas instruções da
+    // tarefa — comment original: "notas consigo movimentar normalmente, mas
+    // continuo com problema para movimentar os comandos dentro das
+    // pastas", porque a seção de cada pasta lista comandos a partir de
+    // c.folder_ids, não de FOLDERS[].command_ids — sem atualizar os dois em
+    // conjunto aqui, um comando movido sumiria da origem mas não apareceria
+    // no destino até um F5). Notas não sofrem desse bug (vêm direto de
+    // folder.notes, atualizado abaixo junto com o resto), mesma observação
+    // do original (comentário em _fldMoveItemAcrossFolders/js/folders.js).
+    let movedNote: Note | undefined;
     setFolders(prev => {
       if (!prev) return prev;
+      if (itemType === 'note') {
+        const origin = prev.find(f => f.id === oldContainerId);
+        movedNote = origin?.notes.find(n => n.id === itemId);
+      }
       return prev.map(f => {
         if (itemType === 'folder' && f.id === itemId) {
           return { ...f, parentId: newContainerId };
@@ -476,11 +659,18 @@ export function CommandsContent({
           nextIds.delete(itemId);
           return { ...f, commandIds: nextIds, order: f.order.filter(o => !(o.type === 'command' && o.id === itemId)) };
         }
+        if (itemType === 'note' && f.id === oldContainerId) {
+          return { ...f, notes: f.notes.filter(n => n.id !== itemId), order: f.order.filter(o => !(o.type === 'note' && o.id === itemId)) };
+        }
         if (f.id === newContainerId) {
           if (itemType === 'command') {
             const nextIds = new Set(f.commandIds);
             nextIds.add(itemId);
             return { ...f, commandIds: nextIds, order: order.slice() }; // `order` já é a ordem final do destino, lida do DOM no dragend
+          }
+          if (itemType === 'note') {
+            const note = movedNote;
+            return { ...f, notes: note ? [...f.notes, { ...note, folder_id: newContainerId }] : f.notes, order: order.slice() };
           }
           return { ...f, order: order.slice() };
         }
@@ -818,6 +1008,14 @@ export function CommandsContent({
                   onCreateSubfolder={createSubfolder}
                   onCopyFolder={copyFolderAction}
                   armDrag={armDrag}
+                  editingNoteIds={editingNoteIds}
+                  creatingNoteFolderId={creatingNoteFolderId}
+                  onCreateNote={startCreateNote}
+                  onStartEditNote={startEditNote}
+                  onCancelNoteEdit={cancelNoteEdit}
+                  onAcceptNoteEdit={acceptNoteEdit}
+                  onDeleteNote={deleteNoteAction}
+                  onCloneNote={cloneNoteAction}
                 />
               ))}
             {/* Escopo "all" — um grupo recolhível "👤 <username>" por dono,
@@ -866,6 +1064,14 @@ export function CommandsContent({
                             onCreateSubfolder={createSubfolder}
                             onCopyFolder={copyFolderAction}
                             armDrag={armDrag}
+                            editingNoteIds={editingNoteIds}
+                            creatingNoteFolderId={creatingNoteFolderId}
+                            onCreateNote={startCreateNote}
+                            onStartEditNote={startEditNote}
+                            onCancelNoteEdit={cancelNoteEdit}
+                            onAcceptNoteEdit={acceptNoteEdit}
+                            onDeleteNote={deleteNoteAction}
+                            onCloneNote={cloneNoteAction}
                           />
                         ))
                       )

@@ -1,17 +1,16 @@
 // ════════════════════════════════════════════════
 // FOLDERS (/api/folders) — porta de js/folders.js (FOLDERS/buildFolderTree/
 // reloadFoldersFromServer/_createFolderInternal/_folderNameInputBlur/
-// deleteFolderConfirm/_collectFolderAndDescendantIds) — SEM notas, SEM
-// cross-user (#folderScopeDD/ALL_USERS_FOLDERS/copyFolderFromUser) e SEM
-// drag-and-drop (reorder) — tudo isso fora do escopo desta fatia (5a), ver
-// instruções da tarefa. `order` ainda é lido do servidor tal como vem (pode
-// conter entradas {type:'note',...} de uma pasta que já tinha notas de uma
-// versão anterior do app — server-py já suporta notas desde a Fase 1), mas
-// essas entradas são ignoradas na hora de montar a árvore de renderização
-// (ver src/lib/foldersPipeline.ts) — não existe ainda um jeito de CRIAR uma
-// nota nesta fatia (fica para a 5c).
+// deleteFolderConfirm/_collectFolderAndDescendantIds).
+//
+// Fatia 5c acrescentou: `Folder.notes` (campo `notes` que o servidor já
+// devolve em GET /api/folders / GET /api/folders/all, ver
+// load_folder_order_and_notes() em app_folders.py — CRUD de nota em si mora
+// em src/lib/notes.ts) + onFoldersChanged/notifyFoldersChanged (pub-sub
+// simples, ver comentário logo abaixo da declaração).
 // ════════════════════════════════════════════════
 import { ApiError, parseErrorBody } from './api';
+import { shapeNote, type Note, type NoteApiRow } from './notes';
 
 export interface FolderOrderItem {
   type: 'command' | 'note' | 'folder';
@@ -25,6 +24,7 @@ export interface Folder {
   parentId: number | null;
   commandIds: Set<number>;
   order: FolderOrderItem[];
+  notes: Note[];
 }
 
 interface FolderApiRow {
@@ -34,6 +34,7 @@ interface FolderApiRow {
   parent_id: number | null;
   command_ids?: number[];
   order?: FolderOrderItem[];
+  notes?: NoteApiRow[];
 }
 
 function shapeFolder(row: FolderApiRow): Folder {
@@ -44,7 +45,33 @@ function shapeFolder(row: FolderApiRow): Folder {
     parentId: row.parent_id ?? null,
     commandIds: new Set(row.command_ids || []),
     order: (row.order || []).slice(),
+    notes: (row.notes || []).map(shapeNote),
   };
+}
+
+// ── Pub-sub minúsculo pra "algo mudou as pastas de fora da árvore de
+// CommandsContent.tsx" — hoje só tem um emissor: FolderImportModal.tsx
+// (Settings → Database → Folders → "Import folder"), que roda como IRMÃO de
+// CommandsContent (ambos filhos de AppShell.tsx, ver SettingsModal.tsx), sem
+// acesso direto ao `folders`/`setFolders` que mora lá. Em vez de içar esse
+// estado inteiro pra AppShell só por causa de um fluxo (o que obrigaria
+// passar `folders`/todo o CRUD de pasta por prop através da árvore inteira),
+// CommandsContent assina este canal (useEffect, ver lá) e reage invalidando
+// o cache + refazendo fetchFolders()/fetchCommands() — mesmo efeito líquido
+// de reloadFoldersFromServer() no original, só que disparado por um evento
+// em vez de uma chamada direta.
+type FoldersChangeListener = () => void;
+const _foldersChangeListeners = new Set<FoldersChangeListener>();
+
+export function onFoldersChanged(cb: FoldersChangeListener): () => void {
+  _foldersChangeListeners.add(cb);
+  return () => {
+    _foldersChangeListeners.delete(cb);
+  };
+}
+
+export function notifyFoldersChanged(): void {
+  _foldersChangeListeners.forEach(cb => cb());
 }
 
 // Cache simples — mesmo padrão/motivo de fetchCommands() (commands.ts):
