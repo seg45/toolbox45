@@ -1,8 +1,13 @@
 // ════════════════════════════════════════════════
-// Card de um comando — porta de card() em js/terminal-renderer.js, SEM o
-// botão de favoritar/pastas (fav-wrap/folderMenuHtml/auditPopover — fatia 5,
-// Pastas). Os botões de editar/duplicar (edit-btn — fatia 4, Editor de
-// comandos) foram acrescentados a `.card-actions` nesta fatia.
+// Card de um comando — porta de card() em js/terminal-renderer.js. Os
+// botões de editar/duplicar (edit-btn — fatia 4, Editor de comandos) foram
+// acrescentados a `.card-actions` naquela fatia; o botão de pastas
+// (fav-wrap/folderMenuHtml/auditPopover — fatia 5a, Pastas) foi acrescentado
+// nesta, entre `.card-desc` e `.card-actions` (mesma posição do original).
+// Este mesmo componente é reaproveitado tanto na visão normal (Tópico/
+// Versão/Created by) quanto dentro de uma seção de pasta (FolderSection.tsx)
+// — o botão de pastas funciona idêntico nos dois lugares (marca/desmarca
+// QUALQUER pasta do usuário, não só "remover desta pasta").
 //
 // A preferência "Details" (settings.showCardDetails) não é um `if` aqui —
 // no original ela liga/desliga a classe `.compact-cards` no <body>, que via
@@ -14,6 +19,7 @@
 import { useAuth } from '../../lib/auth';
 import type { Catalogs } from '../../lib/catalogs';
 import type { CardData } from '../../lib/renderPipeline';
+import { FolderButton } from './FolderMenu';
 import { ScopeTags } from './ScopeTags';
 import { TerminalLines } from './TerminalLines';
 
@@ -54,7 +60,7 @@ export function CommandCard({
         <span className="card-name">{card.name}</span>
         <ScopeTags vendors={card.vendors} systems={card.systems} versions={card.versions} environments={card.environments} catalogs={catalogs} />
         <span className="card-desc">{card.desc || ''}</span>
-        {/* fav/pastas (fatia 5) entram aqui depois. */}
+        <FolderButton commandId={card.id} folderIds={card.folderIds} createdBy={card.createdBy} modifiedBy={card.modifiedBy} updatedAt={card.updatedAt} />
         <span className="card-actions">
           {canEdit && (
             <button type="button" className="edit-btn" title="Edit command" onClick={() => onEdit(card.id)}>

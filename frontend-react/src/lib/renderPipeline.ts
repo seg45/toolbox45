@@ -128,14 +128,20 @@ export function buildValues(fieldValues: Record<string, string>, settings: Setti
 // Filtros de verdade (System commands / Vendor / System) — porta do topo de
 // render.js.
 // ════════════════════════════════════════════════
-function filterCommands(commands: Command[], settings: Settings, filters: LiveFilters): Command[] {
+// Exportada a partir da fatia 5a (Pastas) para o pipeline paralelo de
+// Pastas (src/lib/foldersPipeline.ts) reaproveitar EXATAMENTE o mesmo
+// filtro de "System commands"/Vendor/System usado pela visão normal —
+// render.js aplica esse filtro uma única vez, antes de se ramificar em
+// VIEW_FOLDERS_HOME ou nos modos de Group By (ver comentário no topo de
+// render.js). Nenhuma mudança de comportamento aqui, só a palavra `export`.
+export function filterCommands(commands: Command[], settings: Settings, filters: LiveFilters): Command[] {
   let out = commands;
   // Preferência "System commands" (sidebar, Options) — quando desligada,
   // some com os comandos de referência (created_by='System', is_system=true)
   // e mostra só os criados/duplicados por usuários. Exceção: um comando
-  // System guardado em alguma pasta continua aparecendo (folder_ids sempre
-  // vazio nesta fatia — Folders ainda não implementado — então na prática
-  // isso só filtra comandos de sistema quando o toggle está desligado).
+  // System guardado em alguma pasta continua aparecendo (desde a fatia 5a,
+  // Pastas, folder_ids pode de fato vir preenchido — antes disso a exceção
+  // nunca disparava na prática, já que Folders não existia ainda).
   if (!settings.showSystemCommands) {
     out = out.filter(c => !c.is_system || (c.folder_ids && c.folder_ids.length));
   }

@@ -9,11 +9,16 @@
 // liveFilters.ts. Isso substitui a ligação (incorreta, ver instruções da
 // fatia 3a) direto em useSettings() que a fatia 2 usava provisoriamente.
 //
-// Tudo o mais (linha "Folders" — estática, viewAllFolders() é fatia 5 —,
-// o bloco "Options" com os 4 toggles, e o botão de fixar/colapsar a
-// sidebar) continua ligado a useSettings() exatamente como antes.
+// A linha "Folders" (fatia 5a) agora liga de verdade em useFoldersView()
+// (src/lib/foldersView.ts — porta de viewAllFolders()/VIEW_FOLDERS_HOME em
+// js/folders.js): clicar nela funciona como um toggle (liga/desliga a
+// visão de Pastas em CommandsContent.tsx), com a classe "on" refletindo o
+// estado ativo (mesmo tratamento visual de .dd-btn.filter-active). O
+// bloco "Options" com os 4 toggles e o botão de fixar/colapsar a sidebar
+// continuam ligados a useSettings() exatamente como antes.
 // ════════════════════════════════════════════════
 import type { Catalogs } from '../lib/catalogs';
+import type { useFoldersView } from '../lib/foldersView';
 import type { useLiveFilters } from '../lib/liveFilters';
 import type { Settings } from '../lib/settingsStore';
 import { CmdSearchBox } from './CmdSearchBox';
@@ -49,12 +54,14 @@ export function Sidebar({
   settings,
   update,
   liveFilters,
+  foldersView,
   onToggleCollapsed,
 }: {
   catalogs: Catalogs | null;
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
   liveFilters: ReturnType<typeof useLiveFilters>;
+  foldersView: ReturnType<typeof useFoldersView>;
   onToggleCollapsed: () => void;
 }) {
   const { filters, update: updateFilters } = liveFilters;
@@ -74,9 +81,10 @@ export function Sidebar({
 
         <div className="sb-block">
           <div className="sb-list">
-            {/* viewAllFolders() é fatia 5 (Pastas + notas) — por ora a
-                linha é só visual, sem navegação real. */}
-            <div className="sb-row folders-head-row">
+            <div
+              className={`sb-row folders-head-row${foldersView.active ? ' on' : ''}`}
+              onClick={foldersView.toggle}
+            >
               {ICONS.folders}
               <span>Folders</span>
             </div>
