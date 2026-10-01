@@ -32,7 +32,12 @@ const COPY_BTN_FEEDBACK_MS = 1400;
 // silenciosamente. Tenta a API moderna primeiro e, se não existir ou
 // falhar, cai no método clássico (textarea temporário +
 // document.execCommand('copy')), que funciona em HTTP também.
-function copyToClipboard(text: string): Promise<void> {
+// Exportada (fatia 6) pra IpCalcModal.tsx reaproveitar a MESMA lógica de
+// cópia nos botões inline de cada linha de endereço (ipcCopyBtnHtml/
+// ipcCopyInline no original), em vez de duplicá-la — só o botão em si (ícone
+// sem rótulo "Copied"/"Failed", largura fixa em ch exigida pelo alinhamento
+// de .ipc-valwrap) é um componente próprio ali, não este <CopyButton/>.
+export function copyToClipboard(text: string): Promise<void> {
   if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
     return navigator.clipboard.writeText(text);
   }

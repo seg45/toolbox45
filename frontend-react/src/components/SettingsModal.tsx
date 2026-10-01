@@ -9,22 +9,30 @@
 // fora por ora (fatias/features próprias, ainda sem escopo definido) — só
 // esse grupo específico, sem gate de admin (mesmo critério do original:
 // pastas são dados privados de cada usuário). As demais abas admin-rank
-// (Register/System/Users/Groups) chegam nas fatias 6-9, cada uma
-// adicionando sua própria entrada a NAV_ITEMS (a mesma ideia dos IDs em
-// ADMIN_ONLY_SETTINGS_GROUP_IDS/SUPER_ADMIN_ONLY_SETTINGS_GROUP_IDS do
-// original, só que como um array de config em vez de strings de id
-// soltas). Por isso o conceito de "escopo" do original (título/nav mudam
-// conforme abriu pelo menu de conta ou pela engrenagem) ainda não se aplica
-// de verdade: o título fica sempre "Account settings" por ora.
+// (Register/System/Users) continuam fora do escopo. Por isso o conceito de
+// "escopo" do original (título/nav mudam conforme abriu pelo menu de conta
+// ou pela engrenagem) ainda não se aplica de verdade: o título fica sempre
+// "Account settings" por ora.
+//
+// Fatia 6 acrescentou "Groups" (CRUD de grupos, ver GroupsPane.tsx) —
+// super_admin-only, fail-closed: o item só é incluído em NAV_ITEMS quando
+// auth.isSuperAdmin é true (que começa `false` até /api/me confirmar, ver
+// comentário em lib/auth.tsx), então nada do item OU do pane é montado
+// durante esse intervalo — mesma garantia dos demais gates admin-rank do
+// app, sem precisar de um array próprio de IDs (SUPER_ADMIN_ONLY_SETTINGS_
+// GROUP_IDS do original) já que aqui é só filtrar NAV_ITEMS antes de
+// renderizar.
 // ════════════════════════════════════════════════
 import { useEffect } from 'react';
+import { useAuth } from '../lib/auth';
 import { useSettings } from '../lib/settingsStore';
 import type { Catalogs } from '../lib/catalogs';
 import { AccountPane } from './panes/AccountPane';
 import { DatabasePane } from './panes/DatabasePane';
+import { GroupsPane } from './panes/GroupsPane';
 import { PreferencesPane } from './panes/PreferencesPane';
 
-export type SettingsPane = 'account' | 'prefs' | 'database';
+export type SettingsPane = 'account' | 'prefs' | 'database' | 'groups';
 
 interface NavItem {
   pane: SettingsPane;
@@ -58,6 +66,16 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
+// Mesmo ícone de duas pessoas de #groupsNavBtn no original — só incluído
+// quando auth.isSuperAdmin (ver GROUPS_NAV_ITEM/uso em NAV_ITEMS abaixo).
+const GROUPS_NAV_ITEM: NavItem = {
+  pane: 'groups',
+  label: 'Groups',
+  icon: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="3" /><circle cx="16" cy="8" r="3" /><path d="M2 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" /><path d="M12 19c0-2.8 2.2-5.5 5-5.5 2.8 0 5 2.7 5 5.5" /></svg>
+  ),
+};
+
 export function SettingsModal({
   pane,
   onChangePane,
@@ -73,6 +91,9 @@ export function SettingsModal({
   settings: ReturnType<typeof useSettings>['settings'];
   updateSettings: ReturnType<typeof useSettings>['update'];
 }) {
+  const auth = useAuth();
+  const navItems = auth.isSuperAdmin ? [...NAV_ITEMS, GROUPS_NAV_ITEM] : NAV_ITEMS;
+
   useEffect(() => {
     function onKeyDown(ev: KeyboardEvent) {
       if (ev.key === 'Escape') onClose();
@@ -98,7 +119,7 @@ export function SettingsModal({
         </div>
         <div className="settings-layout">
           <nav className="settings-nav">
-            {NAV_ITEMS.map(item => (
+            {navItems.map(item => (
               <button
                 key={item.pane}
                 type="button"
@@ -109,18 +130,18 @@ export function SettingsModal({
                 <span>{item.label}</span>
               </button>
             ))}
-            {/* Register/System/Users/Groups (admin-rank) entram nas
-                fatias 6-9, cada uma acrescentando seu próprio botão
-                aqui, gated por auth.isAdmin/auth.isSuperAdmin
-                (fail-closed: nada disso é montado enquanto /api/me não
-                confirmar). "Database" acima já está pronta (fatia 5c) —
-                sem gate de admin, mesmo critério do original pro grupo
-                "Folders". */}
+            {/* Register/System/Users (admin-rank) seguem fora do escopo
+                portado até agora. "Database" (fatia 5c) e "Groups" (fatia
+                6) já estão prontas — "Groups" gated por auth.isSuperAdmin
+                acima (fail-closed: nada é montado enquanto /api/me não
+                confirmar), "Database" sem gate de admin (mesmo critério do
+                original pro grupo "Folders"). */}
           </nav>
           <div className="settings-content">
             {pane === 'account' && <AccountPane />}
             {pane === 'prefs' && <PreferencesPane catalogs={catalogs} settings={settings} update={updateSettings} />}
             {pane === 'database' && <DatabasePane />}
+            {pane === 'groups' && auth.isSuperAdmin && <GroupsPane />}
           </div>
         </div>
       </div>
