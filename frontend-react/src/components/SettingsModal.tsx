@@ -22,17 +22,28 @@
 // app, sem precisar de um array próprio de IDs (SUPER_ADMIN_ONLY_SETTINGS_
 // GROUP_IDS do original) já que aqui é só filtrar NAV_ITEMS antes de
 // renderizar.
+//
+// Fatia 7 acrescentou "Users" (CRUD de usuários + promover/rebaixar/
+// desabilitar, ver UsersPane.tsx) — super_admin-only, MESMO gate/padrão de
+// "Groups" acima — e "Register" (catálogo compartilhado: Vendors/Systems/
+// Versions/Environments/Topics/Parameters/Prompts/Exports, ver
+// CatalogPane.tsx) — admin-rank (admin OU super_admin, `auth.isAdmin` já
+// cobre os dois), mesmo defense-in-depth duplo (gate no filtro de NAV_ITEMS
+// E gate de novo na renderização do pane, ver `pane === 'catalog' &&
+// auth.isAdmin` abaixo).
 // ════════════════════════════════════════════════
 import { useEffect } from 'react';
 import { useAuth } from '../lib/auth';
 import { useSettings } from '../lib/settingsStore';
 import type { Catalogs } from '../lib/catalogs';
 import { AccountPane } from './panes/AccountPane';
+import { CatalogPane } from './panes/CatalogPane';
 import { DatabasePane } from './panes/DatabasePane';
 import { GroupsPane } from './panes/GroupsPane';
 import { PreferencesPane } from './panes/PreferencesPane';
+import { UsersPane } from './panes/UsersPane';
 
-export type SettingsPane = 'account' | 'prefs' | 'database' | 'groups';
+export type SettingsPane = 'account' | 'prefs' | 'database' | 'groups' | 'users' | 'catalog';
 
 interface NavItem {
   pane: SettingsPane;
@@ -76,11 +87,32 @@ const GROUPS_NAV_ITEM: NavItem = {
   ),
 };
 
+// Mesmo ícone de #usersNavBtn no original — só incluído quando
+// auth.isSuperAdmin (mesmo gate de GROUPS_NAV_ITEM acima).
+const USERS_NAV_ITEM: NavItem = {
+  pane: 'users',
+  label: 'Users',
+  icon: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="3.2" /><path d="M2.5 19c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" /><path d="M17 4.5v5M14.3 7h5.4" /></svg>
+  ),
+};
+
+// Mesmo ícone de 3 linhas horizontais de #registerNavBtn no original — só
+// incluído quando auth.isAdmin (admin OU super_admin).
+const CATALOG_NAV_ITEM: NavItem = {
+  pane: 'catalog',
+  label: 'Register',
+  icon: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></svg>
+  ),
+};
+
 export function SettingsModal({
   pane,
   onChangePane,
   onClose,
   catalogs,
+  onCatalogsChanged,
   settings,
   updateSettings,
 }: {
@@ -88,11 +120,19 @@ export function SettingsModal({
   onChangePane: (pane: SettingsPane) => void;
   onClose: () => void;
   catalogs: Catalogs | null;
+  onCatalogsChanged: () => void;
   settings: ReturnType<typeof useSettings>['settings'];
   updateSettings: ReturnType<typeof useSettings>['update'];
 }) {
   const auth = useAuth();
-  const navItems = auth.isSuperAdmin ? [...NAV_ITEMS, GROUPS_NAV_ITEM] : NAV_ITEMS;
+  // Mesma ordem do original (index.html): account, prefs, database, groups,
+  // register(catalog), system(ainda fora de escopo), users — "system" não
+  // existe aqui ainda, então o próximo item depois de "catalog" já é
+  // "users".
+  let navItems = NAV_ITEMS;
+  if (auth.isSuperAdmin) navItems = [...navItems, GROUPS_NAV_ITEM];
+  if (auth.isAdmin) navItems = [...navItems, CATALOG_NAV_ITEM];
+  if (auth.isSuperAdmin) navItems = [...navItems, USERS_NAV_ITEM];
 
   useEffect(() => {
     function onKeyDown(ev: KeyboardEvent) {
@@ -130,18 +170,25 @@ export function SettingsModal({
                 <span>{item.label}</span>
               </button>
             ))}
-            {/* Register/System/Users (admin-rank) seguem fora do escopo
-                portado até agora. "Database" (fatia 5c) e "Groups" (fatia
-                6) já estão prontas — "Groups" gated por auth.isSuperAdmin
-                acima (fail-closed: nada é montado enquanto /api/me não
-                confirmar), "Database" sem gate de admin (mesmo critério do
-                original pro grupo "Folders"). */}
+            {/* "System" (audit log, backup/restore, import/export de
+                comandos) segue fora do escopo portado até agora — própria
+                fatia/feature ainda sem escopo definido (ver DatabasePane.tsx
+                e comentário no topo do arquivo). "Database" (fatia 5c),
+                "Groups" (fatia 6) e "Users"/"Register" (fatia 7) já estão
+                prontas — "Groups"/"Users" gated por auth.isSuperAdmin,
+                "Register" por auth.isAdmin (admin OU super_admin — pedido do
+                usuário: "o perfil User não poderá acessar cadastro de
+                registros"), ambos fail-closed (nada é montado enquanto
+                /api/me não confirmar), "Database" sem gate de admin (mesmo
+                critério do original pro grupo "Folders"). */}
           </nav>
           <div className="settings-content">
             {pane === 'account' && <AccountPane />}
             {pane === 'prefs' && <PreferencesPane catalogs={catalogs} settings={settings} update={updateSettings} />}
             {pane === 'database' && <DatabasePane />}
             {pane === 'groups' && auth.isSuperAdmin && <GroupsPane />}
+            {pane === 'users' && auth.isSuperAdmin && <UsersPane />}
+            {pane === 'catalog' && auth.isAdmin && catalogs && <CatalogPane catalogs={catalogs} onCatalogsChanged={onCatalogsChanged} />}
           </div>
         </div>
       </div>

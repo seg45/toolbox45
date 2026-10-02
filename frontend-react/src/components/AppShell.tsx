@@ -30,7 +30,7 @@
 // (classe "on" da linha "Folders" + o próprio clique que a liga/desliga) e
 // CommandsContent precisa saber o mesmo valor pra decidir o que renderizar.
 // ════════════════════════════════════════════════
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { useSettings } from '../lib/settingsStore';
 import { fetchCatalogs, type Catalogs } from '../lib/catalogs';
@@ -51,18 +51,26 @@ export function AppShell() {
   const [catalogs, setCatalogs] = useState<Catalogs | null>(null);
   const [settingsOpen, setSettingsOpen] = useState<SettingsPane | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchCatalogs()
+  // Extraída de dentro do useEffect (fatia 7) pra poder ser reaproveitada
+  // tanto pela carga inicial quanto por um callback passado adiante até
+  // CatalogAdminModal (SettingsModal -> CatalogPane -> CatalogAdminModal) —
+  // qualquer mutação no catálogo (criar/editar/excluir vendor/system/etc.)
+  // dispara esta mesma função de novo, atualizando IMEDIATAMENTE os dados
+  // que alimentam a sidebar, o editor de comando e o resto do app. Mesmo
+  // efeito de catAdminRefreshCatalogs() no original.
+  const refreshCatalogs = useCallback(() => {
+    return fetchCatalogs()
       .then(data => {
-        if (!cancelled) setCatalogs(data);
+        setCatalogs(data);
       })
       .catch(e => {
         console.warn('Não foi possível carregar o catálogo', e);
       });
-    return () => {
-      cancelled = true;
-    };
+  }, []);
+
+  useEffect(() => {
+    refreshCatalogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Enquanto /api/me não confirma a sessão, não renderiza nada do app —
@@ -104,6 +112,7 @@ export function AppShell() {
             onChangePane={setSettingsOpen}
             onClose={() => setSettingsOpen(null)}
             catalogs={catalogs}
+            onCatalogsChanged={refreshCatalogs}
             settings={settings}
             updateSettings={update}
           />
