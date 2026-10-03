@@ -126,6 +126,23 @@ export function useSearchHistory(storageKeyPrefix: string, currentUser: string |
     setEntries(freshSorted(loadRaw(key)));
   }, [key]);
 
+  // Fatia 8 (user-data sync, ver lib/userDataSync.ts) — reage a um
+  // StorageEvent (nativo, de outra aba, OU sintético, disparado por
+  // initUserDataSync() depois de semear 'cpa-query-history:<user>'/
+  // 'cpa-cmdsearch-history:<user>' vindos do servidor) relendo o histórico
+  // sob a chave atual (via keyRef, sempre em dia — ver atribuição acima).
+  // Registrado uma única vez (deps vazias): o listener em si não depende de
+  // `key` mudar, só o confere no momento do evento.
+  useEffect(() => {
+    function onStorage(ev: StorageEvent) {
+      if (keyRef.current && ev.key === keyRef.current) {
+        setEntries(freshSorted(loadRaw(keyRef.current)));
+      }
+    }
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   const persistAndSet = useCallback((arr: HistoryEntry[]) => {
     // fresh+re-persist entradas expiradas removidas — mesmo efeito colateral
     // de loadQueryHistory()/loadCmdSearchHistory() (limpa e regrava quando

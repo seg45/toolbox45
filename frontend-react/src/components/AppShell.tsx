@@ -36,6 +36,9 @@ import { useSettings } from '../lib/settingsStore';
 import { fetchCatalogs, type Catalogs } from '../lib/catalogs';
 import { useFoldersView } from '../lib/foldersView';
 import { useLiveFilters } from '../lib/liveFilters';
+import { useLogo } from '../lib/useLogo';
+import { usePersonalTheme } from '../lib/theme';
+import { useUserDataSync } from '../lib/userDataSync';
 import { ConfirmProvider } from '../lib/useConfirm';
 import { FolderPromptProvider } from '../lib/useFolderPrompt';
 import { CommandsContent } from './commands/CommandsContent';
@@ -50,6 +53,30 @@ export function AppShell() {
   const foldersView = useFoldersView(settings);
   const [catalogs, setCatalogs] = useState<Catalogs | null>(null);
   const [settingsOpen, setSettingsOpen] = useState<SettingsPane | null>(null);
+  // Elevado pra este nível (fatia 8) — antes vivia inteiramente dentro de
+  // Header.tsx (useLogo() chamado lá dentro, sem nenhum prop-drilling).
+  // LogoSettingsModal (Settings → System → Logo) precisa poder empurrar um
+  // `refresh` até o <img> do header depois de salvar/resetar — mas mora numa
+  // outra ramificação da árvore (dentro de SettingsModal, não dentro de
+  // Header), então as duas pontas só se encontram aqui, no ancestral comum.
+  // Mesmo caminho já usado por catalogs/refreshCatalogs logo acima.
+  const logo = useLogo();
+  // Elevado pra este nível pelo MESMO motivo de `logo` acima (fatia 8): o
+  // listener de 'storage' que usePersonalTheme() usa pra reagir ao
+  // user-data sync (ver lib/theme.ts/lib/userDataSync.ts) só tem efeito
+  // enquanto o hook está montado. Antes da fatia 8 ele só era chamado
+  // dentro de PreferencesPane.tsx — um tema sincronizado de outro
+  // navegador só era aplicado visualmente quando o usuário abria essa aba
+  // por acaso. Elevado aqui (montado a sessão inteira, independente de
+  // qual pane de Configurações está aberta, ou se alguma está), o tema
+  // sincronizado é aplicado ao app assim que GET /api/user-data resolve —
+  // achado e corrigido durante a verificação dos testes desta fatia.
+  const personalTheme = usePersonalTheme();
+  // Instala o lado "seed" do mecanismo de sincronização cross-browser (ver
+  // lib/userDataSync.ts) — o monkey-patch de Storage.prototype.setItem já
+  // foi instalado como import side-effect desse módulo; este hook só
+  // dispara o GET /api/user-data inicial assim que o username resolve.
+  useUserDataSync();
 
   // Extraída de dentro do useEffect (fatia 7) pra poder ser reaproveitada
   // tanto pela carga inicial quanto por um callback passado adiante até
@@ -86,7 +113,7 @@ export function AppShell() {
   return (
     <ConfirmProvider>
       <FolderPromptProvider>
-        <Header onOpenSettings={setSettingsOpen} />
+        <Header onOpenSettings={setSettingsOpen} logo={logo} />
         <div className={`app${!settings.showSidebar ? ' sidebar-collapsed' : ''}`}>
           <Sidebar
             catalogs={catalogs}
@@ -115,6 +142,11 @@ export function AppShell() {
             onCatalogsChanged={refreshCatalogs}
             settings={settings}
             updateSettings={update}
+            onLogoChanged={logo.refresh}
+            theme={personalTheme.theme}
+            accent={personalTheme.accent}
+            toggleTheme={personalTheme.toggleTheme}
+            setAccent={personalTheme.setAccent}
           />
         )}
       </FolderPromptProvider>

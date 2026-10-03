@@ -58,7 +58,7 @@ export function resolveAccentForTheme(theme: 'light' | 'dark', accent: string): 
 // que o usuário mexe no toggle/nos swatches, a preferência pessoal passa
 // a existir e o default do admin nunca mais é consultado pra ele.
 // ════════════════════════════════════════════════
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const THEME_KEY = 'cpa-theme';
 const ACCENT_KEY = 'cpa-accent';
@@ -129,6 +129,37 @@ export function usePersonalTheme() {
     applyAccentColor(key);
     try { localStorage.setItem(ACCENT_KEY, key); } catch { /* best-effort */ }
     setAccentState(key);
+  }, []);
+
+  // Fatia 8 (user-data sync, ver lib/userDataSync.ts) — reage a um
+  // StorageEvent (nativo, de outra aba, OU sintético, disparado por
+  // initUserDataSync() depois de semear 'cpa-theme'/'cpa-accent' vindos do
+  // servidor) relendo o valor pessoal gravado. Mesma regra crítica do
+  // original (reapplyAfterUserSync()): só reaplica quando existe uma
+  // preferência PESSOAL de verdade (readPersonalTheme()/readPersonalAccent()
+  // != null) — nunca cai no fallback do admin aqui, senão um usuário sem
+  // preferência pessoal "ganharia" uma preferência falsa só por causa do
+  // sync, e pararia de acompanhar trocas do default do admin.
+  useEffect(() => {
+    function onStorage(ev: StorageEvent) {
+      if (ev.key === THEME_KEY) {
+        const personal = readPersonalTheme();
+        if (personal !== null) {
+          applyTheme(personal);
+          setThemeState(personal);
+        }
+      } else if (ev.key === ACCENT_KEY) {
+        const personal = readPersonalAccent();
+        if (personal !== null) {
+          const currentTheme = readPersonalTheme() || (orgDefault('cpa-org-theme', 'light') as 'light' | 'dark');
+          const resolved = resolveAccentForTheme(currentTheme, personal);
+          applyAccentColor(resolved);
+          setAccentState(resolved);
+        }
+      }
+    }
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   return { theme, accent, toggleTheme, setAccent };

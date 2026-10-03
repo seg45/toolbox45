@@ -41,9 +41,10 @@ import { CatalogPane } from './panes/CatalogPane';
 import { DatabasePane } from './panes/DatabasePane';
 import { GroupsPane } from './panes/GroupsPane';
 import { PreferencesPane } from './panes/PreferencesPane';
+import { SystemPane } from './panes/SystemPane';
 import { UsersPane } from './panes/UsersPane';
 
-export type SettingsPane = 'account' | 'prefs' | 'database' | 'groups' | 'users' | 'catalog';
+export type SettingsPane = 'account' | 'prefs' | 'database' | 'groups' | 'users' | 'catalog' | 'system';
 
 interface NavItem {
   pane: SettingsPane;
@@ -107,6 +108,20 @@ const CATALOG_NAV_ITEM: NavItem = {
   ),
 };
 
+// Fatia 8 — mesma engrenagem usada no título deste próprio modal (acima),
+// aqui em miniatura (14×14, mesmo padrão dos outros itens de nav). SEMPRE
+// visível (nunca gated) — ver SystemPane.tsx: os 5 widgets de dentro é que
+// são individualmente gated por admin/super_admin, não o item de nav em si
+// (mesmo comportamento do botão `data-pane="system"` no index.html
+// original, que nunca tinha nenhum atributo de gate).
+const SYSTEM_NAV_ITEM: NavItem = {
+  pane: 'system',
+  label: 'System',
+  icon: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8a4 4 0 100 8 4 4 0 000-8z" /><path d="M19.4 13a7.97 7.97 0 000-2l2.1-1.6-2-3.4-2.5 1a8.1 8.1 0 00-1.7-1L14.9 3h-4l-.4 2.9a8.1 8.1 0 00-1.7 1l-2.5-1-2 3.4L6.6 11a7.97 7.97 0 000 2l-2.1 1.6 2 3.4 2.5-1c.5.4 1.1.8 1.7 1l.4 2.9h4l.4-2.9c.6-.2 1.2-.6 1.7-1l2.5 1 2-3.4L19.4 13z" /></svg>
+  ),
+};
+
 export function SettingsModal({
   pane,
   onChangePane,
@@ -115,6 +130,11 @@ export function SettingsModal({
   onCatalogsChanged,
   settings,
   updateSettings,
+  onLogoChanged,
+  theme,
+  accent,
+  toggleTheme,
+  setAccent,
 }: {
   pane: SettingsPane;
   onChangePane: (pane: SettingsPane) => void;
@@ -123,15 +143,27 @@ export function SettingsModal({
   onCatalogsChanged: () => void;
   settings: ReturnType<typeof useSettings>['settings'];
   updateSettings: ReturnType<typeof useSettings>['update'];
+  // Fatia 8 — repassado até SystemPane -> LogoSettingsModal; ver
+  // AppShell.tsx/Header.tsx (mesmo `logo` useLogo() elevado, compartilhado
+  // entre os dois).
+  onLogoChanged: () => Promise<void>;
+  // Fatia 8 — usePersonalTheme() elevado pra AppShell.tsx e repassado até
+  // PreferencesPane (ver comentário completo lá) — pelo mesmo motivo de
+  // `logo`/`onLogoChanged` acima: o listener de 'storage' do user-data sync
+  // só funciona enquanto o hook está montado, e PreferencesPane só monta
+  // quando esta aba está aberta.
+  theme: 'light' | 'dark';
+  accent: string;
+  toggleTheme: () => void;
+  setAccent: (key: string) => void;
 }) {
   const auth = useAuth();
   // Mesma ordem do original (index.html): account, prefs, database, groups,
-  // register(catalog), system(ainda fora de escopo), users — "system" não
-  // existe aqui ainda, então o próximo item depois de "catalog" já é
-  // "users".
+  // register(catalog), system, users.
   let navItems = NAV_ITEMS;
   if (auth.isSuperAdmin) navItems = [...navItems, GROUPS_NAV_ITEM];
   if (auth.isAdmin) navItems = [...navItems, CATALOG_NAV_ITEM];
+  navItems = [...navItems, SYSTEM_NAV_ITEM];
   if (auth.isSuperAdmin) navItems = [...navItems, USERS_NAV_ITEM];
 
   useEffect(() => {
@@ -170,25 +202,43 @@ export function SettingsModal({
                 <span>{item.label}</span>
               </button>
             ))}
-            {/* "System" (audit log, backup/restore, import/export de
-                comandos) segue fora do escopo portado até agora — própria
-                fatia/feature ainda sem escopo definido (ver DatabasePane.tsx
-                e comentário no topo do arquivo). "Database" (fatia 5c),
-                "Groups" (fatia 6) e "Users"/"Register" (fatia 7) já estão
-                prontas — "Groups"/"Users" gated por auth.isSuperAdmin,
-                "Register" por auth.isAdmin (admin OU super_admin — pedido do
-                usuário: "o perfil User não poderá acessar cadastro de
-                registros"), ambos fail-closed (nada é montado enquanto
-                /api/me não confirmar), "Database" sem gate de admin (mesmo
-                critério do original pro grupo "Folders"). */}
+            {/* "Database" (fatia 5c), "Groups"/"Users" (fatia 6/7),
+                "Register" (fatia 7) e "System" (fatia 8) já estão prontas —
+                "Groups"/"Users" gated por auth.isSuperAdmin, "Register" por
+                auth.isAdmin (admin OU super_admin — pedido do usuário: "o
+                perfil User não poderá acessar cadastro de registros"),
+                ambos fail-closed (nada é montado enquanto /api/me não
+                confirmar); "Database" sem gate de admin (mesmo critério do
+                original pro grupo "Folders"); "System" sem gate no item de
+                nav em si (ver SYSTEM_NAV_ITEM acima) — só os widgets
+                internos de SystemPane.tsx são gated. O "audit log,
+                backup/restore, import/export de comandos" citado aqui antes
+                (grupo "System" de DatabasePane.tsx) continua fora de
+                escopo — é outra feature, sem relação com a aba "System"
+                desta fatia (configurações administrativas globais). */}
           </nav>
           <div className="settings-content">
             {pane === 'account' && <AccountPane />}
-            {pane === 'prefs' && <PreferencesPane catalogs={catalogs} settings={settings} update={updateSettings} />}
+            {pane === 'prefs' && (
+              <PreferencesPane
+                catalogs={catalogs}
+                settings={settings}
+                update={updateSettings}
+                theme={theme}
+                accent={accent}
+                toggleTheme={toggleTheme}
+                setAccent={setAccent}
+              />
+            )}
             {pane === 'database' && <DatabasePane />}
             {pane === 'groups' && auth.isSuperAdmin && <GroupsPane />}
             {pane === 'users' && auth.isSuperAdmin && <UsersPane />}
             {pane === 'catalog' && auth.isAdmin && catalogs && <CatalogPane catalogs={catalogs} onCatalogsChanged={onCatalogsChanged} />}
+            {/* Sem gate aqui (mesmo critério do nav item acima) — a aba em
+                si é sempre montada; cada um dos 5 widgets dentro de
+                SystemPane decide por si (auth.isAdmin/auth.isSuperAdmin)
+                se renderiza ou não. */}
+            {pane === 'system' && <SystemPane onLogoChanged={onLogoChanged} />}
           </div>
         </div>
       </div>

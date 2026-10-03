@@ -12,7 +12,7 @@
 // qualquer paint do navegador) — não existe um frame intermediário com o
 // valor errado, exatamente como o script inline original.
 // ════════════════════════════════════════════════
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fetchLogo } from './api';
 
 const CACHE_KEY = { light: 'cpa-logo-cache-light', dark: 'cpa-logo-cache-dark' } as const;
@@ -37,32 +37,39 @@ function writeCache(theme: 'light' | 'dark', dataUrl: string | null): void {
 export interface LogoSrcs {
   light: string | null;
   dark: string | null;
+  // Fatia 8 (Settings → System → Logo, ver LogoSettingsModal.tsx) — refaz a
+  // MESMA busca+aplicação do boot abaixo (fetchLogo + setState +
+  // writeCache, extraída pra `load` logo adiante) sob demanda, pra refletir
+  // um save/delete no header IMEDIATAMENTE, sem reload — mesmo efeito de
+  // _logoApplyToDom() chamado logo após o PUT/DELETE no original.
+  refresh: () => Promise<void>;
 }
 
 export function useLogo(): LogoSrcs {
   const [light, setLight] = useState<string | null>(() => readCache('light'));
   const [dark, setDark] = useState<string | null>(() => readCache('dark'));
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchLogo()
-      .then(data => {
-        if (cancelled) return;
-        const nextLight = typeof data.imageData === 'string' ? data.imageData : null;
-        const nextDark = typeof data.imageDataDark === 'string' ? data.imageDataDark : null;
-        setLight(nextLight);
-        setDark(nextDark);
-        writeCache('light', nextLight);
-        writeCache('dark', nextDark);
-      })
-      .catch(e => {
-        // eslint-disable-next-line no-console
-        console.warn('Não foi possível carregar o logo customizado — usando o padrão', e);
-      });
-    return () => {
-      cancelled = true;
-    };
+  // Lógica única de "buscar o logo atual e aplicar estado + cache",
+  // reaproveitada tanto pelo useEffect de boot abaixo quanto pelo `refresh`
+  // exposto no retorno do hook — mesma função, duas chamadas.
+  const load = useCallback(async () => {
+    try {
+      const data = await fetchLogo();
+      const nextLight = typeof data.imageData === 'string' ? data.imageData : null;
+      const nextDark = typeof data.imageDataDark === 'string' ? data.imageDataDark : null;
+      setLight(nextLight);
+      setDark(nextDark);
+      writeCache('light', nextLight);
+      writeCache('dark', nextDark);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('Não foi possível carregar o logo customizado — usando o padrão', e);
+    }
   }, []);
 
-  return { light, dark };
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return { light, dark, refresh: load };
 }

@@ -13,7 +13,7 @@
 // original, que já guarda essas chamadas atrás de `typeof x ===
 // 'function'` — aqui elas simplesmente ainda não existem.
 // ════════════════════════════════════════════════
-import { usePersonalTheme, ACCENT_PRESETS } from '../../lib/theme';
+import { ACCENT_PRESETS } from '../../lib/theme';
 import { Settings } from '../../lib/settingsStore';
 import type { Catalogs } from '../../lib/catalogs';
 import { SegSingle, SegMulti, Toggle } from '../SegControls';
@@ -32,12 +32,27 @@ export function PreferencesPane({
   catalogs,
   settings,
   update,
+  theme,
+  accent,
+  toggleTheme,
+  setAccent,
 }: {
   catalogs: Catalogs | null;
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
+  // Fatia 8 — usePersonalTheme() foi elevado pra AppShell.tsx (mesmo motivo
+  // de useLogo() nesta mesma fatia): o listener de 'storage' que reage ao
+  // user-data sync (ver lib/theme.ts/lib/userDataSync.ts) só tem efeito
+  // enquanto o hook está MONTADO — preso aqui dentro, ele só reaplicava o
+  // tema sincronizado de outro navegador quando o usuário abria esta aba por
+  // acaso. Elevado, o hook (e seu listener) ficam montados pela sessão
+  // inteira, então um tema sincronizado de outro navegador é aplicado ao
+  // app imediatamente, não só quando esta tela é aberta.
+  theme: 'light' | 'dark';
+  accent: string;
+  toggleTheme: () => void;
+  setAccent: (key: string) => void;
 }) {
-  const { theme, accent, toggleTheme, setAccent } = usePersonalTheme();
 
   const vendorOptions = (catalogs?.vendors || []).map(v => ({ val: v.key, label: v.label }));
   const sysOptions = (catalogs?.systems || []).map(v => ({ val: v.key, label: v.label }));

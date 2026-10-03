@@ -21,7 +21,7 @@
 // ════════════════════════════════════════════════
 import { useEffect, useRef, useState } from 'react';
 import { useAuth, authMethodLabel } from '../lib/auth';
-import { useLogo } from '../lib/useLogo';
+import type { LogoSrcs } from '../lib/useLogo';
 import { useConfirm } from '../lib/useConfirm';
 import { ApiError } from '../lib/api';
 import { deleteLink, listLinks, type Link } from '../lib/links';
@@ -30,9 +30,14 @@ import { IpCalcModal } from './IpCalcModal';
 
 type LinkEditorState = { mode: 'create' } | { mode: 'edit'; link: Link } | null;
 
-export function Header({ onOpenSettings }: { onOpenSettings: (pane: 'account' | 'prefs') => void }) {
+// `logo` sobe de AppShell.tsx (fatia 8) — antes era um useLogo() chamado
+// aqui dentro, sem nenhum prop-drilling; agora precisa ser uma ÚNICA
+// instância compartilhada com LogoSettingsModal (Settings → System → Logo),
+// que fica numa ramificação irmã da árvore (dentro de SettingsModal) e
+// precisa disparar `refresh` depois de salvar/resetar — mesmo caminho já
+// usado por catalogs/onCatalogsChanged (ver AppShell.tsx).
+export function Header({ onOpenSettings, logo }: { onOpenSettings: (pane: 'account' | 'prefs') => void; logo: LogoSrcs }) {
   const auth = useAuth();
-  const logo = useLogo();
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const ddRef = useRef<HTMLDivElement>(null);
