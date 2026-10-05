@@ -204,7 +204,7 @@ export function AccountPane() {
         </div>
         {handleError && <div className="set-hint" style={{ color: 'var(--red)' }}>{handleError}</div>}
       </div>
-      <div className="set-group" style={{ marginTop: 14 }}>
+      <div className="set-group" id="acctGroupSharing">
         <span className="set-label">Sharing</span>
         <div className="set-hint">
           Folders and commands are private by default. Share your handle with someone so they can see yours, or share below to see someone

@@ -113,3 +113,11 @@
   color: var(--green); background: var(--green-bg); border: 1px solid var(--green);
   border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.5; text-align: center;
 }
+
+/* Específico do React: no login.html original o .login-card era filho direto
+   do <body class="login-body"> (flex, centralizado). Aqui ele fica dentro de
+   <div id="root">, que como item flex encolhe ao conteúdo — e o
+   "width: min(360px, 100%)" do card passa a resolver contra esse pai
+   estreito (card saía com ~262px em vez de 360px). display: contents tira o
+   #root da árvore de layout e devolve ao card o mesmo pai flex do original. */
+body.login-body > #root { display: contents; }

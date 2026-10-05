@@ -449,7 +449,7 @@ export function IpCalcModal({ open, onClose }: { open: boolean; onClose: () => v
           )}
 
           {subnets && (
-            <div className="set-group">
+            <div className="set-group" id="ipcSubnetsGroup">
               <span className="set-label">{subnets.label}</span>
               <div className="ipc-term">
                 {subnets.kind === 'split' ? (

@@ -174,6 +174,7 @@ export function SettingsModal({
   return (
     <div
       className="modal-overlay show"
+      id="settingsOverlay"
       onClick={ev => {
         if (ev.target === ev.currentTarget) onClose();
       }}

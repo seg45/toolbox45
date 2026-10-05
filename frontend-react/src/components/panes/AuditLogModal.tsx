@@ -61,6 +61,7 @@ export function AuditLogModal({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div
       className="modal-overlay show"
+      id="auditLogOverlay"
       onClick={ev => {
         if (ev.target === ev.currentTarget) onClose();
       }}

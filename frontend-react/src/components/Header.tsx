@@ -131,7 +131,7 @@ export function Header({ onOpenSettings, logo }: { onOpenSettings: (pane: 'accou
         <img className="hdr-logo-img for-light" src={logo.light || '/img/logo-toolbox45.png?v=2'} alt="Toolbox45" />
       </div>
       <div className="hdr-tools-group" ref={toolsGroupRef}>
-        <div className={`dd${openDropdown === 'links' ? ' open' : ''}`}>
+        <div className={`dd${openDropdown === 'links' ? ' open' : ''}`} id="linksDD">
           <button
             type="button"
             className="ipc-header-btn"
@@ -145,7 +145,7 @@ export function Header({ onOpenSettings, logo }: { onOpenSettings: (pane: 'accou
             <span>Links</span>
           </button>
           {openDropdown === 'links' && (
-            <div className="dd-panel" style={{ left: 0, right: 'auto', minWidth: 240, maxWidth: 320 }}>
+            <div className="dd-panel" id="linksDDPanel" style={{ left: 0, right: 'auto', minWidth: 240, maxWidth: 320 }}>
               <div
                 className="sb-row lk-add-row"
                 onClick={() => {
@@ -206,7 +206,7 @@ export function Header({ onOpenSettings, logo }: { onOpenSettings: (pane: 'accou
             </div>
           )}
         </div>
-        <div className={`dd${openDropdown === 'tools' ? ' open' : ''}`}>
+        <div className={`dd${openDropdown === 'tools' ? ' open' : ''}`} id="toolsDD">
           <button
             type="button"
             className="ipc-header-btn"
@@ -248,11 +248,11 @@ export function Header({ onOpenSettings, logo }: { onOpenSettings: (pane: 'accou
       <div className={`dd hdr-user-dd${open ? ' open' : ''}`} ref={ddRef}>
         <button type="button" className="hdr-user" onClick={() => setOpen(o => !o)} title="Account">
           <svg className="hdr-user-ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="10" r="3" /><path d="M6.5 18.5a6 6 0 0 1 11 0" /></svg>
-          <span>{auth.me?.handle || auth.me?.upn || ''}</span>
+          <span id="currentUserLabel">{auth.me?.handle || auth.me?.upn || ''}</span>
         </button>
         {open && (
-          <div className="dd-panel" style={{ left: 'auto', right: 0, minWidth: 220 }}>
-            <div className="set-hint" style={{ padding: '4px 8px 8px' }}>{roleLine}</div>
+          <div className="dd-panel" id="hdrUserPanel" style={{ left: 'auto', right: 0, minWidth: 220 }}>
+            <div className="set-hint" id="hdrUserRoleLine" style={{ padding: '4px 8px 8px' }}>{roleLine}</div>
             <div className="sb-row" onClick={() => { setOpen(false); onOpenSettings('account'); }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="9" /><circle cx="12" cy="10" r="3" /><path d="M6.5 18.5a6 6 0 0 1 11 0" /></svg>
               <span>User account</span>

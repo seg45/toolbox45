@@ -62,7 +62,7 @@ export function PreferencesPane({
 
   return (
     <div className="settings-pane" data-pane="prefs">
-      <div className="set-group">
+      <div className="set-group" id="settingsToggleGroup">
         <span className="set-label">Default settings</span>
         <div className={`sb-toggle${theme === 'dark' ? ' on' : ''}`} onClick={toggleTheme}>
           <div className="set-row-half">
@@ -80,6 +80,7 @@ export function PreferencesPane({
                   <button
                     key={key}
                     type="button"
+                    id={key === 'white' ? 'accentSwatchWhite' : undefined}
                     className={`accent-swatch${accent === key ? ' on' : ''}`}
                     style={{ background: ACCENT_PRESETS[key].teal }}
                     onClick={() => setAccent(key)}
@@ -123,7 +124,7 @@ export function PreferencesPane({
         <SegMulti options={topicOptions} selected={settings.type} onChange={v => update({ type: v })} />
       </div>
 
-      <div className="set-group">
+      <div className="set-group" id="settingsToggleGroup2">
         <Toggle label="Details" on={settings.showCardDetails} onClick={() => update({ showCardDetails: !settings.showCardDetails })} />
         <Toggle label="Export" on={settings.exportEnabled} onClick={() => update({ exportEnabled: !settings.exportEnabled })} />
         <Toggle label="Images" on={settings.showImages} onClick={() => update({ showImages: !settings.showImages })} />

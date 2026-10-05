@@ -79,9 +79,10 @@ export function Sidebar({
       <div className="sidebar-inner">
         <CmdSearchBox search={filters.search} onSearchChange={v => updateFilters({ search: v })} />
 
-        <div className="sb-block">
+        <div className="sb-block" id="foldersBlock">
           <div className="sb-list">
             <div
+              id="foldersNavRow"
               className={`sb-row folders-head-row${foldersView.active ? ' on' : ''}`}
               onClick={foldersView.toggle}
             >
@@ -121,7 +122,7 @@ export function Sidebar({
         </a>
       </div>
 
-      <button type="button" className="sb-divider-toggle" onClick={onToggleCollapsed} title="Pin/unpin sidebar">
+      <button type="button" id="sbDividerToggle" className="sb-divider-toggle" onClick={onToggleCollapsed} title="Pin/unpin sidebar">
         <svg className="icon-collapse" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10.5 2l-6 6 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /><path d="M14.5 2l-6 6 6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
         <svg className="icon-expand" width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M1.5 2l6 6-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /><path d="M5.5 2l6 6-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
