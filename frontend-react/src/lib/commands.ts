@@ -110,11 +110,16 @@ export interface CommandPayload {
 // falha (ex.: 409/403 depois de o backend já ter validado outra coisa) não
 // garante que o estado no servidor não mudou; um próximo fetchCommands()
 // sempre busca dados frescos em vez de arriscar servir uma lista desatualizada.
-export async function createCommand(payload: CommandPayload): Promise<Command> {
+// `asSystem` (opcional, só o import CSV usa — ImportCommandsModal.tsx): quando
+// true envia o header X-Save-As-System, como js/api-client.js::createCommand.
+// O servidor reconfere a role (só admin) antes de gravar created_by='System'.
+export async function createCommand(payload: CommandPayload, asSystem?: boolean): Promise<Command> {
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (asSystem) headers['X-Save-As-System'] = '1';
     const res = await fetch('/api/commands', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
     });
     if (!res.ok) {

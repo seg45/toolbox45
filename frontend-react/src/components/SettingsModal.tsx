@@ -3,13 +3,10 @@
 // + js/settings-modal.js (openSettingsModal/closeSettingsModal/
 // switchSettingsPane/_settingsApplyScope).
 //
-// Fatia 5c acrescentou a aba "Database" (só o grupo "Folders" — Export/
-// Import de pasta, ver DatabasePane.tsx). "Commands" (CSV do catálogo
-// inteiro) e "Database"/Backup & Restore (admin-only) do original ficam de
-// fora por ora (fatias/features próprias, ainda sem escopo definido) — só
-// esse grupo específico, sem gate de admin (mesmo critério do original:
-// pastas são dados privados de cada usuário). As demais abas admin-rank
-// (Register/System/Users) continuam fora do escopo. Por isso o conceito de
+// Fatia 5c acrescentou a aba "Database" (inicialmente só o grupo "Folders" —
+// Export/Import de pasta); a fatia 9 completou a aba com os grupos "Commands"
+// (Export/Import CSV do catálogo) e "Database" (Backup & Restore + audit log,
+// admin-only) — ver DatabasePane.tsx. Por isso o conceito de
 // "escopo" do original (título/nav mudam conforme abriu pelo menu de conta
 // ou pela engrenagem) ainda não se aplica de verdade: o título fica sempre
 // "Account settings" por ora.
@@ -211,11 +208,9 @@ export function SettingsModal({
                 confirmar); "Database" sem gate de admin (mesmo critério do
                 original pro grupo "Folders"); "System" sem gate no item de
                 nav em si (ver SYSTEM_NAV_ITEM acima) — só os widgets
-                internos de SystemPane.tsx são gated. O "audit log,
-                backup/restore, import/export de comandos" citado aqui antes
-                (grupo "System" de DatabasePane.tsx) continua fora de
-                escopo — é outra feature, sem relação com a aba "System"
-                desta fatia (configurações administrativas globais). */}
+                internos de SystemPane.tsx são gated. "Audit log",
+                "backup/restore" e "import/export de comandos" moram na aba
+                "Database" (DatabasePane.tsx, fatia 9) — não nesta. */}
           </nav>
           <div className="settings-content">
             {pane === 'account' && <AccountPane />}
@@ -230,7 +225,7 @@ export function SettingsModal({
                 setAccent={setAccent}
               />
             )}
-            {pane === 'database' && <DatabasePane />}
+            {pane === 'database' && <DatabasePane onCatalogsChanged={onCatalogsChanged} />}
             {pane === 'groups' && auth.isSuperAdmin && <GroupsPane />}
             {pane === 'users' && auth.isSuperAdmin && <UsersPane />}
             {pane === 'catalog' && auth.isAdmin && catalogs && <CatalogPane catalogs={catalogs} onCatalogsChanged={onCatalogsChanged} />}

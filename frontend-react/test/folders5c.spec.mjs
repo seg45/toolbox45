@@ -507,7 +507,7 @@ await withPage(browser, async page => {
   );
 });
 
-// ── Cenário 8: aba Database nas Configurações mostra só o grupo Folders ──
+// ── Cenário 8: aba Database nas Configurações mostra o grupo Folders (a fatia 9 acrescentou Commands e Database, admin-only — cobertos em fatia9a/9b) ──
 await withPage(browser, async page => {
   const state = makeFolderState();
   await mockLoggedInAdmin(page, state);
@@ -519,8 +519,9 @@ await withPage(browser, async page => {
 
   const content = page.locator('.settings-content');
   await assertEventually(async () => (await content.locator('.set-label', { hasText: 'Folders' }).count()) === 1, 'cenário 8: a aba Database mostra o grupo "Folders"');
-  assert((await content.locator('.set-label', { hasText: 'Commands' }).count()) === 0, 'cenário 8: a aba Database NÃO mostra o grupo "Commands" (fora do escopo desta fatia)');
-  assert((await content.locator('.set-label', { hasText: /^Database$/ }).count()) === 0, 'cenário 8: a aba Database NÃO mostra o grupo "Database"/Backup (admin-only, fatia 9)');
+  // Desde a fatia 9 a aba tem os 3 grupos do original; como este usuário é admin, vê todos.
+  assert((await content.locator('.set-label', { hasText: 'Commands' }).count()) === 1, 'cenário 8: a aba Database mostra o grupo "Commands" (fatia 9)');
+  assert((await content.locator('.set-label', { hasText: /^Database$/ }).count()) === 1, 'cenário 8: a aba Database mostra o grupo "Database"/Backup para admin (fatia 9)');
   assert(await content.locator('button', { hasText: 'Export folder' }).isVisible(), 'cenário 8: o botão "Export folder" está visível');
   assert(await content.locator('button', { hasText: 'Import folder' }).isVisible(), 'cenário 8: o botão "Import folder" está visível');
 });

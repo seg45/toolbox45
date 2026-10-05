@@ -61,6 +61,29 @@ export async function createCatalogItem(kind: CatalogKind, payload: CatalogItemP
   if (!res.ok) await throwCatalogError(res);
 }
 
+// Mesmo POST de createCatalogItem, mas devolve o JSON da resposta (a linha
+// criada, com a `key` gerada pelo servidor — ver POST /api/<kind> em
+// server-py/app/routers/catalog.py, status 201 + `dict(row)`). Usado pelo
+// painel "Resolve unmatched values" do import CSV (ImportCommandsModal.tsx),
+// que precisa da key real para mapear o valor digitado -> item recém-criado.
+//
+// Diferença deliberada em relação a createCatalogItem: a mensagem do ApiError é
+// a do próprio servidor (`body.message || 'failed to create'`), como no original
+// (js/csv-import.js::applyImportResolutions), em vez do texto mapeado por
+// mapCatalogErrorBody — o painel mostra a mensagem crua ao lado do item.
+export async function createCatalogItemReturningKey(kind: CatalogKind, payload: CatalogItemPayload): Promise<{ key: string }> {
+  const res = await fetch(`/api/${kind}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await parseErrorBody(res);
+    throw new ApiError(res.status, body.message || 'failed to create', body.error);
+  }
+  return res.json();
+}
+
 // `originalSystem` só é usado (e obrigatório) pra `kind === 'versions'` — vai
 // na URL (/api/versions/:system/:key) ANTES de qualquer re-key que o próprio
 // `payload.system` possa estar pedindo.
