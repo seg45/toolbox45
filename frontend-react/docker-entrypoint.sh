@@ -1,14 +1,13 @@
 #!/bin/sh
 # ════════════════════════════════════════════════════════════════════════
-# Toolbox45 — frontend React entrypoint (toolbox45-frontend-react)
+# Toolbox45 — entrypoint do frontend (toolbox45-frontend)
 #
-# Cópia 1:1 de frontend/docker-entrypoint.sh (frontend JS atual) — mesma
-# lógica de hot-reload de TLS, sem nenhuma mudança: nginx só lê
-# /etc/nginx/tls/cert.pem+key.pem uma vez, no boot, então este script
-# observa esse diretório com inotifywait e roda `nginx -s reload`
-# (graceful, não derruba conexão em andamento) sempre que os arquivos
-# mudam — sem precisar de acesso a /var/run/docker.sock. Ver comentário
-# completo no arquivo original.
+# Hot-reload de TLS: o nginx só lê /etc/nginx/tls/cert.pem+key.pem uma vez,
+# no boot, então este script observa esse diretório (volume toolbox45-tls,
+# somente-leitura) com inotifywait e roda `nginx -s reload` (graceful, não
+# derruba conexão em andamento) sempre que os arquivos mudam — importar ou
+# remover um certificado em Settings → System → SSL Certificate vale sem
+# reiniciar o container, e sem acesso a /var/run/docker.sock.
 # ════════════════════════════════════════════════════════════════════════
 set -e
 

@@ -1,8 +1,8 @@
 services:
   # ── BANCO DE DADOS ──
-  # PostgreSQL "de verdade" (não mais SQLite num volume) — server/db.js
-  # conecta nele via rede (PGHOST=toolbox45-db) e aplica server/schema.sql a
-  # cada boot do backend (idempotente). Sem "ports:" — não é alcançável de
+  # PostgreSQL — o backend (server-py/app/db.py) conecta nele via rede
+  # (PGHOST=toolbox45-db) e a cada boot aplica schema.sql, migrações e seeds
+  # de primeira instalação (idempotente). Sem "ports:" — não é alcançável de
   # fora do host, só pelo toolbox45-backend via rede interna do compose.
   toolbox45-db:
     image: postgres:16-alpine
@@ -21,16 +21,16 @@ services:
       retries: 10
 
   # ── BACKEND ──
-  # API REST pura (Express + PostgreSQL) — não serve mais o frontend estático
+  # API REST (Python/FastAPI + PostgreSQL) — não serve o frontend estático
   # (isso é o toolbox45-frontend abaixo). Também aceita chamadas externas
   # autenticadas por API key (header X-API-Key — ver Settings → System →
-  # API access na UI, e api_keys em server/schema.sql). Sem "ports:" — só o
-  # toolbox45-frontend fala com ele (proxy reverso /api/*, ver
-  # frontend/nginx.conf).
+  # API access na UI, e api_keys em server-py/app/schema.sql). Sem "ports:" —
+  # só o toolbox45-frontend fala com ele (proxy reverso /api/*, ver
+  # frontend-react/nginx.conf).
   toolbox45-backend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: server-py/Dockerfile
       # Ver nota de MTU/rede no serviço toolbox45-frontend abaixo — mesmo
       # racional (apt-get durante o build precisa da rede do host nesta VM).
       network: host
@@ -40,13 +40,13 @@ services:
     depends_on:
       toolbox45-db:
         condition: service_healthy
-    # GET /api/health só responde depois de initDb() E ensureTlsBootstrap()
-    # (ver server/index.js) — ou seja, "healthy" aqui também garante que o
+    # GET /api/health só responde depois de init_db() E ensure_tls_bootstrap()
+    # (lifespan em server-py/app/main.py) — ou seja, "healthy" aqui também garante que o
     # volume de certificados (toolbox45-tls) já tem um cert.pem/key.pem
     # válidos, o que o toolbox45-frontend abaixo depende para poder subir
     # seu bloco "listen 443 ssl" sem erro.
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      test: ["CMD", "python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -58,7 +58,7 @@ services:
       PGUSER: "${POSTGRES_USER:-toolbox45}"
       PGPASSWORD: "${POSTGRES_PASSWORD:-toolbox45}"
       # Login com Google (opcional) — habilita o botão "Sign in with Google"
-      # em login.html (ver GET /api/auth/google* em server/index.js). Sem
+      # em login.html (ver GET /api/auth/google* em server-py/app/routers/oauth.py). Sem
       # login do Windows/NTLM (removido) nem sessão Google, só resta o login
       # local (usuário/senha) — sempre disponível, não precisa de variável
       # nenhuma.
@@ -75,7 +75,7 @@ services:
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
       GOOGLE_REDIRECT_URI: "${GOOGLE_REDIRECT_URI:-}"
       # Login com Microsoft (opcional) — mesmo esquema do Google acima, só troca
-      # o provedor (ver GET /api/auth/microsoft* em server/index.js). MICROSOFT_TENANT_ID
+      # o provedor (ver GET /api/auth/microsoft* em server-py/app/routers/oauth.py). MICROSOFT_TENANT_ID
       # é opcional (default "common" = qualquer conta Microsoft, pessoal ou de qualquer
       # organização); um tenant ID/domínio específico restringe o login só àquela
       # organização. Passo a passo completo (App registration no Azure Portal) em
@@ -90,20 +90,20 @@ services:
       # rebuild/restart deste container.
       - toolbox45-backups:/app/backups
       # Certificado/chave TLS (Settings → System → SSL Certificate) —
-      # ensureTlsBootstrap()/generateSelfSignedCert() em server/index.js
+      # ensure_tls_bootstrap() em server-py/app/tls.py
       # escrevem aqui; COMPARTILHADO (rw aqui, ro no toolbox45-frontend
       # abaixo) porque quem realmente termina HTTPS é o nginx do frontend,
-      # não este container — ver frontend/nginx.conf.
+      # não este container — ver frontend-react/nginx.conf.
       - toolbox45-tls:/app/tls
 
   # ── FRONTEND ──
-  # nginx: serve os arquivos estáticos (index.html/css/js/img) e faz proxy
-  # reverso de /api/* para o toolbox45-backend — ver frontend/nginx.conf.
+  # nginx: serve o build estático do React (Vite) e faz proxy
+  # reverso de /api/* para o toolbox45-backend — ver frontend-react/nginx.conf.
   # ÚNICO container com porta publicada; é com ele que o navegador fala.
   toolbox45-frontend:
     build:
       context: .
-      dockerfile: frontend/Dockerfile
+      dockerfile: frontend-react/Dockerfile
       # "network: host" faz o build usar a rede do próprio host em vez da
       # bridge padrão do Docker — em alguns servidores/VPNs a bridge do
       # Docker tem um MTU incompatível com a rede real, e etapas do build
@@ -115,10 +115,10 @@ services:
     restart: unless-stopped
     depends_on:
       # "service_healthy" (não só "started") — o healthcheck do backend só
-      # fica healthy depois de ensureTlsBootstrap() gerar cert.pem/key.pem
+      # fica healthy depois de ensure_tls_bootstrap() gerar cert.pem/key.pem
       # (ver comentário no serviço acima), garantindo que eles já existem no
       # volume compartilhado quando o nginx aqui sobe e lê o bloco "listen
-      # 443 ssl" de frontend/nginx.conf — sem isso, o nginx falharia ao
+      # 443 ssl" de frontend-react/nginx.conf — sem isso, o nginx falharia ao
       # iniciar (arquivo inexistente) numa primeira subida "do zero".
       toolbox45-backend:
         condition: service_healthy

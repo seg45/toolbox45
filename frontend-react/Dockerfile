@@ -1,23 +1,13 @@
 # ════════════════════════════════════════════════════════════════════════
-# Toolbox45 — frontend React (Fase 3) image (toolbox45-frontend-react)
+# Toolbox45 — imagem do frontend (React/Vite + nginx), servico
+# toolbox45-frontend no docker-compose.yml.
 #
-# Build de produção (Vite, npm run build) + nginx — MESMO padrão do
-# frontend/Dockerfile atual (JS puro): reaproveita o mesmo nginx.conf
-# (proxy /api/, TLS hot-reload via inotify) e o mesmo docker-entrypoint.sh
-# (cópia 1:1, ver comentário lá), trocando só a origem dos arquivos
-# estáticos — agora vem de `npm run build` (Vite), não mais copiado direto
-# do repo.
+# Multi-stage: `npm run build` (Vite) num estagio node, e o nginx serve o
+# resultado (frontend-react/nginx.conf: proxy /api/ para o backend Python,
+# HTTPS com hot-reload de TLS via inotify — docker-entrypoint.sh).
 #
-# Build context é a raiz do repo (igual a frontend/Dockerfile e
-# server-py/Dockerfile) — necessário pra referenciar frontend-react/ com
-# caminho relativo à raiz:
-#   cd /opt/toolbox45 && docker build -f frontend-react/Dockerfile -t toolbox45-frontend-react .
-#
-# Nesta fatia (Fase 3, fatia 1 — setup + login) esta imagem só é usada num
-# container de teste ISOLADO, porta nova, apontando pro backend Python —
-# não faz parte do docker-compose.yml ainda (mesmo critério da Fase 2 pro
-# frontend JS atual). A entrada em produção de verdade só acontece na
-# Fase 4 (corte).
+# Build context é a raiz do repo, por causa dos caminhos frontend-react/...:
+#   docker build -f frontend-react/Dockerfile -t toolbox45-frontend:latest .
 # ════════════════════════════════════════════════════════════════════════
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
@@ -34,6 +24,10 @@ COPY frontend-react/nginx.conf /etc/nginx/nginx.conf
 COPY frontend-react/docker-entrypoint.sh /docker-entrypoint-tls.sh
 RUN chmod +x /docker-entrypoint-tls.sh
 COPY --from=build /app/dist /usr/share/nginx/html
+# Garante leitura pelo usuario do nginx (workers nao rodam como root) mesmo se
+# o checkout/contexto de build trouxer arquivos com modo restrito (ex.: 0700
+# em public/img) — senao /img/* responde 403.
+RUN chmod -R a+rX /usr/share/nginx/html
 
 EXPOSE 80 443
 ENTRYPOINT ["/docker-entrypoint-tls.sh"]

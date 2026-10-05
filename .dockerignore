@@ -1,6 +1,9 @@
 # Nunca vai pra imagem: node_modules é reinstalado dentro do build.
 node_modules
-server/node_modules
+**/node_modules
+frontend-react/dist
+**/__pycache__
+.pytest_cache
 
 # O banco de dados agora é PostgreSQL, num container/volume próprios
 # (toolbox45-db) — nunca fica dentro da imagem do backend nem do frontend.

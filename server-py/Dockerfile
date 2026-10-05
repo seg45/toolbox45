@@ -1,12 +1,9 @@
-# Backend Python (FastAPI) -- Fase 1 da migracao (ver plano no Project
-# toolbox45). Ainda NAO referenciado em docker-compose.yml: este servico
-# roda isolado, so pra validacao manual, ate a Fase 2 (frontend antigo
-# apontado pra ca lado a lado com o backend Node em producao).
+# Toolbox45 -- backend Python (FastAPI), imagem do servico toolbox45-backend.
 #
-# Build a partir da RAIZ do repo (mesmo padrao do Dockerfile do backend Node
-# na raiz), nao de dentro de server-py/ -- por causa do COPY server/schema.sql
-# abaixo:
-#   docker build -f server-py/Dockerfile -t toolbox45-backend-py:latest .
+# Substitui o backend Node no corte da Fase 4 (ver docker-compose.yml).
+# Build a partir da RAIZ do repo (nao de dentro de server-py/), porque o
+# contexto precisa enxergar server-py/ com caminhos relativos a raiz:
+#   docker build -f server-py/Dockerfile -t toolbox45-backend:latest .
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -39,11 +36,30 @@ RUN apt-get update \
 COPY server-py/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# server/schema.sql e a mesma fonte de verdade usada pelo backend Node (ver
-# app/db.py) -- copiado aqui pra dentro da imagem junto com o codigo Python.
-COPY server/schema.sql ./server/schema.sql
+# schema.sql vive em server-py/app/schema.sql (ver app/db.py) -- ja vem junto
+# com o COPY do pacote Python abaixo.
 COPY server-py/app ./app
 
+# Usuario dedicado, nao-root, com uid/gid FIXOS em 999 -- o mesmo que a imagem
+# do backend Node (`useradd --system`, node:20-bookworm-slim) atribuia ao
+# usuario "toolbox45". Os volumes nomeados toolbox45-backups e toolbox45-tls
+# ja existentes em producao pertencem a esse uid; manter o mesmo evita
+# "Permission denied" no Backup & Restore e no SSL Certificate depois do
+# corte, e tambem permite voltar ao Node (rollback) sem arquivos root-owned
+# que o Node nao conseguiria sobrescrever.
+#   /app/backups -- dumps do Backup & Restore (BACKUP_DIR, volume nomeado)
+#   /app/tls     -- cert.pem/key.pem (TLS_DIR, volume COMPARTILHADO com o
+#                   nginx do frontend, que e quem de fato termina o HTTPS)
+RUN groupadd --system --gid 999 toolbox45 \
+    && useradd --system --uid 999 --gid 999 --no-create-home --shell /usr/sbin/nologin toolbox45 \
+    && mkdir -p /app/backups /app/tls \
+    && chown -R toolbox45:toolbox45 /app
+USER toolbox45
+
+ENV BACKUP_DIR=/app/backups
+ENV TLS_DIR=/app/tls
+
 EXPOSE 8000
+VOLUME ["/app/backups", "/app/tls"]
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

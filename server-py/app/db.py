@@ -1,4 +1,4 @@
-"""Pool de conexoes PostgreSQL (asyncpg) + aplicacao de server/schema.sql no
+"""Pool de conexoes PostgreSQL (asyncpg) + aplicacao de schema.sql no
 boot -- mesmo comportamento do initDb() em server/db.js: schema.sql e
 idempotente (CREATE TABLE IF NOT EXISTS), entao reexecuta-lo a cada start e
 seguro.
@@ -24,25 +24,13 @@ from .seeds import run_seeds
 
 logger = logging.getLogger("toolbox45")
 
-# Mesmo arquivo-fonte que o backend Node usa -- uma unica fonte de verdade
-# para o schema enquanto os dois backends coexistirem. O caminho relativo
-# MUDA dependendo de onde db.py esta rodando:
-#   - dentro da imagem Docker (server-py/Dockerfile): WORKDIR /app, com
-#     ./app/db.py (de "COPY server-py/app ./app") e ./server/schema.sql (de
-#     "COPY server/schema.sql ./server/schema.sql") -- so 2 parents daqui
-#     ate /app, porque o nome "server-py" nao existe dentro da imagem (a
-#     copia ja achata esse nivel).
-#   - rodando direto do checkout do repo (server-py/app/db.py): precisa de 3
-#     parents pra chegar na raiz do repo (app -> server-py -> raiz).
-# Tenta os dois, na ordem, e usa o primeiro que existir.
-_SCHEMA_PATH_CANDIDATES = [
-    Path(__file__).resolve().parent.parent / "server" / "schema.sql",
-    Path(__file__).resolve().parent.parent.parent / "server" / "schema.sql",
-]
-SCHEMA_PATH = next(
-    (p for p in _SCHEMA_PATH_CANDIDATES if p.exists()),
-    _SCHEMA_PATH_CANDIDATES[0],
-)
+# schema.sql mora ao lado deste modulo (server-py/app/schema.sql) -- assim o
+# MESMO caminho funciona rodando do checkout do repo e dentro da imagem
+# Docker (server-py/Dockerfile copia server-py/app inteiro pra /app/app), sem
+# depender de server/ (removido no corte da Fase 4). Enquanto o backend Node
+# existir, server/schema.sql e uma copia identica desta; depois do corte,
+# este arquivo e a unica fonte de verdade.
+SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 
 _pool: Optional[asyncpg.Pool] = None
 
