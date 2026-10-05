@@ -121,3 +121,8 @@
    estreito (card saía com ~262px em vez de 360px). display: contents tira o
    #root da árvore de layout e devolve ao card o mesmo pai flex do original. */
 body.login-body > #root { display: contents; }
+
+/* Aviso sob o botão de um provedor OAuth não configurado (Google/Microsoft
+   ficam sempre visíveis na tela de login — só habilitam se configurados). */
+.login-provider-note { text-align: center; margin-top: 4px; }
+.login-google-btn + .login-provider-note + .login-google-btn { margin-top: 10px; }

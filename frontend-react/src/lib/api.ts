@@ -69,10 +69,16 @@ export async function parseErrorBody(res: Response): Promise<{ error?: string; m
   }
 }
 
-export async function fetchAuthProviders(): Promise<AuthProviders> {
-  const res = await fetch('/api/auth/providers');
-  if (!res.ok) return { google: false, microsoft: false };
-  return res.json();
+// Retorna null quando a consulta FALHA (rede/HTTP) — a tela de login então
+// mantém o último estado conhecido em vez de afirmar "não configurado".
+export async function fetchAuthProviders(): Promise<AuthProviders | null> {
+  try {
+    const res = await fetch('/api/auth/providers');
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function login(username: string, password: string): Promise<LoginResponse> {

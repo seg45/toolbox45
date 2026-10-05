@@ -11,6 +11,26 @@ import { useLogo } from '../lib/useLogo';
 
 const LOGIN_FLAG_KEY = 'cpa-authenticated';
 
+// Último estado conhecido dos provedores OAuth (true/false por provedor),
+// guardado pela visita anterior — o primeiro render já sai com o estado certo,
+// sem os botões "piscarem" até GET /api/auth/providers responder. Mesmo padrão
+// de cache dos boots de tema ('cpa-org-theme'). Sem cache (primeira visita) ou
+// com localStorage indisponível, o estado fica "desconhecido" (undefined).
+const PROVIDERS_CACHE_KEY = 'tb45-login-providers';
+type ProviderState = { google?: boolean; microsoft?: boolean };
+
+function readProvidersCache(): ProviderState {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PROVIDERS_CACHE_KEY) || '{}');
+    return {
+      google: typeof raw.google === 'boolean' ? raw.google : undefined,
+      microsoft: typeof raw.microsoft === 'boolean' ? raw.microsoft : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 type View = 'login' | 'register' | 'pending';
 
 const GOOGLE_REASONS: Record<string, string> = {
@@ -59,8 +79,7 @@ async function waitForSessionConfirmed(): Promise<void> {
 
 export default function LoginPage() {
   const [view, setView] = useState<View>('login');
-  const [googleEnabled, setGoogleEnabled] = useState(false);
-  const [microsoftEnabled, setMicrosoftEnabled] = useState(false);
+  const [providers, setProviders] = useState<ProviderState>(readProvidersCache);
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -82,8 +101,14 @@ export default function LoginPage() {
     bootLoginAppearance();
 
     fetchAuthProviders().then(data => {
-      setGoogleEnabled(!!data.google);
-      setMicrosoftEnabled(!!data.microsoft);
+      if (!data) return; // consulta falhou — mantém o último estado conhecido
+      const next = { google: !!data.google, microsoft: !!data.microsoft };
+      setProviders(next);
+      try {
+        localStorage.setItem(PROVIDERS_CACHE_KEY, JSON.stringify(next));
+      } catch {
+        /* sem cache — só volta a "desconhecido" na próxima visita */
+      }
     });
 
     // Resultado do redirect OAuth (volta pra esta MESMA página) — ver
@@ -169,8 +194,11 @@ export default function LoginPage() {
   }
 
   const notPending = view !== 'pending';
-  const showGoogle = googleEnabled && notPending;
-  const showMicrosoft = microsoftEnabled && notPending;
+  // Botões e divisor ficam SEMPRE na página (fora da view "pending"). Só
+  // clicáveis se o provedor está configurado; se o servidor disse que não está,
+  // aparece o aviso logo abaixo do botão. Estado ainda desconhecido (primeira
+  // visita, antes da resposta): botão desabilitado, sem aviso.
+  const showOauth = notPending;
 
   return (
     <div className="login-card">
@@ -299,14 +327,19 @@ export default function LoginPage() {
         </div>
       )}
 
-      {(showGoogle || showMicrosoft) && (
+      {showOauth && (
         <div className="login-divider">
           <span>or</span>
         </div>
       )}
 
-      {showGoogle && (
-        <button type="button" className="btn login-google-btn" onClick={startGoogleLogin}>
+      {showOauth && (
+        <button
+          type="button"
+          className="btn login-google-btn"
+          onClick={startGoogleLogin}
+          disabled={providers.google !== true}
+        >
           <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
             <path fill="#EA4335" d="M24 9.5c3.4 0 6.4 1.2 8.8 3.5l6.6-6.6C35.2 2.6 30 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.7 6C12.2 13.1 17.6 9.5 24 9.5z" />
             <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8C43.9 38 46.5 31.8 46.5 24.5z" />
@@ -316,9 +349,19 @@ export default function LoginPage() {
           <span>Sign in with Google</span>
         </button>
       )}
+      {showOauth && providers.google === false && (
+        <div className="set-hint login-provider-note">
+          Google sign-in is not configured on this server. An administrator can set it up in Settings → System.
+        </div>
+      )}
 
-      {showMicrosoft && (
-        <button type="button" className="btn login-google-btn" onClick={startMicrosoftLogin}>
+      {showOauth && (
+        <button
+          type="button"
+          className="btn login-google-btn"
+          onClick={startMicrosoftLogin}
+          disabled={providers.microsoft !== true}
+        >
           <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden="true">
             <rect x="1" y="1" width="9" height="9" fill="#F25022" />
             <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
@@ -327,6 +370,11 @@ export default function LoginPage() {
           </svg>
           <span>Sign in with Microsoft</span>
         </button>
+      )}
+      {showOauth && providers.microsoft === false && (
+        <div className="set-hint login-provider-note">
+          Microsoft sign-in is not configured on this server. An administrator can set it up in Settings → System.
+        </div>
       )}
     </div>
   );
