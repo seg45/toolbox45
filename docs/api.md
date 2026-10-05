@@ -1,6 +1,6 @@
 # Toolbox45 — Referência da API
 
-API REST exposta pelo container `toolbox45-backend` (ver `server/index.js`), acessada
+API REST exposta pelo container `toolbox45-backend` (Python/FastAPI, ver `server-py/app/main.py`), acessada
 pelo navegador através do proxy reverso do `toolbox45-frontend` (`/api/*`) ou
 diretamente por integrações externas via API key. Todas as respostas são JSON; corpos
 de requisição em `POST`/`PUT` também devem ser JSON (`Content-Type: application/json`).
@@ -40,20 +40,33 @@ pública (login/health) recebe `401 { "error": "unauthorized" }`.
 
 ### Permissões (role)
 
-Todo `username` identificado (por sessão local/Google) tem um `role` — `user` ou
-`admin` — guardado na tabela `users` e provisionado automaticamente (`role: "user"`) na
-primeira vez que é visto. `role: "admin"` é exigido para: excluir comando (`DELETE
-/api/commands/:id`), Backup & Restore (todos os endpoints `/api/backups*`), gerenciar o
-certificado SSL (`/api/system/ssl-certificate*`), ver o audit log (`GET
-/api/audit-log`), gerenciar API keys (`/api/api-keys*`) e gerenciar usuários
-(`/api/users*`) — endpoints marcados **(admin)** abaixo. Toda outra operação (criar/
-editar comando, favoritos, preferências, catálogos) continua liberada para qualquer
-usuário identificado. Uma chamada sem `role: admin` para um endpoint **(admin)** recebe
-`403 { "error": "forbidden" }`.
+Todo `username` identificado (por sessão local/Google/Microsoft) tem um `role` — `user`,
+`admin` ou `super_admin` (cada um inclui os poderes do anterior) — guardado na tabela
+`users`. Contas OAuth novas nascem `user`, desabilitadas até um admin aprovar. Quem decide
+o acesso de cada rota é `server-py/app/deps.py` (`require_user`, `require_admin`,
+`require_super_admin`); sem o role necessário a resposta é `403 { "error": "forbidden" }`.
+
+- **Públicas (sem sessão):** `GET /api/health`, as rotas de `/api/auth/*`,
+  `GET /api/system/logo` e `GET /api/system/appearance` (a tela de login precisa delas).
+- **Qualquer usuário logado (`user`):** ler e criar comandos, editar comandos, pastas e
+  notas próprios, links, compartilhamento (`/api/shares`), `GET /api/catalogs`,
+  `/api/me*`, `/api/user-data` e `/api/global-settings`. Excluir comando: o dono exclui o
+  próprio; excluir comando de outro usuário ou `System` exige `admin`.
+- **`admin` ou `super_admin` (endpoints marcados **(admin)** abaixo):** todas as rotas
+  de escrita dos catálogos (vendors, systems, versions, environments, topics, parameters,
+  prompts, exports e seus vínculos), Backup & Restore (`/api/backups*`,
+  `/api/backup-schedule`), audit log (`GET /api/audit-log`), API keys (`/api/api-keys*`),
+  certificado SSL (`/api/system/ssl-certificate*`), logo (`PUT`/`DELETE /api/system/logo`)
+  e configuração OAuth (`/api/system/oauth*`).
+- **Somente `super_admin`:** administração de usuários (`/api/users*`), grupos
+  (`/api/groups*`) e a aparência padrão da organização (`PUT /api/system/appearance`).
+  Nas seções abaixo, os endpoints de usuários vêm marcados **(super_admin)**. As rotas de
+  grupos, logo, aparência e OAuth (configuração) ainda não têm seção própria neste
+  documento — o contrato está nos módulos `app/routers/groups.py` e `app/routers/system.py`.
 
 **Exemplo (curl, API key):**
 ```bash
-curl https://toolbox45.metalab.tec.br/api/commands \
+curl https://toolbox.seg45.com.br/api/commands \
   -H "X-API-Key: tb45_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
@@ -151,8 +164,8 @@ o comando é criado normalmente como próprio do usuário.
 contiver pelo menos uma linha com `"variant": "empty"` e `content` não vazio — essas
 linhas são o que aparece no card quando IP/Porta ainda não foram preenchidos. Sem isso,
 a flag é rebaixada para `false` no servidor (em vez de deixar o comando entrar num
-estado "invisível" na UI — ver histórico do bug em `server/index.js`,
-`buildCommandColumns`). Não há mais controle de UI para essa flag no editor de
+estado "invisível" na UI — ver `build_command_columns()` em
+`server-py/app/commands.py`). Não há mais controle de UI para essa flag no editor de
 comandos — ela só é definida via dados diretos no banco (ex.: o comando
 `tcpdumpipport`); as linhas `variant: "empty"` continuam sendo lidas/gravadas
 normalmente para não perder os dados desses comandos ao salvar uma edição.
@@ -169,7 +182,7 @@ comum recebe `403 forbidden` (a UI já esconde o botão Edit nesse caso e oferec
 "Duplicate" para criar uma cópia própria editável). `modified_by` é atualizado para o
 usuário atual. `404 not_found` / `400 validation_error` / `403 forbidden`.
 
-### `DELETE /api/commands/:id` — **(admin)**
+### `DELETE /api/commands/:id` — dono ou **(admin)**
 Remove o comando e (via `ON DELETE CASCADE`) todas as suas linhas/escopo/
 membership em pastas. `204` no sucesso, `404 not_found`, `403 forbidden` se o chamador
 não for admin.
@@ -296,7 +309,7 @@ usuário específico estiverem selecionados.
 A descrição (`description`) é HTML vindo do editor rich-text do front-end
 (`contenteditable`, com suporte a colar/redimensionar imagens como `data:image/...`) e
 passa por um sanitizador próprio no backend antes de gravar
-(`sanitizeNoteHtml()` em `server/index.js`) — tags fora de uma lista pequena permitida
+(`sanitize_note_html()` em `server-py/app/sanitize.py`) — tags fora de uma lista pequena permitida
 (`b,strong,i,em,u,br,p,div,span,ul,ol,li,a,img`) são removidas mantendo o texto interno;
 `<script>`/`<style>` são removidos por completo; `src` de `<img>` só é aceito se
 `data:image/...` ou `http(s)://`; `href` de `<a>` só se `http(s)://` (senão vira `#`),
@@ -325,13 +338,14 @@ Identifica o chamador atual, seu papel e como foi autenticado. Exige sessão ou 
   "upn": "rsilva@seg45.com.br",
   "role": "admin",
   "isAdmin": true,
+  "isSuperAdmin": false,
   "authMethod": "google",
   "handle": "rsilva"
 }
 ```
 `upn` espelha `username` (mantido só por compatibilidade com respostas antigas — quando
 a identificação vinha do Windows/NTLM, `upn` era resolvido separadamente via Active
-Directory). `authMethod` é `"local"` | `"google"` | `"api_key"`. Para chamadas com API
+Directory). `authMethod` é `"local"` | `"google"` | `"microsoft"` | `"api_key"`. Para chamadas com API
 key, `username` é `api:<nome da key>`, `upn` espelha o mesmo valor e `role`/`isAdmin`
 sempre vêm como admin (ver seção Permissões acima). `handle` é o apelido de
 compartilhamento do usuário (ver seção **Compartilhamento entre usuários** abaixo);
@@ -396,8 +410,8 @@ Favoritos pessoais — pedido do usuário: "crie ao lado do IP Calc uma estrutur
 dos favoritos dos browsers, onde o usuário pode inserir links e nomear". Puramente
 PESSOAL: cada usuário só vê/gerencia os PRÓPRIOS links, sem nenhum conceito de
 compartilhamento/grupo/admin aqui (diferente de comandos/pastas) — igual a um
-favoritos de navegador de verdade. Ver `links` em `server/schema.sql` e o dropdown
-"Links" no header (`js/links.js`).
+favoritos de navegador de verdade. Ver `links` em `server-py/app/schema.sql` e o dropdown
+"Links" no header do frontend (`frontend-react/src/components/Header.tsx`).
 
 ### `GET /api/links`
 Lista os links do usuário atual, em ordem de criação. `200` `[{ "id": 5, "name": "Wiki
@@ -422,7 +436,7 @@ ou pertencer a outro usuário (não distinguimos os dois casos).
 
 ### `POST /api/auth/login`
 Loga com uma conta local (usuário/senha). Corpo: `{ "username": "admin", "password":
-"admin" }`. Sucesso: `200` `{ "username": "admin", "role": "admin" }` + `Set-Cookie:
+"admin" }`. Sucesso: `200` `{ "username": "admin", "role": "super_admin" }` + `Set-Cookie:
 tb45_session=...` (`HttpOnly`, 12h). Falha: `401 invalid_credentials` (usuário local
 inexistente, senha errada, ou conta desabilitada). Rota pública (não exige sessão
 prévia — senão ninguém conseguiria logar).
@@ -432,10 +446,10 @@ Encerra a sessão ativa, local ou Google (limpa a linha em `sessions` e o cookie
 `204`, idempotente (funciona mesmo sem sessão ativa). Rota pública.
 
 ### Usuário local padrão
-Toda instalação nova já vem com uma conta local `admin` / senha `admin`, role `admin`
-(semeada automaticamente por `server/db.js` assim que o schema é aplicado — ver
-`seedDefaultAdmin()`). **Troque essa senha assim que possível** (`PUT
-/api/users/admin`, veja abaixo, ou pela tela Settings → System → Users).
+Toda instalação nova já vem com uma conta local `admin` / senha `admin`, role
+`super_admin` (semeada automaticamente no boot, depois que o schema é aplicado — ver
+`seed_default_admin()` em `server-py/app/seeds.py`). **Troque essa senha assim que
+possível** (`PUT /api/users/admin`, veja abaixo, ou pela tela Settings → Users).
 
 ---
 
@@ -443,8 +457,8 @@ Toda instalação nova já vem com uma conta local `admin` / senha `admin`, role
 
 OAuth 2.0 (Authorization Code) contra o Google — habilitado só quando o backend tem as
 3 variáveis de ambiente `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e
-`GOOGLE_REDIRECT_URI` configuradas (ver comentário no topo desta seção em
-`server/index.js` e o bloco comentado em `docker-compose.yml`). Sem restrição de
+`GOOGLE_REDIRECT_URI` configuradas (ver `server-py/app/routers/oauth.py` e o
+bloco de variáveis em `docker-compose.yml`). Sem restrição de
 domínio Google Workspace — qualquer conta Google pode entrar. Login com o `code` de
 outro provedor/flow não é aceito; o fluxo inteiro é feito de navegações de página
 inteira (não `fetch`), já que precisa passar por `accounts.google.com`.
@@ -483,8 +497,8 @@ https://openidconnect.googleapis.com/v1/userinfo`, e:
 
 OAuth 2.0 (Authorization Code) contra a Microsoft identity platform v2.0 — habilitado só
 quando o backend tem as 3 variáveis de ambiente `MICROSOFT_CLIENT_ID`,
-`MICROSOFT_CLIENT_SECRET` e `MICROSOFT_REDIRECT_URI` configuradas (ver comentário no
-topo desta seção em `server/index.js`, o bloco comentado em `docker-compose.yml` e o
+`MICROSOFT_CLIENT_SECRET` e `MICROSOFT_REDIRECT_URI` configuradas (ver
+`server-py/app/routers/oauth.py`, o bloco de variáveis em `docker-compose.yml` e o
 passo a passo completo em `docs/server-overview.md`). `MICROSOFT_TENANT_ID` é opcional
 (default `common` — qualquer conta Microsoft, pessoal ou de qualquer organização; um
 tenant ID/domínio específico restringe o login só àquela organização). Mesmo mecanismo
@@ -521,11 +535,11 @@ provedor Microsoft não expõe um campo `email_verified` — só exige o e-mail 
   (`access_denied`, `invalid_state`, `account_exists_other_method`, `account_disabled`,
   `not_configured`, entre outros) — `login.html` mostra a mensagem correspondente.
 
-### `GET /api/users` — **(admin)**
+### `GET /api/users` — **(super_admin)**
 Lista todo usuário já visto pela aplicação (contas locais, Google ou Microsoft — `auth_provider`
 distingue). Nunca devolve `password_hash`.
 ```json
-[{ "username": "admin", "role": "admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system", "auth_provider": "local", "handle": "admin" },
+[{ "username": "admin", "role": "super_admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system", "auth_provider": "local", "handle": "admin" },
  { "username": "jsilva@gmail.com", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": "google-oauth", "auth_provider": "google", "handle": "jsilva" }]
 ```
 Instalações antigas (de antes do login do Windows/NTLM ser removido) podem ainda listar
@@ -535,7 +549,7 @@ Google); um admin pode desabilitá-las/excluí-las quando não forem mais necess
 usuários** acima) — aqui, como em toda esta seção admin-only, vem sempre como o
 handle de verdade (nunca mascarado).
 
-### `POST /api/users` — **(admin)**
+### `POST /api/users` — **(super_admin)**
 Cria uma conta **local** — corpo `{ "username", "password" (≥4 caracteres), "role"? }`
 (`role` é `"user"` por padrão) → `201`. `400 validation_error` se `username` não for um
 e-mail válido (pedido do usuário: "remova o nome de usuário e trate tudo pelo email" —
@@ -543,14 +557,14 @@ mesmo `EMAIL_RE`/normalização `.toLowerCase()` do auto-cadastro em `POST
 /api/auth/register`; contas locais já existentes sem formato de e-mail, como a `admin`
 semeada, não são migradas). `409 conflict` se o e-mail já existir.
 
-### `PUT /api/users/:username` — **(admin)**
+### `PUT /api/users/:username` — **(super_admin)**
 Corpo parcial — qualquer combinação de `{ "role": "admin"|"user", "disabled": bool,
 "password": "..." }`. `password` só é aceito para contas locais (`400
 validation_error` para conta Google). Recusa com `409 conflict` qualquer mudança que
 deixaria a aplicação **sem nenhum admin habilitado** (trava de segurança contra
 lockout).
 
-### `DELETE /api/users/:username` — **(admin)**
+### `DELETE /api/users/:username` — **(super_admin)**
 Remove a linha de usuário (e suas sessões, via `ON DELETE CASCADE`). Uma conta Google
 excluída é recriada automaticamente (role `user`) no próximo login com aquele e-mail.
 Mesma trava contra remover o último admin habilitado (`409 conflict`).
@@ -582,7 +596,7 @@ antes vivia só no `localStorage` do navegador).
 ---
 
 ## API keys (`/api/api-keys`) — **(admin)**
-Ver também a seção Autenticação acima e `api_keys` em `server/schema.sql`.
+Ver também a seção Autenticação acima e `api_keys` em `server-py/app/schema.sql`.
 
 - `GET /api/api-keys` → lista (sem o valor da key, só metadados):
   ```json
@@ -697,11 +711,11 @@ Dumps do PostgreSQL via `pg_dump`/`pg_restore` (formato "custom"), guardados no 
 Certificado/chave usados pelo nginx do `toolbox45-frontend` para servir HTTPS (porta
 443) — guardados no volume `toolbox45-tls`, compartilhado (rw aqui, ro no frontend). No
 primeiro boot (e sempre que não houver certificado customizado), o backend gera um
-autoassinado sozinho (`ensureTlsBootstrap()`/`generateSelfSignedCert()` em
-`server/index.js`, via `openssl req`) — estes endpoints só entram em cena para
+autoassinado sozinho (`ensure_tls_bootstrap()`/`generate_self_signed_cert()` em
+`server-py/app/tls.py`, via `openssl req`) — estes endpoints só entram em cena para
 importar/remover um certificado próprio. Alterar o volume não exige reiniciar o
 frontend: um watcher com `inotifywait` dentro do container dele (ver
-`frontend/docker-entrypoint.sh`) dá `nginx -s reload` sozinho assim que os arquivos
+`frontend-react/docker-entrypoint.sh`) dá `nginx -s reload` sozinho assim que os arquivos
 mudam.
 
 - `GET /api/system/ssl-certificate` → informações do certificado atual (nunca expõe a
@@ -727,6 +741,6 @@ mudam.
 
 ## Referências
 
-- Schema completo do banco: `server/schema.sql`.
-- Implementação de cada rota: `server/index.js`.
+- Schema completo do banco: `server-py/app/schema.sql`.
+- Implementação das rotas: `server-py/app/routers/*.py` (um módulo por domínio: `auth`, `oauth`, `me`, `commands`, `folders`, `notes`, `links`, `shares`, `groups`, `users`, `catalog`, `system`, `api_keys`, `backup`); regras compartilhadas em `server-py/app/` (`deps.py` — autenticação/autorização, `commands.py`, `folders.py`, `catalog.py`, `audit.py`).
 - Modelo de containers/deploy: `docs/install-instructions.txt`.

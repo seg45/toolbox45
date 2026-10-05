@@ -1,69 +1,62 @@
 # server-py — backend Python (FastAPI)
 
-Backend novo, em construção, parte da migração para Python (backend) +
-React (frontend) por padronização de linguagem da empresa. Plano completo,
-inventário de rotas e roadmap por fases: documento `migracao-python-react.md`
-no Project **toolbox45** (claude.ai).
+Backend do Toolbox45 (serviço `toolbox45-backend` do `docker-compose.yml`). Substituiu o
+backend Node.js/Express no corte da Fase 4 da migração para Python (backend) + React
+(frontend), feita por padronização de linguagem da empresa. O histórico completo da
+migração (inventário de rotas, decisões, validações por fatia) está no documento
+`migracao-python-react.md` do Project **toolbox45** (claude.ai).
 
-## Status atual: Fase 1, fatia 1 (infra básica)
+## O que é
 
-O que já existe:
+- FastAPI + `asyncpg` (PostgreSQL 16). Mesmo contrato HTTP do backend antigo: mesmas rotas,
+  mesmos formatos de request/response e de erro (`{"error","message"}`), mesma sessão por
+  cookie, mesmo hash de senha (scrypt) e mesmas variáveis de ambiente.
+- Rotas em `app/routers/*.py` (um módulo por domínio); regras compartilhadas em `app/`
+  (`deps.py` — autenticação/autorização, `commands.py`, `folders.py`, `catalog.py`,
+  `audit.py`, `sanitize.py`, `tls.py`, `backup.py`…). Referência da API em `docs/api.md`.
+- No boot (`app/db.py`): aplica `app/schema.sql`, roda as migrações idempotentes
+  (`app/migrations.py`) e semeia os padrões de primeira instalação (`app/seeds.py`:
+  usuário `admin`/`admin` com role `super_admin`, pasta Favorites, catálogo base). Veja
+  `docs/server-overview.md`.
+- Também no boot/em segundo plano: recarrega a config de OAuth (banco > variáveis de
+  ambiente), gera o certificado TLS autoassinado se não houver um (`openssl`), e roda o
+  agendador de backup (`pg_dump`, cliente PostgreSQL 16 instalado na imagem).
+- `GET /api/health` → `{"ok": true}`; só responde depois de tudo acima concluir.
 
-- Sobe um FastAPI, conecta no PostgreSQL usando as MESMAS variáveis de
-  ambiente do backend Node atual (`PGHOST`/`PGPORT`/`PGDATABASE`/`PGUSER`/
-  `PGPASSWORD`, ou `DATABASE_URL`).
-- Aplica `server/schema.sql` no boot (idempotente — igual ao `initDb()` do
-  Node em `server/db.js`).
-- `GET /api/health` → `{"ok": true}`, mesmo contrato do backend Node
-  (`server/index.js` linha 63).
+## Variáveis de ambiente
 
-O que ainda NÃO existe (propositalmente, fora do escopo desta fatia):
+`PGHOST`/`PGPORT`/`PGDATABASE`/`PGUSER`/`PGPASSWORD` (ou `DATABASE_URL`),
+`GOOGLE_*`/`MICROSOFT_*` (opcionais; a config salva na UI tem precedência),
+`BACKUP_DIR` (padrão `/app/backups` na imagem) e `TLS_DIR` (padrão `/app/tls`).
 
-- Nenhuma das outras ~93 rotas da API (auth, comandos, pastas, etc.).
-- Seed de dados padrão (usuário admin, vendors/systems/topics default) —
-  desnecessário aqui porque este serviço, por enquanto, sempre aponta pro
-  MESMO banco que o backend Node já inicializou e semeou.
-- Qualquer wiring no `docker-compose.yml` — este serviço roda isolado,
-  buildado e testado manualmente, até a Fase 2 do plano (frontend antigo
-  apontado pra cá lado a lado com o backend Node em produção).
+## Imagem Docker
 
-## Como testar isoladamente
-
-Build (a partir da raiz do repo, não de dentro de `server-py/`):
-
-```bash
-docker build -f server-py/Dockerfile -t toolbox45-backend-py:latest .
-```
-
-Descobrir o nome da rede que o `docker compose` já criou pro projeto (pra
-este container conseguir enxergar o `toolbox45-db` existente):
+`server-py/Dockerfile` — build a partir da **raiz do repo** (não de dentro de
+`server-py/`), por causa dos caminhos dos `COPY`:
 
 ```bash
-docker network ls | grep toolbox45
+docker build -f server-py/Dockerfile -t toolbox45-backend:latest .
 ```
 
-Rodar contra o banco já em produção (rede interna do compose, sem publicar
-porta do Postgres — só a porta HTTP deste serviço novo, numa porta
-diferente da 80/443 já usadas pelo `toolbox45-frontend`):
+O container roda como usuário não-root `toolbox45` (uid/gid **999**, o mesmo da imagem Node
+antiga — mantém a posse dos volumes `toolbox45-backups` e `toolbox45-tls` já existentes). Em
+produção ele sobe pelo `docker-compose.yml`; ver `docs/install-instructions.txt`.
+
+## Testes
+
+Precisa de um PostgreSQL acessível (usa bancos descartáveis com prefixo `p_`; o módulo é
+ignorado se não houver Postgres):
 
 ```bash
-docker run --rm -it \
-  --network <nome-da-rede-encontrada-acima> \
-  -e PGHOST=toolbox45-db \
-  -e PGPORT=5432 \
-  -e PGDATABASE=toolbox45 \
-  -e PGUSER=toolbox45 \
-  -e PGPASSWORD=toolbox45 \
-  -p 8001:8000 \
-  toolbox45-backend-py:latest
+cd server-py
+pip install -r requirements.txt pytest
+python -m pytest tests
 ```
 
-Validar:
+A suíte (`tests/test_boot.py`) cobre o boot completo: instalação do zero, idempotência,
+migrações de bancos legados e o ciclo de vida do FastAPI (login `admin`/`admin`, catálogo).
 
-```bash
-curl http://localhost:8001/api/health
-# esperado: {"ok":true}
-```
+## Código Node antigo
 
-`Ctrl+C` para parar — não afeta o backend Node nem o frontend, que
-continuam servindo normalmente na 80/443 o tempo todo.
+Comentários do tipo "porta de `server/index.js`" referem-se ao backend Node removido no corte;
+o código continua acessível no histórico do git (commit anterior ao corte).

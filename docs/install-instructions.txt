@@ -1,13 +1,13 @@
 COMO INSTALAR O TOOLBOX45 A PARTIR DO GITHUB
 ================================================
 
-Repositório: https://github.com/metalab-tec-br/downloads
+Repositório: https://github.com/seg45/toolbox45
 Servidor: Linux (Ubuntu/Debian), com acesso root/sudo, Docker + Docker Compose.
 
 A aplicação roda como 3 containers Docker (ver docker-compose.yml):
   - toolbox45-db        PostgreSQL (banco de dados)
-  - toolbox45-backend   API REST (Node.js/Express)
-  - toolbox45-frontend  nginx (arquivos estáticos + proxy reverso de /api/*)
+  - toolbox45-backend   API REST (Python/FastAPI)
+  - toolbox45-frontend  nginx (frontend React — build estático — + proxy reverso de /api/*)
 
 Só o toolbox45-frontend tem porta publicada no host — é com ele que o
 navegador fala; toolbox45-backend e toolbox45-db não são alcançáveis de
@@ -28,7 +28,7 @@ caminho suportado.
 Evite clonar dentro do home de um usuário (ex.: /home/usuario/...) — prefira
 um local neutro, como /opt:
 
-    sudo git clone https://github.com/metalab-tec-br/downloads.git /opt/toolbox45
+    sudo git clone https://github.com/seg45/toolbox45.git /opt/toolbox45
     cd /opt/toolbox45
 
 Se o git reclamar de "dubious ownership", rode:
@@ -40,18 +40,32 @@ Se o git reclamar de "dubious ownership", rode:
 --------------------------------------
     sudo docker compose up -d --build
 
-Isso constrói as imagens do backend e do frontend, baixa a imagem oficial
-do PostgreSQL, e sobe os 3 containers. O app fica disponível em:
+Isso constrói as imagens do backend e do frontend (o frontend é compilado
+dentro do próprio build — não precisa de Node instalado no servidor), baixa
+a imagem oficial do PostgreSQL, e sobe os 3 containers. O build do frontend
+consome bastante memória: em servidores pequenos (~1 GB de RAM) configure
+swap antes (ver "Problemas comuns", no fim deste arquivo). O app fica
+disponível em:
 
     http://<ip-do-servidor>          (porta 80 — toolbox45-frontend)
 
-Numa instalação NOVA (catálogo vazio, "como em outra empresa"): não precisa
-fazer mais nada — o banco começa vazio e o backend aplica o schema (sem
-seed de dados) no primeiro boot. Cadastre os comandos depois pela própria
-aplicação (editor de comandos, ou Importar comandos via CSV), ou rode o
-seed inicial com os ~30 comandos de referência (opcional):
+Numa instalação NOVA: não precisa fazer mais nada. No primeiro boot o
+backend aplica o schema e semeia sozinho (só onde a tabela está vazia):
 
-    sudo docker compose exec toolbox45-backend node seed.js
+  - o usuário local admin / admin (role super_admin) — TROQUE A SENHA assim
+    que entrar (Configurações → Account, ou Settings → Users);
+  - a pasta "Favorites" de cada usuário;
+  - o catálogo base: fornecedores (Check Point, Fortinet), sistemas,
+    versões, ambientes, parâmetros de busca, prompts e templates de export.
+
+NENHUM comando vem pré-cadastrado, e a lista de Tópicos começa vazia: crie os
+tópicos em Configurações → Register → Topics e cadastre os comandos pela
+própria aplicação (editor de comandos) ou importe em lote por CSV
+(Configurações → Database → Commands → Import; o modelo do CSV está na
+própria janela de importação e em import-templates/).
+
+(O antigo "node seed.js", que carregava ~30 comandos de referência, foi
+removido junto com o backend Node — já não funcionava com o schema atual.)
 
 
 4) VARIÁVEIS DE AMBIENTE (opcional)
@@ -72,9 +86,19 @@ só existe localmente no servidor.
         # completo de criar o Client ID/Secret no Google Cloud Console).
         # GOOGLE_REDIRECT_URI precisa ser a URL pública exata de
         # GET /api/auth/google/callback (ex.:
-        # https://toolbox45.seg45.com.br/api/auth/google/callback),
+        # https://toolbox.seg45.com.br/api/auth/google/callback),
         # registrada nos "Authorized redirect URIs" do Client ID. Sem as 3
         # variáveis, o botão fica escondido — nunca trava a aplicação.
+
+    MICROSOFT_CLIENT_ID / MICROSOFT_CLIENT_SECRET / MICROSOFT_REDIRECT_URI
+    MICROSOFT_TENANT_ID (opcional, padrão "common")
+        # opcional — mesmo esquema do Google, com o botão "Sign in with
+        # Microsoft" (passo a passo no Azure Portal em
+        # docs/server-overview.md).
+
+    Observação: Google e Microsoft também podem ser configurados pela própria
+    UI (Configurações → System → OAuth); o valor salvo na UI tem precedência
+    sobre estas variáveis.
 
 Depois de mudar variáveis, recrie os containers:
 
@@ -99,7 +123,7 @@ depois disso só o hash fica no banco.
 ---------------------------------------
 HTTPS já vem habilitado por padrão, sem nenhum passo manual: no primeiro
 boot, o toolbox45-backend gera automaticamente um certificado autoassinado
-(ensureTlsBootstrap(), ver server/index.js) e o grava num volume Docker
+(ensure_tls_bootstrap(), ver server-py/app/tls.py) e o grava num volume Docker
 compartilhado ("toolbox45-tls") com o toolbox45-frontend, que o serve em
 https://<ip-do-servidor> (porta 443) junto com o HTTP de sempre na porta 80.
 O navegador vai mostrar aviso de segurança enquanto o certificado for
@@ -112,7 +136,7 @@ admin). Cole (ou envie o arquivo) do certificado e da chave privada em PEM
 (sem senha) — um "chain"/intermediários é opcional — e clique em "Save
 certificate". Em poucos segundos o nginx do frontend recarrega sozinho com
 o novo certificado (um watcher com inotifywait dentro do container dele —
-ver frontend/docker-entrypoint.sh — detecta a mudança no volume
+ver frontend-react/docker-entrypoint.sh — detecta a mudança no volume
 compartilhado e dá "nginx -s reload"), sem reiniciar nenhum container e sem
 derrubar conexões em andamento.
 
@@ -122,7 +146,7 @@ autoassinado novo, a qualquer momento.
 
 7) BACKUP & RESTORE
 ------------------------
-Pela própria aplicação (Configurações → System → Database → "Backup &
+Pela própria aplicação (Configurações → Database → "Backup &
 Restore"): cria um dump do Postgres (`pg_dump`, formato custom) guardado no
 volume "toolbox45-backups" (fora do container, sobrevive a rebuild).
 Também dá pra agendar backups automáticos (diário/semanal/mensal) na mesma
@@ -144,7 +168,7 @@ para dentro do volume e restaure pela UI (Backup & Restore → Restore), ou:
 8) VERIFICAR A INSTALAÇÃO
 ------------------------------
     sudo docker compose ps
-    sudo docker compose logs -f toolbox45-backend    # deve mostrar "schema aplicado" e "listening"
+    sudo docker compose logs -f toolbox45-backend    # deve mostrar "schema aplicado" e "Uvicorn running"
     curl -I http://localhost
 
 
@@ -171,8 +195,8 @@ intactos entre updates).
 
 11) BUILD TRAVA EM "apt-get update" (Connection timed out)
 --------------------------------------------------------------
-Sintoma: o build para na etapa de dependências do backend (ver Dockerfile),
-baixando pacotes Debian, com "Get:1 ... InRelease" repetindo várias vezes e
+Sintoma: o build para na etapa de dependências do backend (ver
+server-py/Dockerfile) ou do frontend, baixando pacotes Debian/Alpine/npm, com "Get:1 ... InRelease" repetindo várias vezes e
 terminando em "Connection timed out", mesmo o host tendo internet normal
 (curl/apt do host funcionam sem problema).
 
@@ -207,15 +231,26 @@ serviço toolbox45-backend quanto o toolbox45-frontend já usam
 
 12) PROBLEMAS COMUNS
 ------------------------
-- "toolbox45-backend" reiniciando em loop, log mostra "Failed to start:
-  could not connect to the database": o toolbox45-db ainda pode estar
+- "toolbox45-backend" reiniciando em loop, log mostra "[db] Falha ao
+  conectar/aplicar schema (tentativa N/30)": o toolbox45-db ainda pode estar
   inicializando (primeira vez que o volume é criado, o Postgres oficial
   demora alguns segundos) — o backend tenta reconectar por ~1 minuto
-  sozinho (ver server/db.js); se persistir depois disso, confira
-  "docker compose logs toolbox45-db".
+  sozinho (ver server-py/app/db.py); se persistir depois disso, confira
+  "docker compose logs toolbox45-db" e se POSTGRES_USER/POSTGRES_PASSWORD
+  do .env batem com os do volume já criado.
+
+- Build do frontend morre sem mensagem clara (ou o servidor fica
+  irresponsivo durante o "docker compose up -d --build"): falta de memória
+  — o build do frontend (npm + tsc + vite) tem um pico de memória alto; num
+  servidor de ~1 GB de RAM (caso do docker01 da SEG45) foi necessário um
+  swap de 1 GB para o build concluir. Crie o swap antes de buildar:
+      sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile
+      sudo mkswap /swapfile && sudo swapon /swapfile
+      echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+  Confirme com "free -m" e "dmesg | grep -i oom".
 
 - Login não funciona / usuário não consegue entrar: o Toolbox45 só aceita
-  login local (usuário/senha, Settings → System → Users) ou login com
+  login local (usuário/senha, Settings → Users) ou login com
   Google (se GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI estiverem configurados —
   ver seção 4 acima e docs/server-overview.md); não existe mais login
   automático do Windows (NTLM, removido). Para acesso programático, use uma

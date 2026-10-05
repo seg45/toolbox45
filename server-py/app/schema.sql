@@ -4,13 +4,16 @@
 -- Convertido de SQLite para PostgreSQL (toolbox45-db, container próprio —
 -- ver docker-compose.yml) como parte da separação em 3 containers
 -- (toolbox45-db / toolbox45-backend / toolbox45-frontend). O backend
--- (server/db.js) aplica este arquivo por inteiro a cada boot — todo comando
--- é CREATE TABLE IF NOT EXISTS, então reexecutar é seguro (idempotente).
+-- (server-py/app/db.py) aplica este arquivo por inteiro a cada boot — todo
+-- comando é CREATE TABLE IF NOT EXISTS, então reexecutar é seguro
+-- (idempotente).
 --
--- Este banco não é semeado automaticamente (ver server/db.js) — todas as
--- tabelas começam vazias e continuam vazias até serem populadas manualmente
--- (tela de administração de catálogo / editor de comandos / importação CSV),
--- exceto se `node seed.js` for rodado explicitamente (ver server/seed.js).
+-- Logo depois do schema, o backend roda as migrações (app/migrations.py) e
+-- semeia os padrões de primeira instalação (app/seeds.py: usuário admin,
+-- pasta Favorites, vendors/systems/versions/environments/parameters/prompts/
+-- exports — cada seed só roda se a tabela estiver vazia). Comandos e tópicos
+-- NÃO são semeados: começam vazios e são populados pelo editor de comandos,
+-- pela administração de catálogo ou pela importação CSV.
 --
 -- Um comando (fw monitor, tcpdump, cplic print, ...) é um registro em `commands`,
 -- com uma ou mais linhas de terminal associadas (`command_lines`).

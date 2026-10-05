@@ -1,9 +1,7 @@
-"""Configuracao via variaveis de ambiente -- mesma convencao do backend Node
-atual (server/db.js): PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD, com
-DATABASE_URL como alternativa. Isso permite apontar este backend Python para
-o MESMO banco Postgres que o backend Node ja usa (ver plano de migracao no
-Project toolbox45: Fase 1 valida o Python contra o banco de producao antes
-de qualquer corte).
+"""Configuracao via variaveis de ambiente: PGHOST/PGPORT/PGDATABASE/PGUSER/
+PGPASSWORD, com DATABASE_URL como alternativa (mesmas variaveis do backend
+Node que este backend substituiu no corte da Fase 4, entao o .env e o
+docker-compose.yml existentes continuam valendo).
 """
 from typing import Optional
 
@@ -20,20 +18,13 @@ class Settings(BaseSettings):
     pgpassword: str = "toolbox45"
     database_url: Optional[str] = None
 
-    # Porta HTTP deste backend Python. Propositalmente DIFERENTE da porta do
-    # backend Node (3000) e ainda nao referenciada em docker-compose.yml --
-    # este servico roda isolado ate a Fase 2 (validacao lado a lado).
+    # Porta HTTP deste backend (a imagem Docker sobe o uvicorn na 8000).
     port: int = 8000
 
-    # OAuth (Google/Microsoft) -- mesmas variaveis de ambiente do Node (ver
-    # docker-compose.yml). Usadas por enquanto so por GET /api/auth/providers
-    # (fatia 2), pra refletir corretamente se estao configuradas -- os
-    # endpoints /api/auth/google*/microsoft* em si ainda nao existem neste
-    # backend (fatia 3 do roadmap). NAO reflete a config vinda do banco
-    # (system_settings, ajustavel pela UI em Settings -> System -> OAuth
-    # Integrations) -- isso fica pra quando a fatia 9 (Sistema) portar essa
-    # rota; enquanto isso, só a variavel de ambiente decide aqui, igual ao
-    # comportamento do Node antes de aplicar o override do banco.
+    # OAuth (Google/Microsoft) -- variaveis de ambiente (ver docker-compose.yml).
+    # Este e so o valor de ambiente: a config EFETIVA (banco `oauth_settings`,
+    # ajustavel em Settings -> System -> OAuth, tem precedencia sobre estas
+    # variaveis) e resolvida em app/oauth.py.
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = ""

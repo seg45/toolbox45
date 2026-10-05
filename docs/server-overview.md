@@ -1,29 +1,62 @@
 # Toolbox45 — Backend
 
-Backend (Node.js + Express + PostgreSQL, via `pg`) for Toolbox45, the multi-vendor network
-support tool. This is a **pure REST API** under `/api` — it does not serve the static frontend
-anymore (see `../frontend/` for the nginx image that does that + reverse-proxies `/api/*` here).
+Backend (Python 3.12 + FastAPI + PostgreSQL, via `asyncpg`) for Toolbox45, the multi-vendor
+network support tool. Code lives in `../server-py/` (`app/main.py` is the entry point,
+`app/routers/*.py` hold the routes, one module per domain). This is a **pure REST API** under
+`/api` — it does not serve the static frontend (the React/Vite frontend in `../frontend-react/`
+is built into an nginx image that serves it and reverse-proxies `/api/*` here).
 The whole app runs as 3 Docker containers (see `../docker-compose.yml`):
-`toolbox45-db` (PostgreSQL), `toolbox45-backend` (this), `toolbox45-frontend` (nginx).
+`toolbox45-db` (PostgreSQL), `toolbox45-backend` (this), `toolbox45-frontend` (nginx + React).
+
+> **History.** The backend used to be Node.js/Express (`server/`) with a vanilla-JS frontend
+> (`js/`, `css/`, `index.html`). Both were replaced by this Python backend and the React
+> frontend in the Phase 4 cutover (see `README.md` in `../server-py/`); the old code is still
+> reachable in the git history. Notes in code comments of the form "porta de server/index.js"
+> refer to that pre-cutover Node code.
 
 ## Install & run (standalone, without Docker)
 
 ```
-cd server
-npm install
-# point at your own Postgres instance:
+cd server-py
+pip install -r requirements.txt
+# point at your own Postgres instance (same variable names as before):
 export PGHOST=localhost PGPORT=5432 PGDATABASE=toolbox45 PGUSER=toolbox45 PGPASSWORD=toolbox45
-npm start
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-The server listens on `PORT` (env var, default `3000`) and exposes the REST API at
-`/api/*` only — no static files. On startup it connects to Postgres and applies
-`schema.sql` automatically (safe to re-run — uses `CREATE TABLE IF NOT EXISTS`). To
-(re)populate the ~30 built-in commands, run `node seed.js` once after `npm install`.
+The server listens on the port you pass to `uvicorn` (the Docker image uses `8000`) and
+exposes the REST API at `/api/*` only — no static files. Outside Docker you also need the
+PostgreSQL 16 client tools (`pg_dump`/`pg_restore`, used by Backup & Restore) and `openssl`
+(used to generate the default self-signed certificate) on the `PATH`; set `BACKUP_DIR` and
+`TLS_DIR` to writable folders (the Docker image uses `/app/backups` and `/app/tls`, which
+are the named volumes `toolbox45-backups` and `toolbox45-tls`).
+
+On startup (`app/db.py`, before the first request is served) the backend connects to
+Postgres — retrying for about a minute while the database comes up — and then, in this order:
+
+1. applies `app/schema.sql` (idempotent: `CREATE TABLE IF NOT EXISTS`);
+2. runs the idempotent migrations (`app/migrations.py`), safe to repeat on every boot and
+   on a database that was created by the old Node backend;
+3. seeds first-install defaults (`app/seeds.py`), each one only when its table is empty:
+   the local `admin`/`admin` account (role `super_admin`), the `Favorites` folder per user,
+   vendors, systems, versions, environments, search parameters, prompts and export
+   templates. The 8 fixed search parameters (`src_ip`, `dst_ip`, `src_port`, `dst_port`,
+   `user`, `host`, `license`, `signature`) are re-created on every boot if missing.
+
+No commands and no topics are pre-loaded: create them in the app, or import commands from
+CSV (**Settings → Database → Commands → Import**; see `../import-templates/`). The old
+`seed.js` (a one-off loader of ~30 reference commands) and `perf-seed.js` (synthetic data for
+load tests) were not ported and were removed in the cutover; `seed.js` had already stopped
+working against the current schema (text ids vs. the `SERIAL` `commands.id`, and nothing
+seeded `topics`).
 
 In the normal Docker deployment (see `../docker-compose.yml`), none of this needs to be
 done manually — `docker compose up -d --build` builds and starts all 3 containers, and the
 backend waits for `toolbox45-db` to become healthy before applying the schema.
+
+Tests: `cd server-py && python -m pytest tests` (needs a reachable PostgreSQL — it uses
+throwaway databases prefixed `p_`; the module is skipped if none is available).
+Frontend: `cd frontend-react && npm install && npm run build` (type-check + Vite build).
 
 ## API keys (programmatic access)
 
@@ -36,24 +69,24 @@ only; the raw key is shown once, at creation time). Manage keys in the app under
 ## Multiusuário (login obrigatório)
 
 Este servidor é pensado para rodar em UMA máquina central que toda a equipe acessa pelo
-navegador (ex.: `http://nome-do-servidor:3000`). Cada pessoa loga com uma conta local
+navegador (ex.: `https://nome-do-servidor`). Cada pessoa loga com uma conta local
 (usuário/senha) ou com a própria conta Google (ver seção abaixo) — não existe mais
 identificação automática por login do Windows (NTLM, removido a pedido do usuário:
 "deixar somente autenticação local e com Google") nem um fallback anônimo/dev. Toda
 chamada à API exige sessão (local ou Google) ou API key — sem uma das duas, `401
-unauthorized` (ver o gate de login obrigatório em `server/index.js`). Isso possibilita
+unauthorized` (ver o gate de autenticação em `server-py/app/deps.py`). Isso possibilita
 favoritos, tema, idioma e históricos por usuário, sem depender de domínio Windows.
 
 A conta local `admin`/`admin` já vem semeada em toda instalação nova (troque a senha
 assim que possível — ver `docs/api.md`, seção **Usuário local padrão**); um admin cria
-outras contas locais em **Settings → System → Users**, e contas Google se
+outras contas locais em **Settings → Users**, e contas Google se
 auto-provisionam no primeiro login (ver abaixo).
 
 ### Login com Google (opcional)
 
 Além do login local (usuário/senha), a página de login (`login.html`) pode mostrar um
 botão "Sign in with Google" (OAuth 2.0) — ver `GET /api/auth/google*` em
-`server/index.js` e a seção **Login com Google** em `docs/api.md`. Desligado por
+`server-py/app/routers/oauth.py` e a seção **Login com Google** em `docs/api.md`. Desligado por
 padrão; sem restrição de domínio Google Workspace (qualquer conta Google pode entrar).
 Primeiro login de um e-mail cria a conta automaticamente com `role: "user"`.
 
@@ -87,11 +120,11 @@ GOOGLE_REDIRECT_URI=https://toolbox.seg45.com.br/api/auth/google/callback
 
 Igual ao login com Google acima, só troca o provedor: um botão "Sign in with Microsoft"
 em `login.html` (OAuth 2.0 contra a Microsoft identity platform v2.0) — ver
-`GET /api/auth/microsoft*` em `server/index.js` e a seção **Login com Microsoft** em
+`GET /api/auth/microsoft*` em `server-py/app/routers/oauth.py` e a seção **Login com Microsoft** em
 `docs/api.md`. Desligado por padrão; por padrão aceita qualquer conta Microsoft
 (pessoal ou de qualquer organização — ver `MICROSOFT_TENANT_ID` no passo 6 abaixo).
 Primeiro login de um e-mail cria a conta automaticamente, mas **desabilitada** —
-pendente de aprovação por um admin em **Settings → System → Users**, igual ao
+pendente de aprovação por um admin em **Settings → Users**, igual ao
 auto-cadastro local e ao login com Google.
 
 1. Entre no [Azure Portal](https://portal.azure.com/) → **Microsoft Entra ID** →
@@ -130,8 +163,8 @@ MICROSOFT_REDIRECT_URI=https://toolbox.seg45.com.br/api/auth/microsoft/callback
 
 Pastas e comandos de cada usuário são **privados por padrão** — ninguém mais vê o que
 você criou, a menos que você compartilhe explicitamente. Todo usuário tem um **handle**
-(apelido único, gerado automaticamente na criação da conta — ver `generateUniqueHandle()`
-em `server/db.js` — e trocável livremente depois em **Settings → System → Sharing**)
+(apelido único, gerado automaticamente na criação da conta — ver `generate_unique_handle()`
+em `server-py/app/handles.py` — e trocável livremente depois em **Settings → Account**)
 usado para esse compartilhamento **sem nunca expor o username real** (que é o e-mail,
 no caso de contas Google). Para outro usuário, você digita o handle dele e escolhe o
 que compartilhar — pastas e/ou comandos, "tudo ou nada" (não dá para escolher uma
@@ -139,56 +172,56 @@ pasta/comando específico) — e vale imediatamente, sem a outra pessoa precisar
 nada. Você também pode revogar a qualquer momento. Admins continuam vendo as pastas/
 comandos de todo mundo sempre, sem depender de nenhuma concessão aqui — este mecanismo
 só regula a visibilidade entre usuários comuns. Ver `users.handle`/tabela `shares` em
-`server/schema.sql`, `PUT /api/me/handle`/`/api/shares` em `server/index.js` e a seção
+`server-py/app/schema.sql`, `PUT /api/me/handle` (`app/routers/me.py`)/`/api/shares`
+(`app/routers/shares.py`) e a seção
 **Compartilhamento entre usuários** em `docs/api.md`.
 
-## Catálogos administráveis (Versão / Ambiente / Tópico)
+## Catálogos administráveis
 
-Versão, Ambiente e Tópico (antes listas fixas no código) agora ficam nas tabelas
-`versions`/`environments`/`topics` (criadas e populadas automaticamente no primeiro
-`npm start`, com os mesmos valores que já existiam). Quem tiver o "Modo administrador"
-ativado (Configurações → Modo administrador) vê um botão **🗂️ Gerenciar
-Versões/Ambientes/Tópicos** na barra lateral, que abre um modal para cadastrar, editar
-e excluir esses itens.
+Vendors, Systems, Versions, Environments, Topics, Parameters, Prompts e Exports ficam em
+tabelas próprias (`vendors`, `systems`, `versions`, `environments`, `topics`, `parameters`,
+`prompts`, `exports` — ver `app/schema.sql`), populadas no primeiro boot com o catálogo
+base (ver "Install & run" acima; Topics começa vazio) e administradas em **Settings →
+Register** (só admin): uma janela por catálogo, com cadastrar, editar e excluir.
+Rotas em `app/routers/catalog.py`.
 
+- **Autorização:** `GET /api/catalogs` (todos os catálogos de uma vez) exige apenas login
+  (sessão ou API key). Todas as rotas de escrita — `POST`/`PUT /:key`/`DELETE /:key` em
+  `/api/vendors`, `/api/systems`, `/api/versions`, `/api/environments`, `/api/topics`,
+  `/api/parameters`, `/api/prompts` e `/api/exports`, mais os vínculos
+  `PUT /api/environments/:key/versions` e `PUT /api/topics/:key/environments` — exigem
+  `admin` ou `super_admin`.
+- **Hierarquia:** Vendor → System → Version (a chave de Version é `system` + `key`).
+  Environment também pertence a um System. Mover um System de Vendor propaga o vendor
+  para suas Versions/Environments; trocar o System de um Environment desfaz os vínculos
+  Version↔Environment que ele tinha.
 - O identificador (`key`) de cada item nunca pode ser alterado depois de criado — é o
-  valor gravado nos comandos que usam aquela versão/ambiente/tópico.
-- Exclusão é bloqueada (erro 409) quando o item está em uso por pelo menos um comando,
-  ou quando é o tópico protegido `environment` (usado internamente para os cards de
-  "Ambiente específico" — não aparece no filtro de Tópico, só no editor de comandos).
-- API: `GET /api/catalogs` (os 3 de uma vez) e `POST`/`PUT /:key`/`DELETE /:key` em
-  `/api/versions`, `/api/environments` e `/api/topics`.
-- Assim como o resto da API hoje, não há autorização própria além de exigir login
-  (sessão local/Google) ou API key — qualquer pessoa autenticada pode chamar esses
-  endpoints diretamente (não só quem ativou o Modo administrador na própria tela).
+  valor gravado nos comandos que usam aquele item. Para Vendors/Systems/Versions/
+  Environments/Topics/Prompts/Exports ele é gerado a partir do rótulo (slug, com sufixo
+  `-2`, `-3`… se já existir); só Parameters têm `key` digitada pelo admin.
+- **Exclusão:** bloqueada (409 `in_use`) quando o item está em uso por pelo menos um
+  comando; o tópico interno `environment` é protegido (409 `protected`, checado antes do
+  uso — ele alimenta os cards de "Ambiente específico" e não aparece no filtro de Tópico).
+  Prompts e Exports não têm checagem de uso (são texto solto nas linhas de comando).
 
-## Catálogo administrável (Parâmetros)
+### Parâmetros
 
-Os campos da barra de busca unificada (`src:`, `dst:`, `sport:`, `dport:`, `proto:`,
-`iface:`, `vsid:`, IP e Porta genéricos, e qualquer parâmetro novo) agora vêm da tabela
-`parameters` (criada e populada automaticamente no primeiro `npm start`, com os 9 valores
-que já existiam). A aba **Parâmetros** do modal **🗂️ Gerenciar...** (Modo administrador)
-permite cadastrar, editar e excluir esses itens.
+Os campos da barra de busca unificada (`src_ip`, `dst_ip`, `src_port`, `dst_port`, `user`,
+`host`, `license`, `signature` e qualquer parâmetro novo) vêm da tabela `parameters`
+(colunas `key`, `label`, `sort_order`). Os 8 acima são recriados a cada boot se faltarem.
 
-- Cada parâmetro tem três nomes distintos: `key` (usado em `{{key}}` dentro dos templates
-  de comando — imutável depois de criado), `query_key` (a palavra digitada antes de `:` na
-  busca — esta SIM pode ser editada) e `input_id` (o `<input type="hidden">` que guarda o
-  valor atual; para os 9 parâmetros originais é um id fixo do HTML, para parâmetros novos
-  é criado dinamicamente com o mesmo nome da `key`).
-- `aliases` é uma lista de apelidos (separados por vírgula) também aceitos antes do `:`
-  na busca, além do `query_key` e da `key`.
-- `list_mode` (`none`/`list`/`list_range`) hoje só ajusta o texto de dica (tooltip) — não
-  existe expansão automática de lista/faixa para parâmetros novos; isso só está implementado
-  como lógica própria para os ~10 comandos "avançados" que já tratavam IP/Porta como
-  lista/faixa (ver `RESOLVERS` em `server/db-render-engine.js`). Um parâmetro novo com
-  `list_mode = 'list_range'` funciona como substituição simples de texto — o valor digitado
-  entra literalmente no lugar de `{{key}}`.
-- Exclusão é bloqueada (409) quando o parâmetro está em uso — via texto genérico (`{{key}}`
-  aparece em algum comando) OU, especificamente para `ip` e `port`, quando algum comando
-  depende deles de forma estrutural (flag `requires_ip_port`, usada pelo motor de
+- `key` é o nome usado em `{{key}}` dentro dos templates de comando e também a palavra
+  digitada antes de `:` na busca (`src_ip:10.0.0.1`); só aceita `[A-Za-z0-9._-]`, até 40
+  caracteres, e não pode mudar depois de criado. `label` é o texto exibido.
+- Não existe expansão automática de lista/faixa para parâmetros novos: ela só está
+  implementada como lógica própria para os comandos "avançados" que já tratavam IP/Porta
+  como lista/faixa (os `RESOLVERS` em `frontend-react/src/lib/resolvers.ts`). Um parâmetro
+  novo funciona como substituição simples de texto — o valor digitado entra literalmente
+  no lugar de `{{key}}`.
+- Exclusão bloqueada (409) quando o parâmetro está em uso — via texto (`{{key}}` aparece
+  em alguma linha de algum comando) OU, especificamente para `ip` e `port`, quando algum
+  comando depende deles de forma estrutural (flag `requires_ip_port`, usada pelo motor de
   renderização para decidir o estado vazio "informe IP/Porta"). Essa segunda checagem é
-  fixa no código (não é uma opção do admin) porque esses 2 parâmetros são lidos pelo nome
-  diretamente na lógica do front-end, e não apenas via substituição de template — um
-  simples "está em uso" no texto não bastaria para detectar o risco de quebra.
+  fixa no código, não uma opção do admin.
 - API: `GET /api/catalogs` (inclui `parameters`) e `POST`/`PUT /:key`/`DELETE /:key` em
   `/api/parameters`.
