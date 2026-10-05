@@ -36,3 +36,6 @@ server-py/.venv/
 server-py/venv/
 __pycache__/
 *.pyc
+
+# Cache do pytest (server-py/tests)
+.pytest_cache/

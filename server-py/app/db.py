@@ -3,15 +3,13 @@ boot -- mesmo comportamento do initDb() em server/db.js: schema.sql e
 idempotente (CREATE TABLE IF NOT EXISTS), entao reexecuta-lo a cada start e
 seguro.
 
-Este backend roda contra o MESMO banco que o backend Node (ver
-docker-compose.yml: PGHOST=toolbox45-db) durante a Fase 1/2 da migracao --
-por isso, propositalmente, esta funcao NAO replica as funcoes de seed
-(seedDefaultAdmin, seedDefaultVendors, etc.) nem as migracoes legadas de
-dados (migrateCommandsIdToSerial) de server/db.js: numa instalacao ja em
-producao elas ja rodaram pelo backend Node. Portar esse seeding so vira
-necessario na Fase 4 (corte), quando este backend passa a ser responsavel
-por uma instalacao nova do zero -- fica registrado aqui como pendencia
-conhecida, nao esquecimento.
+Depois do schema, init_db() tambem replica o que initDb() do Node faz em
+seguida: run_migrations() (app/migrations.py -- porta de runMigrations() e
+migrateCommandsIdToSerial()) e run_seeds() (app/seeds.py -- porta das funcoes
+seedDefault*(), na mesma ordem). Ambas rodam DENTRO do mesmo try do loop de
+retry, como no Node, e sao idempotentes (seguro rodar em todo boot, inclusive
+contra um banco que o backend Node ja migrou/semeou): assim este backend ja
+consegue subir uma instalacao nova do zero (Fase 4 -- corte).
 """
 import asyncio
 import logging
@@ -21,6 +19,8 @@ from typing import Optional
 import asyncpg
 
 from .config import settings
+from .migrations import run_migrations
+from .seeds import run_seeds
 
 logger = logging.getLogger("toolbox45")
 
@@ -54,10 +54,11 @@ def get_pool() -> asyncpg.Pool:
 
 
 async def init_db(retries: int = 30, delay_seconds: float = 2.0) -> None:
-    """Conecta ao Postgres e aplica schema.sql, tentando de novo por ate
-    `retries` vezes -- mesmo racional do initDb() em server/db.js: no
-    docker-compose, toolbox45-db pode ainda estar inicializando quando este
-    backend sobe, mesmo com depends_on + healthcheck (e rede real)."""
+    """Conecta ao Postgres, aplica schema.sql e roda migracoes + seeds
+    (app/migrations.py e app/seeds.py), tentando de novo por ate `retries`
+    vezes -- mesmo racional do initDb() em server/db.js: no docker-compose,
+    toolbox45-db pode ainda estar inicializando quando este backend sobe,
+    mesmo com depends_on + healthcheck (e rede real)."""
     global _pool
     schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
 
@@ -72,6 +73,8 @@ async def init_db(retries: int = 30, delay_seconds: float = 2.0) -> None:
                 # do driver `pg` usado pelo backend Node em db.js).
                 await conn.execute(schema_sql)
             logger.info("[db] Conectado ao PostgreSQL e schema aplicado.")
+            await run_migrations(_pool)
+            await run_seeds(_pool)
             return
         except Exception as err:  # noqa: BLE001 -- mesmo padrao amplo do try/catch em db.js
             last_error = err
