@@ -1,18 +1,15 @@
-# Dependências — sempre reinstaladas via "npm install".
+# Dependências do frontend — sempre reinstaladas via "npm install"/"npm ci".
 node_modules/
-server/node_modules/
 
 # Backups locais avulsos (o histórico do git já cumpre esse papel)
 *.bak
 *.bak_*
 
-# Dumps de backup do banco (pg_dump — ver server/index.js, GET/POST
+# Dumps de backup do banco (pg_dump — ver server-py/app/backup.py, GET/POST
 # /api/backups). Ficam só no volume do container toolbox45-backend
 # (/app/backups); nunca versionados. O banco em si (PostgreSQL) vive inteiramente
-# no container toolbox45-db + seu próprio volume nomeado — não há mais
-# nenhum arquivo de banco de dados dentro deste repositório (antes era
-# server/commands.db, SQLite; removido junto com a migração para Postgres).
-server/backup/
+# no container toolbox45-db + seu próprio volume nomeado — não há nenhum
+# arquivo de banco de dados dentro deste repositório.
 /backup/
 
 # Segredos (POSTGRES_PASSWORD, GOOGLE_CLIENT_SECRET etc. — ver
@@ -39,3 +36,6 @@ __pycache__/
 
 # Cache do pytest (server-py/tests)
 .pytest_cache/
+
+# Saída de trabalho do Claude (patches, runbooks) — não faz parte do projeto.
+Claude outputs/

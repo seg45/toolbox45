@@ -7,7 +7,6 @@ frontend-react/dist
 
 # O banco de dados agora é PostgreSQL, num container/volume próprios
 # (toolbox45-db) — nunca fica dentro da imagem do backend nem do frontend.
-server/backup/
 /backup/
 
 # Documentação e planilhas — não afetam a aplicação em si.

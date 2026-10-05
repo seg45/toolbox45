@@ -59,4 +59,6 @@ migrações de bancos legados e o ciclo de vida do FastAPI (login `admin`/`admin
 ## Código Node antigo
 
 Comentários do tipo "porta de `server/index.js`" referem-se ao backend Node removido no corte;
-o código continua acessível no histórico do git (commit anterior ao corte).
+o código continua acessível pela tag `node-final` (último commit que ainda o contém):
+`git show node-final:server/index.js` lê um arquivo; `git checkout node-final` restaura
+a stack antiga inteira.

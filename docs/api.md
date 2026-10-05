@@ -253,7 +253,7 @@ usuário que está fazendo a requisição.
   `"username"` — para uma pasta de outra pessoa, esse campo vem trocado pelo
   **handle** dela (nunca o username real), exceto para admins. Usado pelo seletor de
   escopo de pastas "All"/usuário específico dentro de Folders — ver `docs/README.md`/
-  comentários em `js/render.js`.
+  comentários em `frontend-react/src/components/commands/FolderScopeDropdown.tsx`.
 - `POST /api/folders` — corpo `{ "name": "..." }`. `201` com a pasta criada
   (`command_ids: []`, `notes: []`, `order: []`). `400 validation_error` se faltar
   `name`. `409 conflict` se o usuário já tiver uma pasta com esse nome (nomes são

@@ -10,8 +10,10 @@ The whole app runs as 3 Docker containers (see `../docker-compose.yml`):
 
 > **History.** The backend used to be Node.js/Express (`server/`) with a vanilla-JS frontend
 > (`js/`, `css/`, `index.html`). Both were replaced by this Python backend and the React
-> frontend in the Phase 4 cutover (see `README.md` in `../server-py/`); the old code is still
-> reachable in the git history. Notes in code comments of the form "porta de server/index.js"
+> frontend in the Phase 4 cutover (see `README.md` in `../server-py/`). The last commit that
+> still contains the old code is tagged `node-final`: `git show node-final:server/index.js`
+> reads a file, and `git checkout node-final` restores the whole old stack (rebuild with
+> `docker compose build`). Notes in code comments of the form "porta de server/index.js"
 > refer to that pre-cutover Node code.
 
 ## Install & run (standalone, without Docker)
