@@ -199,6 +199,23 @@ await withPage(browser, async page => {
   assert(await page.isVisible('.card[data-cmd-id="2"]'), 'cenário 1: card do comando 2 (VPN) visível');
   assert(await page.isVisible('text=Status'), 'cenário 1: seção "Status" visível');
   assert(await page.isVisible('text=VPN'), 'cenário 1: seção "VPN" visível');
+  // Auditoria visual pós-corte: seções de topo (tópicos) separadas pelo gap de
+  // 16px de .content — sem wrappers entre #out e .section — e as barras
+  // .inp-bar/.content-toolbar fora de #out com a largura toda da .main.
+  const geo = await page.evaluate(() => {
+    const secs = [...document.querySelectorAll('#out > .section')].map(e => e.getBoundingClientRect());
+    const main = document.querySelector('.main').getBoundingClientRect().width;
+    return {
+      n: secs.length,
+      gaps: secs.slice(1).map((r, i) => Math.round(r.top - secs[i].bottom)),
+      main: Math.round(main),
+      inp: Math.round(document.querySelector('.inp-bar').getBoundingClientRect().width),
+      tb: Math.round(document.querySelector('.content-toolbar').getBoundingClientRect().width),
+    };
+  });
+  assert(geo.n >= 2, `cenário 1: seções de topo são filhas diretas de #out (${geo.n})`);
+  assert(geo.gaps.length > 0 && geo.gaps.every(x => x === 16), `cenário 1: seções separadas por 16px (${geo.gaps.join(',')})`);
+  assert(geo.inp === geo.main && geo.tb === geo.main, `cenário 1: .inp-bar (${geo.inp}) e .content-toolbar (${geo.tb}) com a largura da .main (${geo.main})`);
   await page.screenshot({ path: `${SHOTS}/1-cards-loaded.png` });
 });
 

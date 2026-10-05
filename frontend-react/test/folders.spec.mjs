@@ -511,6 +511,54 @@ await withPage(browser, async page => {
   assert(text.includes('Modified on:'), 'cenário 10: popover mostra a data de modificação formatada');
 });
 
+// ── Cenário 11: "+ Add > Folder" da toolbar cria uma pasta de topo VAZIA ──
+await withPage(browser, async page => {
+  const state = makeFolderState();
+  await mockLoggedInAdmin(page, state);
+  await page.goto(`${BASE}/index.html`);
+  await page.waitForSelector('.card[data-cmd-id="1"]');
+
+  await page.locator('.ctb-cmd-btn').click();
+  assert(await page.locator('#addDDPanel .sb-row').count() === 2, 'cenário 11: dropdown "Add" da toolbar tem 2 itens (Command, Folder)');
+  await page.locator('#addDDPanel .sb-row', { hasText: 'Folder' }).click();
+  await page.waitForSelector('.modal-overlay.show .modal-title:has-text("New folder")');
+  await page.fill('.modal-overlay.show .set-input', 'Empty top');
+  await page.locator('.modal-overlay.show .btn-primary').click();
+
+  await page.locator('.folders-head-row').click();
+  await page.waitForSelector('.section.section-folder');
+  const sec = folderSectionByName(page, 'Empty top');
+  await assertEventually(async () => sec.isVisible(), 'cenário 11: a pasta vazia "Empty top" aparece na visão de Pastas');
+  assert((await sec.locator('.card').count()) === 0, 'cenário 11: a pasta criada pela toolbar está vazia (nenhum comando)');
+});
+
+// ── Cenário 12: geometria da tela inicial igual ao original (auditoria visual pós-corte) ──
+// As barras .inp-bar/.content-toolbar são irmãs de .content (largura total da
+// .main) e as seções de topo ficam separadas pelo gap de 16px de .content.
+await withPage(browser, async page => {
+  const state = makeFolderState();
+  await mockLoggedInAdmin(page, state);
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto(`${BASE}/index.html`);
+  await page.waitForSelector('.card[data-cmd-id="1"]');
+  const g = await page.evaluate(() => {
+    const w = sel => Math.round(document.querySelector(sel).getBoundingClientRect().width);
+    const main = document.querySelector('.main');
+    const secs = [...document.querySelectorAll('#out > .section')].map(e => e.getBoundingClientRect());
+    return {
+      main: Math.round(main.getBoundingClientRect().width),
+      inp: w('.inp-bar'),
+      tb: w('.content-toolbar'),
+      outParentIsMain: document.querySelector('#out').parentElement === main,
+      barsInsideContent: !!document.querySelector('#out .inp-bar, #out .content-toolbar'),
+      gaps: secs.slice(1).map((r, i) => Math.round(r.top - secs[i].bottom)),
+    };
+  });
+  assert(g.inp === g.main && g.tb === g.main, `cenário 12: .inp-bar (${g.inp}px) e .content-toolbar (${g.tb}px) ocupam a largura toda da .main (${g.main}px)`);
+  assert(g.outParentIsMain && !g.barsInsideContent, 'cenário 12: .inp-bar/.content-toolbar são irmãs de #out, não filhas');
+  assert(g.gaps.every(x => x === 16), `cenário 12: seções de topo separadas por 16px (${g.gaps.join(',') || 'só uma seção'})`);
+});
+
 await browser.close();
 
 console.log(`\n${failures === 0 ? 'TODOS OS CENÁRIOS PASSARAM' : `${failures} CENÁRIO(S) FALHARAM`}`);

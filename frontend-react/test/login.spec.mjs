@@ -54,14 +54,17 @@ await withPage(browser, async page => {
   await page.screenshot({ path: `${SHOTS}/1-default-login.png` });
 });
 
-// ── Cenário 2: providers desligados — nem os botões nem o divider aparecem ──
+// ── Cenário 2: providers desligados — botões CONTINUAM na página (fixos, sem piscar), desabilitados, com aviso ──
 await withPage(browser, async page => {
   await mockDefaultApis(page, { providers: { google: false, microsoft: false } });
   await page.goto(`${BASE}/login.html`);
   await page.waitForSelector('.login-card');
   await page.waitForTimeout(200);
-  assert(!(await page.isVisible('text=Sign in with Google')), 'cenário 2: botão Google ausente quando provider desabilitado');
-  assert(!(await page.isVisible('.login-divider')), 'cenário 2: divider "or" ausente sem nenhum provider');
+  assert(await page.isVisible('text=Sign in with Google'), 'cenário 2: botão Google continua visível quando provider desabilitado');
+  assert(await page.isDisabled('button:has-text("Sign in with Google")'), 'cenário 2: botão Google desabilitado quando provider desabilitado');
+  assert(await page.isDisabled('button:has-text("Sign in with Microsoft")'), 'cenário 2: botão Microsoft desabilitado quando provider desabilitado');
+  assert((await page.locator('.login-provider-note').count()) === 2, 'cenário 2: um aviso "não configurado" por provider');
+  assert(await page.isVisible('.login-divider'), 'cenário 2: divider "or" continua visível');
   await page.screenshot({ path: `${SHOTS}/2-no-providers.png` });
 });
 
@@ -95,7 +98,7 @@ await withPage(browser, async page => {
   await page.click('text=Log in');
   await page.waitForURL('**/index.html', { timeout: 5000 });
   assert(loginCalled, 'cenário 4: POST /api/auth/login foi chamado');
-  await page.waitForSelector('text=Fase 3, fatia 1');
+  await page.waitForSelector('.app');
   const localFlag = await page.evaluate(() => localStorage.getItem('cpa-authenticated'));
   assert(localFlag === '1', 'cenário 4: flag cpa-authenticated gravada após login');
   await page.screenshot({ path: `${SHOTS}/4-login-success-placeholder.png` });

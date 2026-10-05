@@ -19,11 +19,12 @@
 // Folders, "Filter by" dentro (mesmo texto do original — ali o dropdown
 // não agrupa nada, só filtra de quem são as pastas exibidas).
 //
-// "Add" (fatia 4): só "Add command" por enquanto — sem dropdown, já que
-// "Add folder" (fatia 5, Pastas) ainda não existe; quando essa fatia
-// chegar, este botão simples vira um dropdown (mesmo padrão de escopo
-// adiado já usado em Header.tsx para os dropdowns Links/Tools).
+// "Add": dropdown "Command" / "Folder" (mesmo do original, #addDD em
+// index.html). "Folder" cria uma pasta de topo vazia (promptCreateFolder()
+// em js/folders.js). Auditoria visual pós-corte: o botão tinha ficado só
+// "+ Add command" porque o dropdown foi adiado na fatia 4 e nunca revisitado.
 // ════════════════════════════════════════════════
+import { useEffect, useRef, useState } from 'react';
 import type { FolderScope } from '../../lib/folderScope';
 import type { FolderWithOwner } from '../../lib/folders';
 import type { Settings } from '../../lib/settingsStore';
@@ -42,6 +43,7 @@ export function ContentToolbar({
   onExpandAll,
   onCollapseAll,
   onAddCommand,
+  onAddFolder,
   foldersActive,
   folderScope,
   onChangeFolderScope,
@@ -54,6 +56,7 @@ export function ContentToolbar({
   onExpandAll: () => void;
   onCollapseAll: () => void;
   onAddCommand: () => void;
+  onAddFolder: () => void;
   // Fatia 5b — ver comentário do arquivo acima.
   foldersActive: boolean;
   folderScope: FolderScope;
@@ -62,6 +65,23 @@ export function ContentToolbar({
   currentUsername: string | undefined;
   onOpenFolderScope: () => void;
 }) {
+  const [addOpen, setAddOpen] = useState(false);
+  const addRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!addOpen) return;
+    function onDown(ev: MouseEvent) {
+      if (addRef.current && !addRef.current.contains(ev.target as Node)) setAddOpen(false);
+    }
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === 'Escape') setAddOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [addOpen]);
   return (
     <div className="content-toolbar">
       <span className="ctb-label">{foldersActive ? 'Filter by' : 'Group by'}</span>
@@ -90,16 +110,28 @@ export function ContentToolbar({
           <path d="M2 14.5l6-5 6 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
-      {/* .ctb-cmd-actions/.ctb-cmd-btn.admin-highlight já existiam prontos em
-          css/layout.css (pill sólido na cor de destaque) — CSS deixado
-          preparado desde antes desta fatia para este exato botão. Vira um
-          dropdown "Add" (Add command / Add folder, ver #addDDPanel já
-          estilizado em layout.css) quando a fatia 5 (Pastas) chegar; por
-          ora, um botão simples — só "Add command" está no escopo. */}
-      <div className="ctb-cmd-actions">
-        <button type="button" className="btn ctb-cmd-btn admin-highlight" onClick={onAddCommand}>
-          + Add command
-        </button>
+      {/* .ctb-cmd-actions/.ctb-cmd-btn.admin-highlight (layout.css) + painel
+          #addDDPanel (o CSS do painel é por #id — o id é obrigatório). */}
+      <div className="ctb-cmd-actions" id="cmdActionsBlock">
+        <div className={`dd${addOpen ? ' open' : ''}`} id="addDD" ref={addRef}>
+          <button type="button" className="btn ctb-cmd-btn admin-highlight" id="addDDBtn" onClick={() => setAddOpen(o => !o)}>
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+            <span>Add</span>
+            <span className="dd-arrow">▾</span>
+          </button>
+          {addOpen && (
+            <div className="dd-panel" id="addDDPanel">
+              <div className="sb-row" onClick={() => { setAddOpen(false); onAddCommand(); }}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}><path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+                <span>Command</span>
+              </div>
+              <div className="sb-row" onClick={() => { setAddOpen(false); onAddFolder(); }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.2h8.5A1.5 1.5 0 0 1 21 8.7v9.8A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5v-12z" /></svg>
+                <span>Folder</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

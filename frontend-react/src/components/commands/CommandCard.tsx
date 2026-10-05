@@ -62,14 +62,14 @@ export function CommandCard({
         <span className="card-desc">{card.desc || ''}</span>
         <FolderButton commandId={card.id} folderIds={card.folderIds} createdBy={card.createdBy} modifiedBy={card.modifiedBy} updatedAt={card.updatedAt} />
         <span className="card-actions">
+          <button type="button" className="edit-btn" title="Duplicate command" onClick={() => onDuplicate(card.id)}>
+            {DUPLICATE_ICON}
+          </button>
           {canEdit && (
             <button type="button" className="edit-btn" title="Edit command" onClick={() => onEdit(card.id)}>
               {EDIT_ICON}
             </button>
           )}
-          <button type="button" className="edit-btn" title="Duplicate command" onClick={() => onDuplicate(card.id)}>
-            {DUPLICATE_ICON}
-          </button>
         </span>
       </div>
       <TerminalLines lines={card.lines} showImages={showImages} />

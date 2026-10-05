@@ -136,6 +136,7 @@ async function mockLoggedInAdmin(page) {
 // ── Helpers de navegação do wizard ──
 async function openAddCommand(page) {
   await page.locator('.ctb-cmd-btn').click();
+  await page.locator('#addDDPanel .sb-row', { hasText: 'Command' }).click();
   await page.waitForSelector('#cmdEditorOverlay.show');
 }
 async function pickSegSingle(group, optionText) {

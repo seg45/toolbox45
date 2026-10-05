@@ -36,7 +36,7 @@
 // CommandCard.tsx) ficam disponíveis nos DOIS modos — o dropdown "Add to
 // folder" de um card na visão normal já reflete/edita as mesmas pastas.
 // ════════════════════════════════════════════════
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -355,6 +355,19 @@ export function CommandsContent({
       addCommandToFolder(folder.id, commandId).catch(e =>
         console.warn('Falha ao adicionar o comando à nova pasta no servidor (mantido localmente)', e)
       );
+    } catch (e) {
+      window.alert(folderCrudErrorMessage(e, 'Failed to create folder. Please try again.'));
+    }
+  }
+
+  // Toolbar "+ Add > Folder" — pasta de topo VAZIA (promptCreateFolder() sem
+  // cmdIdToAddAfter, js/folders.js).
+  async function createEmptyRootFolder() {
+    const name = await folderPrompt('create');
+    if (!name) return;
+    try {
+      const folder = await createFolder(name);
+      setFolders(prev => (prev ? [...prev, folder] : [folder]));
     } catch (e) {
       window.alert(folderCrudErrorMessage(e, 'Failed to create folder. Please try again.'));
     }
@@ -873,7 +886,7 @@ export function CommandsContent({
     if (block.groupBy === 'creator') {
       if (!block.creatorGroups || !block.creatorGroups.length) return null;
       return (
-        <div key={block.key}>
+        <Fragment key={block.key}>
           {comboHeader}
           {envNote}
           {block.creatorGroups.map(g => {
@@ -894,7 +907,7 @@ export function CommandsContent({
               />
             );
           })}
-        </div>
+        </Fragment>
       );
     }
 
@@ -925,11 +938,11 @@ export function CommandsContent({
 
     // "topic" (padrão)
     return (
-      <div key={block.key}>
+      <Fragment key={block.key}>
         {comboHeader}
         {envNote}
         {(block.sections || []).map(renderSection)}
-      </div>
+      </Fragment>
     );
   }
 
@@ -944,8 +957,11 @@ export function CommandsContent({
     );
   }
 
+  // QueryBar e ContentToolbar ficam FORA de `.content` (irmãos dele dentro de
+  // `.main`, como em index.html: .inp-bar / .content-toolbar / #out) — dentro,
+  // herdavam o padding de 14px e ficavam 28px mais estreitos que o original.
   return (
-    <div className={`content${settings.showCardDetails ? '' : ' compact-cards'}`} id="out">
+    <>
       <FoldersUIContext.Provider value={foldersUIValue}>
         <QueryBar onChange={setFieldValues} catalogs={catalogs} />
         {/* Fatia 5b: "Group by" dá lugar por inteiro ao seletor de ESCOPO
@@ -959,6 +975,7 @@ export function CommandsContent({
           onExpandAll={() => collapsedSections.expandAll(allSectionKeys)}
           onCollapseAll={() => collapsedSections.collapseAll(allSectionKeys)}
           onAddCommand={() => setEditor({ mode: 'create' })}
+          onAddFolder={createEmptyRootFolder}
           foldersActive={foldersView.active}
           folderScope={folderScopeState.scope}
           onChangeFolderScope={(s: FolderScope) => folderScopeState.setScope(s)}
@@ -966,6 +983,9 @@ export function CommandsContent({
           currentUsername={me?.username}
           onOpenFolderScope={ensureAllUsersFoldersLoaded}
         />
+      </FoldersUIContext.Provider>
+      <div className={`content${settings.showCardDetails ? '' : ' compact-cards'}`} id="out">
+      <FoldersUIContext.Provider value={foldersUIValue}>
         {foldersLoadError && (
           <div className="empty">
             <div className="empty-ico">⚠️</div>
@@ -1124,6 +1144,7 @@ export function CommandsContent({
           />,
           document.body
         )}
-    </div>
+      </div>
+    </>
   );
 }

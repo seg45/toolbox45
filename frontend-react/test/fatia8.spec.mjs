@@ -365,7 +365,7 @@ await withPage(browser, async page => {
   await goToApp(page);
   await openSystemPane(page);
 
-  await page.locator('.set-group', { has: page.locator('.set-label', { hasText: 'Logo' }) }).locator('button', { hasText: 'Configure' }).click();
+  await page.locator('.set-group', { has: page.locator('.set-label', { hasText: 'Logo' }) }).locator('button', { hasText: 'Manage logo' }).click();
   const modal = page.locator('.modal-box', { has: page.locator('.modal-title', { hasText: 'Logo' }) });
   await modal.waitFor();
 
@@ -391,7 +391,7 @@ await withPage(browser, async page => {
   assert(!srcBefore || !srcBefore.startsWith('data:'), 'cenário 5: antes do save, o header mostra o logo default (não um data: URL customizado)');
 
   await openSystemPane(page);
-  await page.locator('.set-group', { has: page.locator('.set-label', { hasText: 'Logo' }) }).locator('button', { hasText: 'Configure' }).click();
+  await page.locator('.set-group', { has: page.locator('.set-label', { hasText: 'Logo' }) }).locator('button', { hasText: 'Manage logo' }).click();
   const modal = page.locator('.modal-box', { has: page.locator('.modal-title', { hasText: 'Logo' }) });
   await modal.waitFor();
 
@@ -424,7 +424,7 @@ await withPage(browser, async page => {
   await goToApp(page);
   await openSystemPane(page);
 
-  await page.locator('.set-group', { has: page.locator('.set-label', { hasText: 'Logo' }) }).locator('button', { hasText: 'Configure' }).click();
+  await page.locator('.set-group', { has: page.locator('.set-label', { hasText: 'Logo' }) }).locator('button', { hasText: 'Manage logo' }).click();
   const modal = page.locator('.modal-box', { has: page.locator('.modal-title', { hasText: 'Logo' }) });
   await modal.waitFor();
   const lightSection = modal.locator('.set-group', { has: page.locator('.set-label', { hasText: 'Light theme logo' }) });
@@ -444,7 +444,7 @@ await withPage(browser, async page => {
 
 async function openAppearanceModal(page) {
   await openSystemPane(page);
-  await page.locator('.set-group', { has: page.locator('.set-label', { hasText: 'Default theme & colors' }) }).locator('button', { hasText: 'Configure' }).click();
+  await page.locator('.set-group', { has: page.locator('.set-label', { hasText: 'Default theme & colors' }) }).locator('button', { hasText: 'Manage appearance' }).click();
   const modal = page.locator('.modal-box', { has: page.locator('.modal-title', { hasText: 'Default theme & colors' }) });
   await modal.waitFor();
   return modal;
@@ -623,7 +623,7 @@ await withPage(browser, async page => {
 
 async function openSslModal(page) {
   await openSystemPane(page);
-  await page.locator('.set-group', { has: page.locator('.set-label', { hasText: 'SSL Certificate' }) }).locator('button', { hasText: 'Configure' }).click();
+  await page.locator('.set-group', { has: page.locator('.set-label', { hasText: 'SSL Certificate' }) }).locator('button', { hasText: 'Manage certificate' }).click();
   const modal = page.locator('.modal-box', { has: page.locator('.modal-title', { hasText: 'SSL Certificate' }) });
   await modal.waitFor();
   return modal;
