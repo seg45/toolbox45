@@ -532,7 +532,7 @@ await withPage(browser, async page => {
   await modal.locator('input[type="password"]').fill('senha123');
   await modal.locator('button', { hasText: 'Create' }).click();
   await assertEventually(
-    async () => (await modal.locator('.set-hint', { hasText: 'A valid e-mail address is required, and the password must be at least 4 characters.' }).count()) === 1,
+    async () => (await modal.locator('.set-hint', { hasText: 'A valid e-mail address is required, and the password must be at least 8 characters.' }).count()) === 1,
     'cenário 9: e-mail inválido mostra a mensagem de erro combinada'
   );
   assert(state.calls.create.length === 0, 'cenário 9: nenhum POST /api/users disparado com e-mail inválido');
@@ -542,8 +542,8 @@ await withPage(browser, async page => {
   await modal.locator('input[type="password"]').fill('ab');
   await modal.locator('button', { hasText: 'Create' }).click();
   await assertEventually(
-    async () => (await modal.locator('.set-hint', { hasText: 'A valid e-mail address is required, and the password must be at least 4 characters.' }).count()) === 1,
-    'cenário 9: senha curta (<4) também mostra o erro combinado'
+    async () => (await modal.locator('.set-hint', { hasText: 'A valid e-mail address is required, and the password must be at least 8 characters.' }).count()) === 1,
+    'cenário 9: senha curta (<8) também mostra o erro combinado'
   );
   assert(state.calls.create.length === 0, 'cenário 9: nenhum POST /api/users disparado com senha curta');
 
@@ -583,8 +583,8 @@ await withPage(browser, async page => {
   await modal.locator('input[type="password"]').fill('ab');
   await modal.locator('button', { hasText: 'Save' }).click();
   await assertEventually(
-    async () => (await modal.locator('.set-hint', { hasText: 'Password must be at least 4 characters.' }).count()) === 1,
-    'cenário 10: senha curta mostra "Password must be at least 4 characters."'
+    async () => (await modal.locator('.set-hint', { hasText: 'Password must be at least 8 characters.' }).count()) === 1,
+    'cenário 10: senha curta mostra "Password must be at least 8 characters."'
   );
 
   const listCallsBefore = state.calls.list;

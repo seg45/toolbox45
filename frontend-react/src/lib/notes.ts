@@ -17,6 +17,7 @@
 // original (FOLDERS.forEach(...) + render() ANTES do fetch DELETE).
 // ════════════════════════════════════════════════
 import { ApiError, parseErrorBody } from './api';
+import { sanitizeRichHtml } from './safeHtml';
 
 export interface Note {
   id: number;
@@ -63,7 +64,7 @@ export function shapeNote(row: NoteApiRow): Note {
 // campo próprio — porte 1:1 de _deriveNoteTitle() (js/folders.js).
 export function deriveNoteTitle(html: string): string {
   const tmp = document.createElement('div');
-  tmp.innerHTML = html || '';
+  tmp.innerHTML = sanitizeRichHtml(html);
   const text = (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
   return text.length > 80 ? text.slice(0, 80).trim() + '…' : text;
 }

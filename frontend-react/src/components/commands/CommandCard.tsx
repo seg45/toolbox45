@@ -17,6 +17,7 @@
 // o original fazia no body.
 // ════════════════════════════════════════════════
 import { useAuth } from '../../lib/auth';
+import { SafeHtml } from '../SafeHtml';
 import type { Catalogs } from '../../lib/catalogs';
 import type { CardData } from '../../lib/renderPipeline';
 import { FolderButton } from './FolderMenu';
@@ -77,7 +78,7 @@ export function CommandCard({
         <div className="card-about">
           <div className="about-body">
             <div className="about-heading">Details</div>
-            <div dangerouslySetInnerHTML={{ __html: card.detailsHtml }} />
+            <SafeHtml html={card.detailsHtml} />
           </div>
         </div>
       )}

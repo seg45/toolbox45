@@ -40,6 +40,7 @@ const GOOGLE_REASONS: Record<string, string> = {
     "This Google account's e-mail matches an existing account that uses a different sign-in method. Please log in with your username and password instead.",
   account_disabled: 'This account has been disabled. Contact an administrator.',
   not_configured: 'Google sign-in is not configured on this server.',
+  email_not_verified: "Google could not confirm that this account owns that e-mail address.",
 };
 
 const MICROSOFT_REASONS: Record<string, string> = {
@@ -49,6 +50,10 @@ const MICROSOFT_REASONS: Record<string, string> = {
     "This Microsoft account's e-mail matches an existing account that uses a different sign-in method. Please log in with your username and password instead.",
   account_disabled: 'This account has been disabled. Contact an administrator.',
   not_configured: 'Microsoft sign-in is not configured on this server.',
+  email_not_verified:
+    "Microsoft could not confirm that this account's sign-in name matches its e-mail address. An administrator can allow your organization by setting its tenant ID in Settings → System → OAuth.",
+  tenant_mismatch: 'This Microsoft account does not belong to the organization allowed on this server.',
+  invalid_token: 'Microsoft sign-in could not be verified. Please try again.',
 };
 
 function markAuthenticatedAndEnter(): void {
@@ -173,6 +178,10 @@ export default function LoginPage() {
       setRegisterError('Enter both e-mail and password.');
       return;
     }
+    if (regPassword.length < 8) {
+      setRegisterError('Password must be at least 8 characters.');
+      return;
+    }
     setRegisterSubmitting(true);
     try {
       const data = await register(regEmail.trim(), regPassword);
@@ -293,6 +302,7 @@ export default function LoginPage() {
                 if (e.key === 'Enter') submitRegister();
               }}
             />
+            <span className="set-hint">At least 8 characters.</span>
           </div>
           <button
             type="button"

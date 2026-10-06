@@ -28,6 +28,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from .config import settings
 from .db import get_pool
@@ -46,10 +47,34 @@ logger = logging.getLogger("toolbox45")
 BACKUP_DIR = Path(os.environ.get("BACKUP_DIR") or (Path(__file__).resolve().parent.parent / "backup"))
 
 
-async def _run_cli(cmd: str, args: list) -> None:
+def pg_cli_target() -> "tuple[str, dict]":
+    """(dsn_sem_senha, env) para pg_dump/pg_restore.
+
+    A senha do banco NAO pode ir na linha de comando (`-d postgresql://user:SENHA@...`):
+    argumentos de processo ficam visiveis para qualquer um que liste os processos
+    do container (`ps`, /proc/<pid>/cmdline). O libpq le a senha da variavel de
+    ambiente PGPASSWORD do processo filho -- essa sim fica restrita ao dono.
+    """
+    dsn = settings.dsn()
+    parts = urlsplit(dsn)
+    env = dict(os.environ)
+    if parts.password is not None:
+        env["PGPASSWORD"] = unquote(parts.password)
+        netloc = quote(unquote(parts.username or ""), safe="")
+        if parts.hostname:
+            host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+            netloc += f"@{host}" if netloc else host
+            if parts.port:
+                netloc += f":{parts.port}"
+        dsn = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    return dsn, env
+
+
+async def _run_cli(cmd: str, args: list, env: Optional[dict] = None) -> None:
     proc = await asyncio.create_subprocess_exec(
         cmd, *args,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        env=env,
     )
     _, stderr = await proc.communicate()
     if proc.returncode != 0:
@@ -83,7 +108,8 @@ async def perform_backup(prefix: str = "backup") -> str:
     full = BACKUP_DIR / filename
     # Formato "custom" (-F c): comprimido e restauravel com pg_restore
     # (permite --clean/--if-exists na restauracao, ao contrario do -F p).
-    await _run_cli("pg_dump", ["-d", settings.dsn(), "-F", "c", "-f", str(full)])
+    dsn, env = pg_cli_target()
+    await _run_cli("pg_dump", ["-d", dsn, "-F", "c", "-f", str(full)], env=env)
     return filename
 
 

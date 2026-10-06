@@ -18,11 +18,13 @@ from .. import oauth
 from ..db import get_pool
 from ..handles import generate_unique_handle
 from ..security import hash_password, verify_password
+from ..password_policy import password_problem
 from ..session import (
     SESSION_COOKIE_NAME,
     clear_session_cookie,
     create_session,
     delete_session,
+    request_is_https,
     set_session_cookie,
 )
 
@@ -57,7 +59,7 @@ async def get_providers() -> dict:
 
 
 @router.post("/login")
-async def login(payload: LoginRequest, response: Response) -> dict:
+async def login(payload: LoginRequest, request: Request, response: Response) -> dict:
     username = (payload.username or "").strip()
     password = payload.password or ""
     if not username or not password:
@@ -77,7 +79,7 @@ async def login(payload: LoginRequest, response: Response) -> dict:
         )
 
     token = await create_session(user["username"])
-    set_session_cookie(response, token)
+    set_session_cookie(response, token, secure=request_is_https(request))
     return {"username": user["username"], "role": user["role"]}
 
 
@@ -86,7 +88,7 @@ async def logout(request: Request, response: Response) -> Response:
     token = request.cookies.get(SESSION_COOKIE_NAME)
     if token:
         await delete_session(token)
-    clear_session_cookie(response)
+    clear_session_cookie(response, secure=request_is_https(request))
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 
@@ -100,13 +102,11 @@ async def register(payload: RegisterRequest) -> dict:
             detail={"error": "validation_error", "message": "A valid e-mail address is required"},
         )
     password = payload.password or ""
-    if len(password) < 4:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "validation_error", "message": '"password" must be at least 4 characters'},
-        )
-
     normalized_email = email.lower()
+    problem = password_problem(password, normalized_email)
+    if problem:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": problem})
+
     pool = get_pool()
     existing = await pool.fetchrow("SELECT * FROM users WHERE username = $1", normalized_email)
     if existing:

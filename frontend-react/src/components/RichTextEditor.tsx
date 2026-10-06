@@ -26,6 +26,7 @@
 // como o original fazia com .innerHTML.
 // ════════════════════════════════════════════════
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { sanitizeRichHtml } from '../lib/safeHtml';
 
 export interface RichTextEditorHandle {
   getHtml(): string;
@@ -335,7 +336,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, { ariaLabel?: str
     setHtml(html: string) {
       const body = bodyRef.current;
       if (!body) return;
-      body.innerHTML = html;
+      body.innerHTML = sanitizeRichHtml(html);
       // Imagens que já vieram no HTML salvo (ex.: reabrindo um comando
       // existente com Details contendo imagens) também precisam da alça de
       // redimensionar — só as coladas na hora (via insertImage) ganham isso

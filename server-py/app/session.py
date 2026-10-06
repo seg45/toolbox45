@@ -21,7 +21,24 @@ class CurrentSession(TypedDict):
     auth_provider: str
 
 
-def set_session_cookie(response: Response, token: str) -> None:
+def request_is_https(request: Request) -> bool:
+    """A requisicao chegou por HTTPS? Atras do nginx (que termina o TLS) o
+    backend fala HTTP puro com ele, entao quem diz e o cabecalho
+    X-Forwarded-Proto -- o nginx SEMPRE o sobrescreve com $scheme (ver
+    frontend-react/nginx.conf), entao um cliente nao consegue forja-lo. Sem
+    proxy (testes, acesso direto ao backend) vale o esquema da propria URL."""
+    proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    if proto:
+        return proto == "https"
+    return request.url.scheme == "https"
+
+
+def set_session_cookie(response: Response, token: str, secure: bool = False) -> None:
+    # `secure`: o cookie so volta ao servidor por HTTPS (um atacante na rede
+    # nao o captura numa requisicao HTTP). So e ligado quando a requisicao
+    # veio por HTTPS (ver request_is_https) -- ligar incondicionalmente faria o
+    # navegador descartar o cookie num acesso HTTP direto (ex.: ambiente de
+    # desenvolvimento) e ninguem conseguiria entrar.
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
@@ -29,11 +46,12 @@ def set_session_cookie(response: Response, token: str) -> None:
         path="/",
         httponly=True,
         samesite="lax",
+        secure=secure,
     )
 
 
-def clear_session_cookie(response: Response) -> None:
-    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/", httponly=True, samesite="lax")
+def clear_session_cookie(response: Response, secure: bool = False) -> None:
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/", httponly=True, samesite="lax", secure=secure)
 
 
 async def create_session(username: str) -> str:

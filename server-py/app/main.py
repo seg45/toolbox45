@@ -178,7 +178,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # algum corpo malformado escapar disso (ex.: JSON invalido), ainda
     # assim volta no formato {error, message} em vez do formato padrao
     # (lista de erros) do FastAPI.
-    return JSONResponse(status_code=400, content={"error": "validation_error", "message": str(exc)})
+    # So "campo: motivo" -- sem o valor recebido (que str(exc) incluiria) nem
+    # detalhes internos do pydantic.
+    parts = []
+    for err in exc.errors():
+        loc = ".".join(str(p) for p in err.get("loc", ()) if p != "body")
+        parts.append(f"{loc}: {err.get('msg', 'invalid')}" if loc else str(err.get("msg", "invalid")))
+    return JSONResponse(status_code=400, content={"error": "validation_error", "message": "; ".join(parts) or "Invalid request"})
 
 
 app.include_router(auth_router.router)

@@ -13,6 +13,7 @@ filename vindo da URL, protegido por resolve_backup_path() (ver
 app/backup.py) contra path traversal -- 404 (nao 400) quando o nome nao
 "bate" ou o arquivo nao existe, mesmo comportamento do Node.
 """
+import logging
 import re
 from typing import Any
 
@@ -21,12 +22,22 @@ from fastapi.responses import FileResponse
 
 from .. import backup
 from ..audit import AUDIT_LOG_RETENTION_DAYS
-from ..config import settings
 from ..db import get_pool
 from ..deps import CurrentUser, require_admin
 from .system import _read_global_setting, _write_global_setting
 
+logger = logging.getLogger("toolbox45")
 router = APIRouter(tags=["backup"])
+
+# Mensagem devolvida ao cliente quando uma operacao de backup/restore falha. O
+# detalhe real (stderr do pg_dump/pg_restore, caminhos, host do banco...) vai
+# SO para o log do servidor -- nao para a resposta HTTP.
+_GENERIC_FAILURE = "The operation failed. See the server log for details."
+
+
+def _internal_error(action: str, err: Exception) -> HTTPException:
+    logger.error("[backup] %s falhou: %s", action, err, exc_info=err)
+    return HTTPException(status_code=500, detail={"error": "internal_error", "message": _GENERIC_FAILURE})
 
 
 # ════════════════════════════════════════════════
@@ -37,7 +48,7 @@ async def list_backups(user: CurrentUser = Depends(require_admin)) -> list:
     try:
         return backup.list_backup_files()
     except Exception as err:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail={"error": "internal_error", "message": str(err)}) from err
+        raise _internal_error("listar backups", err) from err
 
 
 @router.post("/api/backups", status_code=201)
@@ -45,7 +56,7 @@ async def create_backup(user: CurrentUser = Depends(require_admin)) -> dict:
     try:
         filename = await backup.perform_backup("backup")
     except Exception as err:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail={"error": "internal_error", "message": str(err)}) from err
+        raise _internal_error("criar backup", err) from err
     return {"filename": filename}
 
 
@@ -70,7 +81,7 @@ async def delete_backup(filename: str, user: CurrentUser = Depends(require_admin
     try:
         full.unlink()
     except Exception as err:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail={"error": "internal_error", "message": str(err)}) from err
+        raise _internal_error("excluir backup", err) from err
 
 
 @router.post("/api/backups/{filename}/restore")
@@ -82,9 +93,10 @@ async def restore_backup(filename: str, user: CurrentUser = Depends(require_admi
         raise HTTPException(status_code=404, detail={"error": "not_found"})
     try:
         await backup.perform_backup("pre-restore")
-        await backup._run_cli("pg_restore", ["--clean", "--if-exists", "--no-owner", "-d", settings.dsn(), str(full)])
+        dsn, env = backup.pg_cli_target()
+        await backup._run_cli("pg_restore", ["--clean", "--if-exists", "--no-owner", "-d", dsn, str(full)], env=env)
     except Exception as err:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail={"error": "internal_error", "message": str(err)}) from err
+        raise _internal_error("restaurar backup", err) from err
     return {"ok": True, "message": "Restore complete. Reload the page to see the restored data."}
 
 
@@ -160,7 +172,7 @@ async def get_audit_log(user: CurrentUser = Depends(require_admin)) -> list:
                 LIMIT 1000"""
         )
     except Exception as err:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail={"error": "internal_error", "message": str(err)}) from err
+        raise _internal_error("ler audit log", err) from err
     return [
         {**dict(r), "command_id": r["entity_id"], "command_name": r["entity_name"]}
         for r in rows

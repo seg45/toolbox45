@@ -47,7 +47,14 @@ consome bastante memória: em servidores pequenos (~1 GB de RAM) configure
 swap antes (ver "Problemas comuns", no fim deste arquivo). O app fica
 disponível em:
 
-    http://<ip-do-servidor>          (porta 80 — toolbox45-frontend)
+    https://<ip-do-servidor>         (porta 443 — toolbox45-frontend)
+
+A porta 80 só REDIRECIONA para HTTPS (exceto GET /api/health, usado em
+healthchecks): o cookie de sessão é marcado "Secure" e só trafega por HTTPS.
+No primeiro acesso o navegador avisa do certificado autoassinado (ver
+passo 6). Se um dia houver um proxy na frente que termine o TLS e fale HTTP
+com este nginx, remova o redirect da porta 80 em frontend-react/nginx.conf
+(senão dá loop) e repasse o cabeçalho X-Forwarded-Proto: https.
 
 Numa instalação NOVA: não precisa fazer mais nada. No primeiro boot o
 backend aplica o schema e semeia sozinho (só onde a tabela está vazia):
@@ -125,7 +132,9 @@ HTTPS já vem habilitado por padrão, sem nenhum passo manual: no primeiro
 boot, o toolbox45-backend gera automaticamente um certificado autoassinado
 (ensure_tls_bootstrap(), ver server-py/app/tls.py) e o grava num volume Docker
 compartilhado ("toolbox45-tls") com o toolbox45-frontend, que o serve em
-https://<ip-do-servidor> (porta 443) junto com o HTTP de sempre na porta 80.
+https://<ip-do-servidor> (porta 443); a porta 80 apenas redireciona para ele.
+O nginx também envia cabeçalhos de segurança (CSP, HSTS de 30 dias, etc.) e
+limita a taxa de login (~6/min por IP), de cadastro (~3/min) e da API.
 O navegador vai mostrar aviso de segurança enquanto o certificado for
 autoassinado — normal.
 

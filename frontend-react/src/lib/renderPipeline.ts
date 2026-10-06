@@ -27,6 +27,7 @@ import { dbLinesToTerm, resolveTokens, type TermLine, type Values } from './comm
 import type { LiveFilters } from './liveFilters';
 import { RESOLVERS } from './resolvers';
 import { stripVarMarkers } from './syntaxHighlight';
+import { escapeHtml } from './safeHtml';
 import type { Settings } from './settingsStore';
 
 // ── Constantes de Versão/Ambiente — porta de js/state.js ──────────────────
@@ -182,7 +183,7 @@ function envNoteHtmlFor(ce: string, vsid: string): string {
     case 'cluster':
       return 'Cluster: run on <strong>both members</strong>. Check the active member with <code>cphaprob stat</code>.';
     case 'vsx':
-      return `VSX: enter the VS with <code>vsenv ${vsid}</code> before running any command. <code>vsx stat -v</code> lists all IDs.`;
+      return `VSX: enter the VS with <code>vsenv ${escapeHtml(vsid)}</code> before running any command. <code>vsx stat -v</code> lists all IDs.`;
     case 'maestro':
       return 'Maestro: use <code>asg_cmd "..."</code> to broadcast to all SGMs. The <code>g_*</code> prefix aggregates output from all of them.';
     case 'mds':

@@ -27,6 +27,8 @@
 // ════════════════════════════════════════════════
 import { useEffect, useRef } from 'react';
 import { RichTextEditor, type RichTextEditorHandle } from '../RichTextEditor';
+import { sanitizeRichHtml } from '../../lib/safeHtml';
+import { SafeHtml } from '../SafeHtml';
 
 const CLONE_ICON = (
   <svg width="11" height="11" fill="none" viewBox="0 0 16 16">
@@ -45,7 +47,7 @@ const EDIT_ICON = (
 // nenhum) ainda é válida, então não basta olhar pro textContent.
 function isEmptyNoteHtml(html: string): boolean {
   const tmp = document.createElement('div');
-  tmp.innerHTML = html || '';
+  tmp.innerHTML = sanitizeRichHtml(html);
   const hasText = !!(tmp.textContent || '').trim();
   const hasImage = !!tmp.querySelector('img');
   return !hasText && !hasImage;
@@ -185,7 +187,7 @@ export function NoteCard({
       )}
       <div className="note-flat-body">
         {hasContent ? (
-          <div dangerouslySetInnerHTML={{ __html: note.description }} />
+          <SafeHtml html={note.description} />
         ) : (
           <span className="note-flat-empty">(empty note)</span>
         )}

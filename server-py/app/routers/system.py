@@ -33,17 +33,67 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from .. import oauth, tls
 from ..audit import log_audit
 from ..db import get_pool
-from ..deps import CurrentUser, require_admin, require_super_admin, require_user
+from ..deps import CurrentUser, get_optional_user, require_admin, require_super_admin, require_user, role_rank
 from ..image_dimensions import get_image_dimensions
 
 router = APIRouter(tags=["system"])
 
 GLOBAL_SETTINGS_USER = "__global_defaults__"
+
+# ── Validacao dos "baldes" chave/valor (user-data / global-settings) ──────────
+# Antes qualquer usuario autenticado gravava QUALQUER chave (inclusive as do
+# agendamento de backup e da aparencia global, que tem rotas proprias com
+# permissao mais alta) e com tamanho ilimitado (encher o banco). Agora: chave
+# restrita a um alfabeto seguro, valor so texto/numero/booleano com teto de
+# tamanho, teto de chaves por requisicao e por dono.
+KV_KEY_RE = re.compile(r"^[A-Za-z0-9_.:@+\-]{1,160}$")
+KV_MAX_VALUE_BYTES = 256 * 1024
+KV_MAX_KEYS_PER_REQUEST = 64
+KV_MAX_KEYS_PER_OWNER = 300
+# Chaves de /api/global-settings reservadas a rotas dedicadas (PUT
+# /api/backup-schedule exige admin; PUT /api/system/appearance exige
+# super_admin) -- nunca editaveis pelo balde generico, nem por admin.
+GLOBAL_RESERVED_PREFIXES = ("backupSchedule", "appearance")
+
+
+def _kv_error(code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=400, detail={"error": code, "message": message})
+
+
+def _validate_kv_body(body: Any, reserved_prefixes: tuple = ()) -> dict:
+    """Valida e normaliza o corpo {chave: valor}. Chaves com valor null/undefined
+    sao ignoradas (mesmo contrato de antes). Devolve {chave: valor_em_texto}."""
+    if not isinstance(body, dict):
+        raise _kv_error("validation_error", "Request body must be a JSON object of {key: value}")
+    clean: dict = {}
+    for key, val in body.items():
+        if val is None:
+            continue
+        if not isinstance(key, str) or not KV_KEY_RE.match(key):
+            raise _kv_error("validation_error", "Invalid key: use only letters, digits and _ . : @ + - (max 160 characters)")
+        if reserved_prefixes and key.startswith(reserved_prefixes):
+            raise _kv_error("validation_error", f'The key "{key}" is reserved and can\'t be set here')
+        if isinstance(val, (dict, list)):
+            raise _kv_error("validation_error", f'The value of "{key}" must be text, number or boolean')
+        text = str(val)
+        if len(text.encode("utf-8")) > KV_MAX_VALUE_BYTES:
+            raise _kv_error("too_large", f'The value of "{key}" is too large (max {KV_MAX_VALUE_BYTES // 1024} KB)')
+        clean[key] = text
+    if len(clean) > KV_MAX_KEYS_PER_REQUEST:
+        raise _kv_error("validation_error", f"Too many keys in one request (max {KV_MAX_KEYS_PER_REQUEST})")
+    return clean
+
+
+async def _check_kv_quota(pool, owner: str, incoming_keys) -> None:
+    rows = await pool.fetch("SELECT data_key FROM user_data WHERE username = $1", owner)
+    total = len({r["data_key"] for r in rows} | set(incoming_keys))
+    if total > KV_MAX_KEYS_PER_OWNER:
+        raise _kv_error("too_many_keys", f"Too many stored keys (max {KV_MAX_KEYS_PER_OWNER})")
 
 
 async def _read_user_data(pool, username: str) -> dict:
@@ -91,24 +141,31 @@ async def get_user_data(user: CurrentUser = Depends(require_user)) -> dict:
 
 @router.put("/api/user-data", status_code=204)
 async def update_user_data(body: Any = Body(default_factory=dict), user: CurrentUser = Depends(require_user)) -> None:
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "Request body must be a JSON object of {key: value}"})
+    clean = _validate_kv_body(body)
     pool = get_pool()
-    await _write_user_data(pool, user["username"], body)
+    await _check_kv_quota(pool, user["username"], clean.keys())
+    await _write_user_data(pool, user["username"], clean)
 
 
 @router.get("/api/global-settings")
 async def get_global_settings(user: CurrentUser = Depends(require_user)) -> dict:
     pool = get_pool()
-    return await _read_user_data(pool, GLOBAL_SETTINGS_USER)
+    data = await _read_user_data(pool, GLOBAL_SETTINGS_USER)
+    if role_rank(user["role"]) < 1:
+        # O agendamento de backup (horario, frequencia...) e dado operacional de
+        # admin -- usuario comum nao precisa ve-lo.
+        data = {k: v for k, v in data.items() if not k.startswith("backupSchedule")}
+    return data
 
 
 @router.put("/api/global-settings", status_code=204)
-async def update_global_settings(body: Any = Body(default_factory=dict), user: CurrentUser = Depends(require_user)) -> None:
-    if not isinstance(body, dict):
-        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "Request body must be a JSON object of {key: value}"})
+async def update_global_settings(body: Any = Body(default_factory=dict), user: CurrentUser = Depends(require_admin)) -> None:
+    # Defaults COMPARTILHADOS por todos: so admin grava (antes: qualquer usuario).
+    clean = _validate_kv_body(body, GLOBAL_RESERVED_PREFIXES)
     pool = get_pool()
-    await _write_user_data(pool, GLOBAL_SETTINGS_USER, body)
+    await _check_kv_quota(pool, GLOBAL_SETTINGS_USER, clean.keys())
+    await _write_user_data(pool, GLOBAL_SETTINGS_USER, clean)
+    await log_audit(user["username"], "update", "global_settings", None, "Global settings", f"Keys: {', '.join(sorted(clean)) or '(none)'}"[:500])
 
 
 # ════════════════════════════════════════════════
@@ -122,8 +179,22 @@ LOGO_MAX_DIMENSION = 4096
 LOGO_THEMES = {"light", "dark"}
 
 
+async def _viewer_is_admin(request: Request) -> bool:
+    """GET /api/system/logo e publico (a tela de login precisa dele); quem esta
+    logado como admin ve tambem QUEM atualizou o logo. Uma API key invalida
+    numa rota publica nao deve dar 401 -- aqui ela so conta como "nao admin"."""
+    try:
+        viewer = await get_optional_user(request)
+    except HTTPException:
+        return False
+    return bool(viewer and role_rank(viewer["role"]) >= 1)
+
+
 @router.get("/api/system/logo")
-async def get_logo() -> dict:
+async def get_logo(request: Request) -> dict:
+    # `updatedBy` e o e-mail do admin que trocou o logo -- nao e para o publico
+    # (esta rota responde sem login): so admins recebem esses campos.
+    show_who = await _viewer_is_admin(request)
     pool = get_pool()
     row = await pool.fetchrow(
         "SELECT image_data, mime_type, updated_at, updated_by, image_data_dark, mime_type_dark, updated_at_dark, updated_by_dark FROM system_logo WHERE id = 1"
@@ -134,8 +205,8 @@ async def get_logo() -> dict:
             "imageDataDark": None, "mimeTypeDark": None, "updatedAtDark": None, "updatedByDark": None,
         }
     return {
-        "imageData": row["image_data"], "mimeType": row["mime_type"], "updatedAt": row["updated_at"], "updatedBy": row["updated_by"],
-        "imageDataDark": row["image_data_dark"], "mimeTypeDark": row["mime_type_dark"], "updatedAtDark": row["updated_at_dark"], "updatedByDark": row["updated_by_dark"],
+        "imageData": row["image_data"], "mimeType": row["mime_type"], "updatedAt": row["updated_at"], "updatedBy": row["updated_by"] if show_who else None,
+        "imageDataDark": row["image_data_dark"], "mimeTypeDark": row["mime_type_dark"], "updatedAtDark": row["updated_at_dark"], "updatedByDark": row["updated_by_dark"] if show_who else None,
     }
 
 

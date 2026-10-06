@@ -27,7 +27,8 @@ abaixo):
    para de autenticar (`401 invalid_api_key`) mas continua listada até ser excluída
    manualmente. Excluir uma key (`DELETE /api/api-keys/:id`) é permanente — não existe
    mais "revogar" (soft-delete): a linha é removida da tabela e não pode ser recuperada.
-2. **Sessão** (cookie `tb45_session`, `HttpOnly`, 12h) — login com usuário/senha via
+2. **Sessão** (cookie `tb45_session`, `HttpOnly`, `SameSite=Lax`, 12h, e `Secure` sempre que a
+   requisição chega por HTTPS — atrás do nginx é sempre) — login com usuário/senha via
    `POST /api/auth/login` (ver **Login local e usuários** abaixo) OU login com Google
    (ver **Login com Google** abaixo); os dois usam exatamente o mesmo cookie/sessão — só
    muda a FORMA de chegar até ele. `authMethod` reporta `"local"` ou `"google"`
@@ -72,6 +73,14 @@ curl https://toolbox.seg45.com.br/api/commands \
 
 ## Formato de erro
 
+**Limites de taxa e de tamanho (nginx).** Por IP de origem: `POST /api/auth/login` aceita ~6
+tentativas por minuto (rajada de 8), `POST /api/auth/register` ~3 por minuto (rajada de 5) e o
+resto de `/api/*` 30 requisições por segundo (rajada de 60); acima disso a resposta é `429
+too_many_requests`. Corpo máximo: 16 KB em login/registro, 2 MB em `/api/user-data` e
+`/api/global-settings`, 20 MB nas demais rotas (`413 payload_too_large`). A porta 80 só
+redireciona (`301`) para HTTPS, exceto `GET /api/health`. Detalhes em
+`frontend-react/nginx.conf`.
+
 Respostas de erro (4xx/5xx) sempre têm o formato:
 ```json
 { "error": "validation_error", "message": "\"name\" is required" }
@@ -80,7 +89,11 @@ Códigos de `error` usados: `validation_error` (400), `not_found` (404), `confli
 `in_use` (409 — item de catálogo em uso por comandos), `protected` (409 — tópico
 protegido), `structural_dependency` (409 — parâmetro estrutural, ver Parâmetros),
 `invalid_api_key` (401), `invalid_credentials` (401 — login local), `forbidden` (403 —
-endpoint exige `role: admin`), `internal_error` (500). Alguns erros `in_use`/
+endpoint exige `role: admin`), `too_large` (400 — valor/imagem grande demais),
+`too_many_keys` (400 — teto de chaves em `/api/user-data`), `too_many_requests` (429 — limite
+de taxa do nginx, ver abaixo), `payload_too_large` (413 — corpo acima do limite da rota),
+`internal_error` (500 — a mensagem é sempre genérica; o detalhe só vai para o log do
+servidor). Alguns erros `in_use`/
 `structural_dependency` também trazem `"count": <n>`.
 
 ---
@@ -439,7 +452,15 @@ Loga com uma conta local (usuário/senha). Corpo: `{ "username": "admin", "passw
 "admin" }`. Sucesso: `200` `{ "username": "admin", "role": "super_admin" }` + `Set-Cookie:
 tb45_session=...` (`HttpOnly`, 12h). Falha: `401 invalid_credentials` (usuário local
 inexistente, senha errada, ou conta desabilitada). Rota pública (não exige sessão
-prévia — senão ninguém conseguiria logar).
+prévia — senão ninguém conseguiria logar). Limitada a ~6 tentativas/min por IP (`429`).
+
+### `POST /api/auth/register`
+Auto-cadastro público. Corpo `{ "email", "password" }`; a conta nasce **desabilitada,
+pendente de aprovação** por um admin → `201 { "status": "pending_approval" }`. A senha
+precisa ter de **8 a 256 caracteres** e não pode ser igual ao e-mail (`400
+validation_error`). `409` se o e-mail já existir. O e-mail **não é verificado** (não há
+envio de e-mail): ao aprovar, confira que o endereço é de quem você espera. Limitada a ~3
+cadastros/min por IP (`429`).
 
 ### `POST /api/auth/logout`
 Encerra a sessão ativa, local ou Google (limpa a linha em `sessions` e o cookie).
@@ -518,7 +539,14 @@ variáveis de ambiente obrigatórias acima não estiverem configuradas. Rota pú
 Destino do redirect de volta da Microsoft (`redirect_uri` registrado no Azure Portal —
 precisa ser EXATAMENTE `MICROSOFT_REDIRECT_URI`). Troca o `code` pelos tokens, confirma
 o e-mail via `GET https://graph.microsoft.com/oidc/userinfo` (diferente do Google, o
-provedor Microsoft não expõe um campo `email_verified` — só exige o e-mail presente), e:
+provedor Microsoft não expõe um campo `email_verified`, e o `email` é um atributo que o
+dono de **qualquer** tenant Azure AD consegue editar — o chamado "nOAuth"). Por isso o
+backend também lê o `id_token` e só aceita o e-mail se a identidade bater: com
+`MICROSOFT_TENANT_ID` igual a um **GUID**, o `tid` do token tem que ser desse tenant; com um
+domínio de tenant, o endpoint já é específico dele; com `common`/`organizations`/`consumers`,
+o `preferred_username` (UPN, cujo domínio é verificado no tenant de origem) tem que ser
+igual ao e-mail — senão `reason=email_not_verified`. Se o UPN da sua organização difere do
+e-mail, configure o ID do tenant em Settings → System → OAuth. Depois disso:
 - Se o e-mail já existe como usuário local/Google/NTLM (não como conta Microsoft) →
   recusa (evita account takeover) e redireciona para
   `login.html?microsoft=error&reason=account_exists_other_method`.
@@ -533,7 +561,8 @@ provedor Microsoft não expõe um campo `email_verified` — só exige o e-mail 
   `login.html?microsoft=success`.
 - Em qualquer falha, redireciona para `login.html?microsoft=error&reason=<motivo>`
   (`access_denied`, `invalid_state`, `account_exists_other_method`, `account_disabled`,
-  `not_configured`, entre outros) — `login.html` mostra a mensagem correspondente.
+  `not_configured`, `email_not_verified`, `tenant_mismatch`, `invalid_token`, entre
+  outros) — `login.html` mostra a mensagem correspondente.
 
 ### `GET /api/users` — **(super_admin)**
 Lista todo usuário já visto pela aplicação (contas locais, Google ou Microsoft — `auth_provider`
@@ -550,7 +579,7 @@ usuários** acima) — aqui, como em toda esta seção admin-only, vem sempre co
 handle de verdade (nunca mascarado).
 
 ### `POST /api/users` — **(super_admin)**
-Cria uma conta **local** — corpo `{ "username", "password" (≥4 caracteres), "role"? }`
+Cria uma conta **local** — corpo `{ "username", "password" (8 a 256 caracteres, diferente do e-mail), "role"? }`
 (`role` é `"user"` por padrão) → `201`. `400 validation_error` se `username` não for um
 e-mail válido (pedido do usuário: "remova o nome de usuário e trate tudo pelo email" —
 mesmo `EMAIL_RE`/normalização `.toLowerCase()` do auto-cadastro em `POST
@@ -560,7 +589,9 @@ semeada, não são migradas). `409 conflict` se o e-mail já existir.
 ### `PUT /api/users/:username` — **(super_admin)**
 Corpo parcial — qualquer combinação de `{ "role": "admin"|"user", "disabled": bool,
 "password": "..." }`. `password` só é aceito para contas locais (`400
-validation_error` para conta Google). Recusa com `409 conflict` qualquer mudança que
+validation_error` para conta Google; a mesma regra de 8 a 256 caracteres do cadastro vale
+para a senha nova — senhas antigas mais curtas continuam funcionando no login até serem
+trocadas). Recusa com `409 conflict` qualquer mudança que
 deixaria a aplicação **sem nenhum admin habilitado** (trava de segurança contra
 lockout).
 
@@ -589,9 +620,17 @@ antes vivia só no `localStorage` do navegador).
   usuário atual).
 - `PUT /api/user-data` → corpo `{ chave: valor, ... }`, upsert parcial (só as chaves
   enviadas; `null`/`undefined` são ignorados, não apagam a chave). `204`.
-- `GET`/`PUT /api/global-settings` → mesmo formato, mas grava sob um usuário sentinela
-  compartilhado (`__global_defaults__`) — são os **defaults** herdados por quem ainda
-  não tem preferência própria salva (não afeta quem já personalizou algo).
+- `GET /api/global-settings` → mesmo formato, mas lê de um usuário sentinela compartilhado
+  (`__global_defaults__`) — são os **defaults** herdados por quem ainda não tem preferência
+  própria salva. Quem não é admin não recebe as chaves `backupSchedule*`.
+- `PUT /api/global-settings` **(admin)** → grava nesses defaults compartilhados (antes
+  qualquer usuário logado gravava). As chaves `backupSchedule*` e `appearance*` são
+  **reservadas** (`400`): mudam só por `PUT /api/backup-schedule` (admin) e `PUT
+  /api/system/appearance` (super_admin).
+
+Validação (as duas rotas, `400 validation_error`/`too_large`/`too_many_keys`): chave com 1 a
+160 caracteres de `A-Z a-z 0-9 _ . : @ + -`; valor só texto, número ou booleano (objeto/lista
+é recusado), até 256 KB; até 64 chaves por requisição e 300 por dono.
 
 ---
 
@@ -721,6 +760,9 @@ Dumps do PostgreSQL via `pg_dump`/`pg_restore` (formato "custom"), guardados no 
 - `POST /api/backups` → cria um dump agora → `201 { "filename": "..." }`.
 - `GET /api/backups/:filename/download` → baixa o arquivo `.dump`.
 - `DELETE /api/backups/:filename` → apaga o arquivo → `204`.
+- Falhas de backup/restore respondem `500 internal_error` com mensagem genérica (o stderr
+  do `pg_dump`/`pg_restore` vai só para o log do backend). A senha do banco é passada ao
+  `pg_dump`/`pg_restore` pela variável `PGPASSWORD`, nunca na linha de comando.
 - `POST /api/backups/:filename/restore` → tira um snapshot de segurança do estado
   atual (prefixo `pre-restore-`) e então restaura (`pg_restore --clean --if-exists`) →
   `200 { "ok": true, "message": "..." }`.
@@ -747,6 +789,8 @@ independentes**, tema claro e tema escuro, cada uma com seu próprio salvar/remo
     "imageDataDark": null, "mimeTypeDark": null, "updatedAtDark": null, "updatedByDark": null }
   ```
   Sem logo customizado, todos os campos vêm `null` (o front usa o logo padrão).
+  `updatedBy`/`updatedByDark` (o e-mail de quem trocou o logo) só vêm preenchidos para
+  admins logados; para o público (sem sessão) são sempre `null`.
 - `PUT /api/system/logo` **(admin)** — corpo `{ "imageData": "data:image/png;base64,...", "theme": "light" }`
   (`theme` é `"light"` ou `"dark"`; qualquer outro valor ou a ausência vale `"light"`).
   Formatos aceitos: PNG, JPEG e WEBP; até **2 MB** (decodificado) e **4096×4096 px**.

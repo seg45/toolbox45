@@ -17,6 +17,7 @@ from ..audit import log_audit
 from ..db import get_pool
 from ..deps import CurrentUser, require_super_admin, role_rank
 from ..handles import generate_unique_handle
+from ..password_policy import password_problem
 from ..security import hash_password
 from .auth import EMAIL_RE
 
@@ -67,8 +68,9 @@ async def create_user(body: dict = Body(default_factory=dict), user: CurrentUser
     role = body.get("role")
     if not username_raw or not isinstance(username_raw, str) or not EMAIL_RE.match(username_raw.strip()):
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "A valid e-mail address is required"})
-    if not password or not isinstance(password, str) or len(password) < 4:
-        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": '"password" must be at least 4 characters'})
+    problem = password_problem(password, username_raw.strip())
+    if problem:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": problem})
     role_val = role if role in USER_ROLES else "user"
 
     pool = get_pool()
@@ -124,8 +126,9 @@ async def update_user(username: str, body: dict = Body(default_factory=dict), us
     if password:
         if not existing["is_local"]:
             raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "Only local users have a password"})
-        if not isinstance(password, str) or len(password) < 4:
-            raise HTTPException(status_code=400, detail={"error": "validation_error", "message": '"password" must be at least 4 characters'})
+        problem = password_problem(password, username)
+        if problem:
+            raise HTTPException(status_code=400, detail={"error": "validation_error", "message": problem})
         password_hash = hash_password(password)
 
     # Aprovando uma conta pendente (disabled: true -> false, primeira vez --

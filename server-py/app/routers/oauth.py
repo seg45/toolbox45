@@ -7,7 +7,11 @@ Nao inclui GET/PUT/DELETE /api/system/oauth/:provider (tela de config
 admin-only) -- isso fica pra fatia 9 "Sistema". A leitura da config (com
 prioridade do banco sobre o ambiente) ja existe desde ja em app/oauth.py.
 """
+import base64
+import json
+import re
 import secrets
+from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
@@ -17,7 +21,7 @@ from fastapi.responses import PlainTextResponse, RedirectResponse
 from .. import oauth
 from ..db import get_pool
 from ..handles import generate_unique_handle
-from ..session import create_session, set_session_cookie
+from ..session import create_session, request_is_https, set_session_cookie
 
 router = APIRouter(prefix="/api/auth", tags=["oauth"])
 
@@ -29,12 +33,69 @@ _STATE_COOKIE_MAX_AGE = 300  # 5 min -- so durante a ida-e-volta do consentiment
 _HTTP_TIMEOUT = 15.0
 
 
-def _set_state_cookie(response: RedirectResponse, name: str, value: str) -> None:
-    response.set_cookie(key=name, value=value, max_age=_STATE_COOKIE_MAX_AGE, path="/", httponly=True, samesite="lax")
+_GUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+# Endpoints "multi-tenant" da Microsoft: aceitam contas de QUALQUER organizacao
+# (e contas pessoais) -- o `email` que vem delas NAO e verificado.
+_MS_MULTI_TENANT = {"common", "organizations", "consumers"}
 
 
-def _clear_state_cookie(response: RedirectResponse, name: str) -> None:
-    response.delete_cookie(key=name, path="/", httponly=True, samesite="lax")
+def decode_jwt_claims(token) -> Optional[dict]:
+    """Le as claims de um JWT SEM verificar a assinatura. E aceitavel aqui
+    porque o id_token chega direto do endpoint de token da Microsoft, numa
+    chamada HTTPS que NOS fizemos com o client_secret (OIDC Core 3.1.3.7: a
+    validacao do TLS/servidor substitui a assinatura nesse fluxo) -- ele nunca
+    vem do navegador do usuario."""
+    try:
+        parts = str(token).split(".")
+        if len(parts) != 3:
+            return None
+        payload = parts[1] + "=" * (-len(parts[1]) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")))
+        return claims if isinstance(claims, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def microsoft_identity_problem(tenant_id: Optional[str], client_id: Optional[str], claims: Optional[dict], email: str) -> Optional[str]:
+    """Defesa contra o "nOAuth": o `email` do userinfo da Microsoft e um atributo
+    EDITAVEL e nao verificado -- quem cria o proprio tenant no Azure AD consegue
+    por la o e-mail de qualquer pessoa. Como o login casa a conta pelo e-mail,
+    isso permitiria entrar como outro usuario (ou pedir aprovacao se passando
+    por ele). Por isso o e-mail so e aceito quando a identidade bate com algo
+    que o provedor garante:
+      * tenant fixo (GUID): o id_token tem que ser DAQUELE tenant (tid) -- so
+        usuarios da organizacao entram, e ela e dona dos e-mails;
+      * tenant por dominio (ex.: contoso.onmicrosoft.com): o endpoint de
+        autorizacao ja e especifico do tenant;
+      * common/organizations/consumers: o `preferred_username` (UPN, cujo
+        dominio precisa ser verificado no tenant de origem) tem que ser igual ao
+        e-mail -- um tenant do atacante nao consegue ter um UPN @empresa.com.
+        Se o UPN da sua organizacao difere do e-mail, configure o ID do tenant
+        em Settings -> System -> OAuth.
+    Devolve o codigo de motivo (vai para /login.html?microsoft=error&reason=...)
+    ou None se esta tudo certo."""
+    if not claims:
+        return "invalid_token"
+    if not client_id or claims.get("aud") != client_id:
+        return "invalid_token"
+    tid = str(claims.get("tid") or "").lower()
+    if not tid:
+        return "invalid_token"
+    tenant = (tenant_id or "common").strip().lower()
+    if _GUID_RE.match(tenant):
+        return None if tid == tenant else "tenant_mismatch"
+    if tenant in _MS_MULTI_TENANT:
+        upn = str(claims.get("preferred_username") or "").strip().lower()
+        return None if upn and upn == email else "email_not_verified"
+    return None
+
+
+def _set_state_cookie(response: RedirectResponse, name: str, value: str, secure: bool = False) -> None:
+    response.set_cookie(key=name, value=value, max_age=_STATE_COOKIE_MAX_AGE, path="/", httponly=True, samesite="lax", secure=secure)
+
+
+def _clear_state_cookie(response: RedirectResponse, name: str, secure: bool = False) -> None:
+    response.delete_cookie(key=name, path="/", httponly=True, samesite="lax", secure=secure)
 
 
 async def _provision_or_login(email: str, provider: str, created_by: str):
@@ -77,7 +138,7 @@ async def _provision_or_login(email: str, provider: str, created_by: str):
 # ──────────────────────────── Google ────────────────────────────
 
 @router.get("/google")
-async def google_login():
+async def google_login(request: Request):
     cfg = oauth.google_config
     if not cfg.enabled:
         return PlainTextResponse("Google login is not configured on this server.", status_code=503)
@@ -91,15 +152,17 @@ async def google_login():
         "prompt": "select_account",
     })
     response = RedirectResponse(f"https://accounts.google.com/o/oauth2/v2/auth?{query}", status_code=302)
-    _set_state_cookie(response, OAUTH_STATE_COOKIE, state)
+    _set_state_cookie(response, OAUTH_STATE_COOKIE, state, secure=request_is_https(request))
     return response
 
 
 @router.get("/google/callback")
 async def google_callback(request: Request):
+    _sec = request_is_https(request)
+
     def failure(reason: str) -> RedirectResponse:
         r = RedirectResponse(f"/login.html?google=error&reason={reason}", status_code=302)
-        _clear_state_cookie(r, OAUTH_STATE_COOKIE)
+        _clear_state_cookie(r, OAUTH_STATE_COOKIE, secure=_sec)
         return r
 
     cfg = oauth.google_config
@@ -153,20 +216,20 @@ async def google_callback(request: Request):
         return failure(payload)
     if outcome == "pending":
         r = RedirectResponse("/login.html?google=pending", status_code=302)
-        _clear_state_cookie(r, OAUTH_STATE_COOKIE)
+        _clear_state_cookie(r, OAUTH_STATE_COOKIE, secure=_sec)
         return r
 
     token = await create_session(payload["username"])
     r = RedirectResponse("/login.html?google=success", status_code=302)
-    _clear_state_cookie(r, OAUTH_STATE_COOKIE)
-    set_session_cookie(r, token)
+    _clear_state_cookie(r, OAUTH_STATE_COOKIE, secure=_sec)
+    set_session_cookie(r, token, secure=_sec)
     return r
 
 
 # ──────────────────────────── Microsoft ────────────────────────────
 
 @router.get("/microsoft")
-async def microsoft_login():
+async def microsoft_login(request: Request):
     cfg = oauth.microsoft_config
     if not cfg.enabled:
         return PlainTextResponse("Microsoft login is not configured on this server.", status_code=503)
@@ -184,15 +247,17 @@ async def microsoft_login():
     response = RedirectResponse(
         f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize?{query}", status_code=302
     )
-    _set_state_cookie(response, OAUTH_STATE_COOKIE_MS, state)
+    _set_state_cookie(response, OAUTH_STATE_COOKIE_MS, state, secure=request_is_https(request))
     return response
 
 
 @router.get("/microsoft/callback")
 async def microsoft_callback(request: Request):
+    _sec = request_is_https(request)
+
     def failure(reason: str) -> RedirectResponse:
         r = RedirectResponse(f"/login.html?microsoft=error&reason={reason}", status_code=302)
-        _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS)
+        _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS, secure=_sec)
         return r
 
     cfg = oauth.microsoft_config
@@ -245,16 +310,22 @@ async def microsoft_callback(request: Request):
         return failure("email_not_verified")
     email = str(profile["email"]).lower()
 
+    problem = microsoft_identity_problem(
+        cfg.tenant_id, cfg.client_id, decode_jwt_claims(tokens.get("id_token")), email
+    )
+    if problem:
+        return failure(problem)
+
     outcome, payload = await _provision_or_login(email, "microsoft", "microsoft-oauth")
     if outcome == "failure":
         return failure(payload)
     if outcome == "pending":
         r = RedirectResponse("/login.html?microsoft=pending", status_code=302)
-        _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS)
+        _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS, secure=_sec)
         return r
 
     token = await create_session(payload["username"])
     r = RedirectResponse("/login.html?microsoft=success", status_code=302)
-    _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS)
-    set_session_cookie(r, token)
+    _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS, secure=_sec)
+    set_session_cookie(r, token, secure=_sec)
     return r

@@ -35,8 +35,8 @@ export function NewUserModal({ onClose, onCreated }: { onClose: () => void; onCr
 
   async function handleSubmit() {
     const trimmed = username.trim();
-    if (!EMAIL_RE.test(trimmed) || password.length < 4) {
-      setError('A valid e-mail address is required, and the password must be at least 4 characters.');
+    if (!EMAIL_RE.test(trimmed) || password.length < 8) {
+      setError('A valid e-mail address is required, and the password must be at least 8 characters.');
       return;
     }
     setBusy(true);

@@ -17,7 +17,7 @@
 # desligado por padrão porque é uma tentativa de login de verdade (aparece no
 # log de acesso); rode só no seu próprio servidor.
 #
-# Variáveis opcionais: DC="docker compose", BASE_URL=http://localhost,
+# Variáveis opcionais: DC="docker compose", BASE_URL=https://localhost, HTTP_URL=http://localhost,
 # PSQL="psql ... -At" (substitui o acesso ao banco via container; usado nos
 # testes).
 # ════════════════════════════════════════════════════════════════════════
@@ -25,7 +25,8 @@ set -u
 cd "$(dirname "$0")/.." || exit 2
 
 DC="${DC:-docker compose}"
-BASE_URL="${BASE_URL:-http://localhost}"
+BASE_URL="${BASE_URL:-https://localhost}"   # o app agora só responde em HTTPS (a porta 80 redireciona)
+HTTP_URL="${HTTP_URL:-http://localhost}"
 CHECK_DEFAULT_ADMIN=0
 [ "${1:-}" = "--check-default-admin" ] && CHECK_DEFAULT_ADMIN=1
 
@@ -57,7 +58,9 @@ expect_zero() { # descricao, query que devolve um inteiro
     *) bad "$1: $n registro(s)" ;;
   esac
 }
-http_code() { local c; c=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "$@" 2>/dev/null); echo "${c:-000}"; }
+# -k: o teste é contra o próprio servidor (localhost), cujo certificado é para o
+# domínio público; a validade do certificado é checada à parte, na seção 4.
+http_code() { local c; c=$(curl -sk -o /dev/null -m 10 -w '%{http_code}' "$@" 2>/dev/null); echo "${c:-000}"; }
 
 printf 'Toolbox45 — health check em %s (%s)\n' "$(hostname)" "$(date '+%F %T %Z')"
 
@@ -117,9 +120,16 @@ fi
 
 # ──────────────────────────────────────────────────────────────────────
 sec "3. Endpoints HTTP/HTTPS"
-body=$(curl -s -m 10 "$BASE_URL/api/health" 2>/dev/null)
+body=$(curl -sk -m 10 "$BASE_URL/api/health" 2>/dev/null)
 echo "$body" | grep -q '"ok":[ ]*true' && ok "GET /api/health → $body" || bad "GET /api/health inesperado: $(printf '%s' "${body:-sem resposta}" | head -c 100)"
-code=$(http_code -k "https://localhost/api/health"); [ "$code" = 200 ] && ok "HTTPS 443 /api/health → 200" || bad "HTTPS 443 /api/health → $code"
+code=$(http_code "$HTTP_URL/api/health"); [ "$code" = 200 ] && ok "HTTP 80 /api/health → 200 (healthcheck em HTTP puro)" || bad "HTTP 80 /api/health → $code"
+loc=$(curl -sk -m 10 -o /dev/null -w '%{http_code} %{redirect_url}' "$HTTP_URL/" 2>/dev/null)
+case "$loc" in "301 https://"*) ok "HTTP 80 redireciona para HTTPS ($loc)" ;; *) bad "HTTP 80 / não redireciona para HTTPS (recebi: ${loc:-sem resposta}) — ver frontend-react/nginx.conf" ;; esac
+hdrs=$(curl -skI -m 10 "$BASE_URL/" 2>/dev/null | tr -d '\r')
+for h in "Content-Security-Policy" "Strict-Transport-Security" "X-Content-Type-Options" "X-Frame-Options" "Referrer-Policy"; do
+  echo "$hdrs" | grep -qi "^$h:" && ok "cabeçalho $h presente" || warn "cabeçalho $h ausente em $BASE_URL/ (imagem do frontend desatualizada?)"
+done
+echo "$hdrs" | grep -qi "^server: nginx/" && warn "o nginx expõe a versão no cabeçalho Server (server_tokens off)" || true
 for path in / /login.html /api/auth/providers /api/system/appearance /api/system/logo /img/logo-toolbox45.png; do
   code=$(http_code "$BASE_URL$path"); [ "$code" = 200 ] && ok "GET $path → 200" || bad "GET $path → $code"
 done
@@ -128,7 +138,7 @@ for path in /api/commands /api/me /api/users /api/api-keys /api/backups /api/aud
   case "$code" in 401|403) ok "GET $path sem sessão → $code (protegido)" ;; *) bad "GET $path sem sessão → $code (deveria exigir login: 401/403)" ;; esac
 done
 # Assets estáticos referenciados pelo index.html (pega o bug de permissão 403 do nginx).
-assets=$(curl -s -m 10 "$BASE_URL/" 2>/dev/null | grep -o '/assets/[^"]*\.\(js\|css\)' | sort -u)
+assets=$(curl -sk -m 10 "$BASE_URL/" 2>/dev/null | grep -o '/assets/[^"]*\.\(js\|css\)' | sort -u)
 if [ -z "$assets" ]; then bad "index.html não referencia nenhum /assets/*.js|css"; else
   na=0; nb=0
   for a in $assets; do
@@ -136,7 +146,7 @@ if [ -z "$assets" ]; then bad "index.html não referencia nenhum /assets/*.js|cs
   done
   [ "$nb" = 0 ] && ok "$na asset(s) do index.html respondem 200"
 fi
-t=$(curl -s -o /dev/null -m 10 -w '%{time_total}' "$BASE_URL/api/health" 2>/dev/null || echo 99)
+t=$(curl -sk -o /dev/null -m 10 -w '%{time_total}' "$BASE_URL/api/health" 2>/dev/null || echo 99)
 awk -v t="$t" 'BEGIN{exit !(t<1.0)}' && ok "latência de /api/health: ${t}s" || warn "latência de /api/health alta: ${t}s"
 if command -v ss >/dev/null 2>&1; then
   exposed=$(ss -ltnH 2>/dev/null | awk '{print $4}' | grep -E '(^|:)(5432|8000)$' | grep -v -E '^(127\.0\.0\.1|\[::1\]):' | head -2)
@@ -235,6 +245,18 @@ if [ "$HAVE_DOCKER" = 1 ]; then
   [ "${ng:-0}" = 0 ] && ok "nginx: sem [error]" || warn "nginx: $ng linha(s) [error]"
   db=$($DC logs --since 24h toolbox45-db 2>&1 | grep -c -E "FATAL|PANIC|ERROR" || true)
   [ "${db:-0}" = 0 ] && ok "postgres: sem FATAL/ERROR" || warn "postgres: $db linha(s) FATAL/ERROR"
+fi
+if [ "$HAVE_DOCKER" = 1 ]; then
+  # Os limites de taxa do nginx (login/registro/API) são POR IP de origem. Se o
+  # Docker entregar todas as conexões com o IP do gateway da bridge (172.x.0.1),
+  # todos os usuários passam a dividir o mesmo limite: 6 logins/min no total.
+  # Olha só linhas com mais de 1 min (as do próprio health check vêm do gateway).
+  ips=$($DC logs --since 24h --until 1m toolbox45-frontend 2>/dev/null | grep -E '^toolbox45-frontend[[:space:]]*\|[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ' | sed -E 's/^[^|]*\|[[:space:]]*([0-9.]+) .*/\1/' | sort | uniq -c | sort -rn)
+  nips=$(printf '%s\n' "$ips" | grep -c . || true); ntot=$(printf '%s\n' "$ips" | awk '{s+=$1} END{print s+0}')
+  if [ "${ntot:-0}" -lt 20 ]; then info "IP de origem nos logs do nginx: poucos acessos para avaliar ($ntot)"
+  elif [ "$nips" = 1 ] && printf '%s' "$ips" | grep -q -E ' (172\.(1[6-9]|2[0-9]|3[01])|10)\.'; then
+    warn "todas as conexões chegam ao nginx com o mesmo IP de gateway ($(printf '%s' "$ips" | awk '{print $2}')) — o limite de taxa por IP vira GLOBAL; investigar o proxy do Docker (userland-proxy) antes de manter limit_req"
+  else ok "IP de origem preservado nos logs do nginx ($nips IP(s) distintos em $ntot acessos)"; fi
 fi
 kills=$(journalctl -k -o short-iso --since "24 hours ago" 2>/dev/null | grep "Out of memory: Killed process")
 nk=$(printf '%s' "$kills" | grep -c . || true)
