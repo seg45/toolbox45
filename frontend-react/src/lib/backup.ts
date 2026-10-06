@@ -118,3 +118,24 @@ export async function fetchAuditLog(): Promise<AuditLogRow[]> {
   if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
   return res.json();
 }
+
+// ── Access log (eventos de acesso — só super admin) ───────────────────
+
+export interface AuthEventRow {
+  id: number;
+  ts: string;
+  event: string;
+  username: string | null;
+  ip: string | null;
+  user_agent: string | null;
+  detail: string | null;
+}
+
+// GET /api/auth-events (super_admin) -> mais recente primeiro; `event` filtra por tipo.
+export async function fetchAuthEvents(event?: string): Promise<AuthEventRow[]> {
+  const qs = new URLSearchParams({ limit: '500' });
+  if (event) qs.set('event', event);
+  const res = await fetch(`/api/auth-events?${qs.toString()}`);
+  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
+  return res.json();
+}

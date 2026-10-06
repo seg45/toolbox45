@@ -37,7 +37,7 @@ SETUP_LOCK_KEY = 45001  # pg_advisory_xact_lock: serializa duas configuracoes si
 USERNAME_REFERENCES = [
     ("commands", "created_by"), ("commands", "modified_by"),
     ("user_favorites", "username"), ("folders", "username"), ("notes", "username"),
-    ("user_data", "username"), ("audit_log", "username"),
+    ("user_data", "username"), ("audit_log", "username"), ("auth_events", "username"),
     ("oauth_settings", "updated_by"), ("system_logo", "updated_by"), ("system_logo", "updated_by_dark"),
     ("api_keys", "created_by"), ("users", "created_by"),
     ("shares", "grantor_username"), ("shares", "grantee_username"),

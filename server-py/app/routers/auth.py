@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from .. import oauth, setup
+from ..auth_events import log_auth_event
 from ..db import get_pool
 from ..handles import generate_unique_handle
 from ..login_guard import client_ip, login_limiter
@@ -33,7 +34,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # Mesma regex de server/index.js (EMAIL_RE) -- validacao simples de formato,
 # nao de existencia real do dominio/caixa postal.
-EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+# `\x00` fora: o Postgres recusa o byte NUL em TEXT (daria 500 em vez de 400).
+EMAIL_RE = re.compile(r"^[^\s@\x00]+@[^\s@\x00]+\.[^\s@\x00]+$")
 
 
 # Campos Optional (nao obrigatorios pro pydantic) DE PROPOSITO: um corpo sem
@@ -107,6 +109,7 @@ async def initial_setup(payload: SetupRequest, request: Request, response: Respo
         )
     token = await create_session(email)
     set_session_cookie(response, token, secure=request_is_https(request))
+    await log_auth_event("setup_completed", request=request, username=email, detail=f"mode={mode}")
     return {"username": email, "role": "super_admin", "mode": mode}
 
 
@@ -124,6 +127,10 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
     wait = login_limiter.retry_after(ip, username)
     if wait:
         # Bloqueado: responde sem calcular scrypt (rejeicao barata).
+        await log_auth_event(
+            "login_blocked", request=request, ip=ip, username=username, require_email=True,
+            detail=f"retry_after={wait}s",
+        )
         raise HTTPException(
             status_code=429,
             detail={
@@ -145,18 +152,22 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
         )
 
     pool = get_pool()
-    user = await pool.fetchrow(
+    # Byte NUL no usuario: o Postgres recusaria a consulta (500); trata como conta inexistente.
+    user = None if "\x00" in username else await pool.fetchrow(
         "SELECT * FROM users WHERE username = $1 AND is_local = 1", username
     )
     if user and not user["disabled"]:
         ok = await verify_password_async(password, user["password_hash"])
+        why = "bad_password"
     else:
         # Usuario inexistente/desativado: gasta o mesmo scrypt, para o tempo
         # de resposta nao revelar quais contas existem.
         await burn_verify(password)
         ok = False
+        why = "account_disabled" if user else "unknown_user"
     if not ok:
         login_limiter.record_failure(ip, username)
+        await log_auth_event("login_failed", request=request, ip=ip, username=username, require_email=True, detail=why)
         raise HTTPException(
             status_code=401,
             detail={"error": "invalid_credentials", "message": "Invalid username or password"},
@@ -165,6 +176,7 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
 
     token = await create_session(user["username"])
     set_session_cookie(response, token, secure=request_is_https(request))
+    await log_auth_event("login_success", request=request, ip=ip, username=user["username"])
     return {"username": user["username"], "role": user["role"]}
 
 
@@ -179,7 +191,7 @@ async def logout(request: Request, response: Response) -> Response:
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest) -> dict:
+async def register(payload: RegisterRequest, request: Request) -> dict:
     email = (payload.email or "").strip()
     if not email or not EMAIL_RE.match(email):
         raise HTTPException(
@@ -241,6 +253,7 @@ async def register(payload: RegisterRequest) -> dict:
             "DELETE FROM audit_log WHERE ts < NOW() - INTERVAL '30 days'"
         )
 
+    await log_auth_event("register", request=request, username=normalized_email, detail="pending_approval")
     return {
         "status": "pending_approval",
         "message": "Your account was created and is pending administrator approval.",

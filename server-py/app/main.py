@@ -106,6 +106,7 @@ from . import setup as setup_mod
 from .security import HashingBusy
 from .routers import api_keys as api_keys_router
 from .routers import auth as auth_router
+from .routers import auth_events as auth_events_router
 from .routers import backup as backup_router
 from .routers import catalog as catalog_router
 from .routers import commands as commands_router
@@ -132,6 +133,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Carrega a config efetiva de OAuth (banco > ambiente -- ver
     # app/oauth.py) DEPOIS do pool existir, mesma ordem do
     # reloadOAuthConfig() no startup IIFE do Node.
+    # Secrets OAuth ainda em texto puro (instalacao antiga) -> cifrados, se houver
+    # TOOLBOX45_SECRET_KEY (ver app/secrets_box.py).
+    await oauth.encrypt_legacy_secrets()
     await oauth.reload_oauth_config()
     # A conta 'admin' ainda tem a senha padrao? (ver app/setup.py)
     await setup_mod.refresh_default_admin_state()
@@ -216,6 +220,7 @@ app.include_router(catalog_router.router)
 app.include_router(system_router.router)
 app.include_router(api_keys_router.router)
 app.include_router(backup_router.router)
+app.include_router(auth_events_router.router)
 
 
 @app.get("/api/health")

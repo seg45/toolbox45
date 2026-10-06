@@ -21,6 +21,7 @@ from fastapi.responses import PlainTextResponse, RedirectResponse
 from .. import oauth
 from ..db import get_pool
 from ..handles import generate_unique_handle
+from ..auth_events import log_auth_event
 from ..session import create_session, request_is_https, set_session_cookie
 
 router = APIRouter(prefix="/api/auth", tags=["oauth"])
@@ -165,20 +166,26 @@ async def google_callback(request: Request):
         _clear_state_cookie(r, OAUTH_STATE_COOKIE, secure=_sec)
         return r
 
+    ctx = {"email": None}
+
+    async def fail(reason: str) -> RedirectResponse:
+        await log_auth_event("oauth_failed", request=request, username=ctx["email"], detail=f"google:{reason}")
+        return failure(reason)
+
     cfg = oauth.google_config
     if not cfg.enabled:
-        return failure("not_configured")
+        return await fail("not_configured")
 
     qp = request.query_params
     if qp.get("error"):
-        return failure("access_denied")
+        return await fail("access_denied")
     state = qp.get("state")
     cookie_state = request.cookies.get(OAUTH_STATE_COOKIE)
     if not state or not cookie_state or state != cookie_state:
-        return failure("invalid_state")
+        return await fail("invalid_state")
     code = qp.get("code")
     if not code:
-        return failure("missing_code")
+        return await fail("missing_code")
 
     try:
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
@@ -193,7 +200,7 @@ async def google_callback(request: Request):
                 },
             )
             if token_res.status_code >= 400:
-                return failure("token_exchange_failed")
+                return await fail("token_exchange_failed")
             tokens = token_res.json()
 
             profile_res = await client.get(
@@ -201,25 +208,28 @@ async def google_callback(request: Request):
                 headers={"Authorization": f"Bearer {tokens.get('access_token')}"},
             )
             if profile_res.status_code >= 400:
-                return failure("profile_fetch_failed")
+                return await fail("profile_fetch_failed")
             profile = profile_res.json()
     except httpx.HTTPError:
-        return failure("internal_error")
+        return await fail("internal_error")
 
     email_verified = profile.get("email_verified")
     if not profile.get("email") or email_verified not in (True, "true"):
-        return failure("email_not_verified")
+        return await fail("email_not_verified")
     email = str(profile["email"]).lower()
+    ctx["email"] = email
 
     outcome, payload = await _provision_or_login(email, "google", "google-oauth")
     if outcome == "failure":
-        return failure(payload)
+        return await fail(payload)
     if outcome == "pending":
+        await log_auth_event("oauth_pending", request=request, username=email, detail="google")
         r = RedirectResponse("/login.html?google=pending", status_code=302)
         _clear_state_cookie(r, OAUTH_STATE_COOKIE, secure=_sec)
         return r
 
     token = await create_session(payload["username"])
+    await log_auth_event("oauth_login", request=request, username=payload["username"], detail="google")
     r = RedirectResponse("/login.html?google=success", status_code=302)
     _clear_state_cookie(r, OAUTH_STATE_COOKIE, secure=_sec)
     set_session_cookie(r, token, secure=_sec)
@@ -260,20 +270,26 @@ async def microsoft_callback(request: Request):
         _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS, secure=_sec)
         return r
 
+    ctx = {"email": None}
+
+    async def fail(reason: str) -> RedirectResponse:
+        await log_auth_event("oauth_failed", request=request, username=ctx["email"], detail=f"microsoft:{reason}")
+        return failure(reason)
+
     cfg = oauth.microsoft_config
     if not cfg.enabled:
-        return failure("not_configured")
+        return await fail("not_configured")
 
     qp = request.query_params
     if qp.get("error"):
-        return failure("access_denied")
+        return await fail("access_denied")
     state = qp.get("state")
     cookie_state = request.cookies.get(OAUTH_STATE_COOKIE_MS)
     if not state or not cookie_state or state != cookie_state:
-        return failure("invalid_state")
+        return await fail("invalid_state")
     code = qp.get("code")
     if not code:
-        return failure("missing_code")
+        return await fail("missing_code")
 
     tenant = cfg.tenant_id or "common"
     try:
@@ -290,7 +306,7 @@ async def microsoft_callback(request: Request):
                 },
             )
             if token_res.status_code >= 400:
-                return failure("token_exchange_failed")
+                return await fail("token_exchange_failed")
             tokens = token_res.json()
 
             profile_res = await client.get(
@@ -298,33 +314,36 @@ async def microsoft_callback(request: Request):
                 headers={"Authorization": f"Bearer {tokens.get('access_token')}"},
             )
             if profile_res.status_code >= 400:
-                return failure("profile_fetch_failed")
+                return await fail("profile_fetch_failed")
             profile = profile_res.json()
     except httpx.HTTPError:
-        return failure("internal_error")
+        return await fail("internal_error")
 
     # Diferente do Google, o userinfo do Microsoft nao devolve
     # "email_verified" -- so exige que o e-mail tenha vindo preenchido
     # (mesmo comportamento do Node).
     if not profile.get("email"):
-        return failure("email_not_verified")
+        return await fail("email_not_verified")
     email = str(profile["email"]).lower()
+    ctx["email"] = email
 
     problem = microsoft_identity_problem(
         cfg.tenant_id, cfg.client_id, decode_jwt_claims(tokens.get("id_token")), email
     )
     if problem:
-        return failure(problem)
+        return await fail(problem)
 
     outcome, payload = await _provision_or_login(email, "microsoft", "microsoft-oauth")
     if outcome == "failure":
-        return failure(payload)
+        return await fail(payload)
     if outcome == "pending":
+        await log_auth_event("oauth_pending", request=request, username=email, detail="microsoft")
         r = RedirectResponse("/login.html?microsoft=pending", status_code=302)
         _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS, secure=_sec)
         return r
 
     token = await create_session(payload["username"])
+    await log_auth_event("oauth_login", request=request, username=payload["username"], detail="microsoft")
     r = RedirectResponse("/login.html?microsoft=success", status_code=302)
     _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS, secure=_sec)
     set_session_cookie(r, token, secure=_sec)

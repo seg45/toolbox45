@@ -5,7 +5,9 @@ services:
   # de primeira instalação (idempotente). Sem "ports:" — não é alcançável de
   # fora do host, só pelo toolbox45-backend via rede interna do compose.
   toolbox45-db:
-    image: postgres:16-alpine
+    # Imagem FIXADA por digest (auditoria de seguranca, out/2026) -- atualizar com
+    # scripts/update-image-digests.sh (e fazer backup antes de trocar a imagem).
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     container_name: toolbox45-db
     restart: unless-stopped
     # Prioridade de sobrevivência no OOM: o docker01 tem ~1 GiB de RAM e um
@@ -15,6 +17,25 @@ services:
     # prefere matar processos do build (que são descartáveis) a este
     # container. (-500 numa escala de -1000..1000; padrão = 0.)
     oom_score_adj: -500
+    # Hardening (auditoria de seguranca, out/2026): sem escalada de privilegio,
+    # sem capabilities alem das que o entrypoint do Postgres usa (chown do
+    # diretorio de dados e troca para o usuario `postgres`) e rootfs
+    # somente-leitura (so o volume de dados e o tmpfs abaixo sao graváveis).
+    # Se algum dia o container nao subir apos mexer nisto, ver `docker compose logs`.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/postgresql
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-toolbox45}"
       POSTGRES_USER: "${POSTGRES_USER:-toolbox45}"
@@ -47,6 +68,16 @@ services:
     # Ver o racional em toolbox45-db acima: protege a API de produção quando
     # um build no mesmo host estoura a RAM.
     oom_score_adj: -500
+    # Hardening (ver toolbox45-db): o backend ja roda como usuario nao-root
+    # (uid 999); aqui some qualquer capability, a escalada de privilegio e a
+    # escrita no rootfs. Grava so nos volumes (backups, tls) e em /tmp (tmpfs).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       toolbox45-db:
         condition: service_healthy
@@ -94,6 +125,11 @@ services:
       MICROSOFT_CLIENT_SECRET: "${MICROSOFT_CLIENT_SECRET:-}"
       MICROSOFT_REDIRECT_URI: "${MICROSOFT_REDIRECT_URI:-}"
       MICROSOFT_TENANT_ID: "${MICROSOFT_TENANT_ID:-common}"
+      # Chave que cifra o client secret do OAuth gravado no banco (AES-256-GCM, ver
+      # server-py/app/secrets_box.py). Vive SO no .env do servidor -- nunca no banco
+      # nem nos backups. Gere com scripts/init-secret-key.sh. Sem ela o secret
+      # continua em texto puro (e o health check avisa).
+      TOOLBOX45_SECRET_KEY: "${TOOLBOX45_SECRET_KEY:-}"
     volumes:
       # Dumps do Backup & Restore (Settings → System → Database) — pg_dump/
       # pg_restore, fora do volume de dados do Postgres, sobrevive a
@@ -123,6 +159,26 @@ services:
     image: toolbox45-frontend:latest
     container_name: toolbox45-frontend
     restart: unless-stopped
+    # Hardening (ver toolbox45-db). O nginx sobe como root so para abrir 80/443
+    # (NET_BIND_SERVICE) e trocar os workers para o usuario `nginx` (SETUID/
+    # SETGID/CHOWN); DAC_OVERRIDE para ler a chave TLS do volume (dono = backend).
+    # Rootfs somente-leitura: /run (pid, tb-gateway.conf gerado no boot),
+    # /var/cache/nginx (buffers) e /tmp sao tmpfs.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - NET_BIND_SERVICE
+      - SETGID
+      - SETUID
+    read_only: true
+    tmpfs:
+      - /run
+      - /var/cache/nginx
+      - /tmp
     depends_on:
       # "service_healthy" (não só "started") — o healthcheck do backend só
       # fica healthy depois de ensure_tls_bootstrap() gerar cert.pem/key.pem

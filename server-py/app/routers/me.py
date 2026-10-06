@@ -11,6 +11,7 @@ from ..db import get_pool
 from ..deps import CurrentUser, require_user, role_rank
 from ..audit import log_audit
 from ..handles import HANDLE_RE, normalize_handle
+from ..auth_events import log_auth_event
 from ..login_guard import client_ip, password_change_limiter
 from ..password_policy import password_problem
 from ..security import hash_password_async, verify_password_async
@@ -111,6 +112,7 @@ async def update_password(request: Request, body: dict = Body(default_factory=di
     ip = client_ip(request)
     wait = password_change_limiter.retry_after(ip, username)
     if wait:
+        await log_auth_event("password_change_blocked", request=request, ip=ip, username=username, detail=f"retry_after={wait}s")
         raise HTTPException(
             status_code=429,
             detail={
@@ -121,6 +123,7 @@ async def update_password(request: Request, body: dict = Body(default_factory=di
         )
     if not current_password or not await verify_password_async(current_password, row["password_hash"]):
         password_change_limiter.record_failure(ip, username)
+        await log_auth_event("password_change_failed", request=request, ip=ip, username=username, detail="wrong_current_password")
         raise HTTPException(status_code=401, detail={"error": "unauthorized", "message": "Current password is incorrect"})
     password_change_limiter.record_success(ip, username)
     problem = password_problem(new_password, username)
@@ -135,7 +138,8 @@ async def update_password(request: Request, body: dict = Body(default_factory=di
     )
     # Trocou a senha: todas as OUTRAS sessoes dessa conta caem (um cookie roubado
     # ou esquecido em outro aparelho deixa de valer); a atual continua.
-    await delete_user_sessions(username, except_token=request.cookies.get(SESSION_COOKIE_NAME))
+    revoked = await delete_user_sessions(username, except_token=request.cookies.get(SESSION_COOKIE_NAME))
+    await log_auth_event("password_changed", request=request, ip=ip, username=username, detail=f"other_sessions_revoked={revoked}")
     if username == setup_mod.DEFAULT_ADMIN_USERNAME:
         await setup_mod.refresh_default_admin_state()
 

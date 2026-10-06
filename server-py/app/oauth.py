@@ -17,8 +17,13 @@ o container.
 from dataclasses import dataclass
 from typing import Optional
 
+import logging
+
+from . import secrets_box
 from .config import settings
 from .db import get_pool
+
+logger = logging.getLogger("toolbox45")
 
 
 @dataclass
@@ -55,23 +60,77 @@ def _env_only() -> "tuple[ProviderConfig, ProviderConfig]":
 google_config, microsoft_config = _env_only()
 
 
+def secret_context(provider: str) -> str:
+    """Dado autenticado (AAD) da cifra: amarra o ciphertext a linha do provedor."""
+    return f"oauth:{provider}"
+
+
+def _db_row_usable(row, provider: str):
+    """(linha, secret em texto puro). Se o secret gravado esta cifrado e nao da para
+    ler (chave ausente/errada), a linha INTEIRA e ignorada -- misturar o client_id
+    do banco com o secret da variavel de ambiente seria uma credencial invalida."""
+    if not row:
+        return None, None
+    try:
+        return row, secrets_box.decrypt(row["client_secret"], secret_context(provider))
+    except secrets_box.SecretUnavailable as err:
+        logger.error(
+            "[oauth] o secret de %s no banco nao pode ser lido (%s): o login %s fica indisponivel "
+            "ate a chave certa ser configurada ou o secret ser salvo de novo em Settings -> System -> OAuth.",
+            provider, err, provider,
+        )
+        return None, None
+
+
 async def reload_oauth_config() -> None:
     global google_config, microsoft_config
     pool = get_pool()
     rows = await pool.fetch("SELECT * FROM oauth_settings")
     by_provider = {row["provider"]: row for row in rows}
 
-    g = by_provider.get("google")
+    g, g_secret = _db_row_usable(by_provider.get("google"), "google")
     google_config = ProviderConfig(
         client_id=(g and g["client_id"]) or settings.google_client_id or None,
-        client_secret=(g and g["client_secret"]) or settings.google_client_secret or None,
+        client_secret=g_secret or settings.google_client_secret or None,
         redirect_uri=(g and g["redirect_uri"]) or settings.google_redirect_uri or None,
     )
 
-    m = by_provider.get("microsoft")
+    m, m_secret = _db_row_usable(by_provider.get("microsoft"), "microsoft")
     microsoft_config = ProviderConfig(
         client_id=(m and m["client_id"]) or settings.microsoft_client_id or None,
-        client_secret=(m and m["client_secret"]) or settings.microsoft_client_secret or None,
+        client_secret=m_secret or settings.microsoft_client_secret or None,
         redirect_uri=(m and m["redirect_uri"]) or settings.microsoft_redirect_uri or None,
         tenant_id=(m and m["tenant_id"]) or settings.microsoft_tenant_id or "common",
     )
+
+
+async def encrypt_legacy_secrets() -> int:
+    """Cifra, uma unica vez, os secrets que ainda estao em texto puro (instalacao
+    anterior a esta auditoria). So age com TOOLBOX45_SECRET_KEY configurada; sem ela
+    apenas avisa. Devolve quantas linhas converteu."""
+    problem = secrets_box.key_problem()
+    if problem:
+        logger.warning("[oauth] %s", problem)
+    pool = get_pool()
+    rows = await pool.fetch(
+        "SELECT provider, client_secret FROM oauth_settings WHERE client_secret IS NOT NULL AND client_secret NOT LIKE $1",
+        secrets_box.PREFIX + "%",
+    )
+    if not rows:
+        return 0
+    if not secrets_box.key_configured():
+        logger.warning(
+            "[oauth] %d secret(s) OAuth em TEXTO PURO no banco (e nos backups): defina %s no .env "
+            "(scripts/init-secret-key.sh) e reinicie o backend para cifrar.", len(rows), secrets_box.KEY_ENV,
+        )
+        return 0
+    n = 0
+    for row in rows:
+        enc = secrets_box.encrypt(row["client_secret"], secret_context(row["provider"]))
+        await pool.execute(
+            "UPDATE oauth_settings SET client_secret = $1 WHERE provider = $2 AND client_secret = $3",
+            enc, row["provider"], row["client_secret"],
+        )
+        n += 1
+    logger.info("[oauth] %d secret(s) OAuth cifrado(s) em repouso (AES-256-GCM)", n)
+    return n

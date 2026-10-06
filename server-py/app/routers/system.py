@@ -39,7 +39,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
-from .. import oauth, tls
+from .. import oauth, secrets_box, tls
 from ..audit import log_audit
 from ..db import get_pool
 from ..deps import CurrentUser, get_optional_user, require_admin, require_super_admin, require_user, role_rank
@@ -342,6 +342,8 @@ async def get_oauth_settings(user: CurrentUser = Depends(require_super_admin)) -
             "source": source,
             "clientId": cfg.client_id,
             "clientSecretSet": bool(cfg.client_secret),
+            # linha no banco cujo secret esta cifrado e nao pode ser lido (chave ausente/errada)
+            "secretUnreadable": bool(db_row) and not cfg.enabled and secrets_box.is_encrypted(db_row["client_secret"]),
             "redirectUri": cfg.redirect_uri,
             "updatedAt": db_row["updated_at"] if db_row else None,
             "updatedBy": db_row["updated_by"] if db_row else None,
@@ -371,7 +373,11 @@ async def update_oauth_settings(provider: str, body: dict = Body(default_factory
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "Redirect URI must start with https://."})
 
     pool = get_pool()
-    existing_secret = await pool.fetchval("SELECT client_secret FROM oauth_settings WHERE provider = $1", provider)
+    existing_stored = await pool.fetchval("SELECT client_secret FROM oauth_settings WHERE provider = $1", provider)
+    try:
+        existing_secret = secrets_box.decrypt(existing_stored, oauth.secret_context(provider))
+    except secrets_box.SecretUnavailable:
+        existing_secret = None   # nao da para reaproveitar: exige informar o secret de novo
     # Client secret so e obrigatorio na PRIMEIRA vez que este provedor e
     # salvo -- deixar o campo em branco numa edicao posterior mantem o
     # secret ja salvo (mesmo principio de "nao reexibir segredo depois de
@@ -390,7 +396,7 @@ async def update_oauth_settings(provider: str, body: dict = Body(default_factory
              tenant_id = EXCLUDED.tenant_id,
              updated_at = NOW(),
              updated_by = EXCLUDED.updated_by""",
-        provider, trimmed_client_id, final_secret, trimmed_redirect_uri,
+        provider, trimmed_client_id, secrets_box.encrypt(final_secret, oauth.secret_context(provider)), trimmed_redirect_uri,
         (trimmed_tenant_id or "common") if provider == "microsoft" else None,
         user["username"],
     )

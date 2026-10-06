@@ -1,4 +1,6 @@
-fastapi==0.115.6
+# 0.142.x traz starlette 1.x: corrige os avisos do pip-audit do starlette 0.41.3
+# (auditoria de seguranca, out/2026). Subir de versao: rodar `pip-audit` e a suite.
+fastapi==0.142.2
 uvicorn[standard]==0.34.0
 asyncpg==0.30.0
 pydantic-settings==2.7.1

@@ -458,6 +458,22 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_log_ts ON audit_log(ts);
 
+-- Eventos de acesso (login/falha/bloqueio/setup/senha/OAuth) — ver
+-- app/auth_events.py. Retenção de 180 dias, aplicada em lote (a cada ~10 min) e
+-- com teto de linhas; só o super_admin consulta (GET /api/auth-events). Nunca
+-- guarda senha, hash nem token.
+CREATE TABLE IF NOT EXISTS auth_events (
+  id          BIGSERIAL PRIMARY KEY,
+  ts          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  event       TEXT NOT NULL,
+  username    TEXT,
+  ip          TEXT,
+  user_agent  TEXT,
+  detail      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_auth_events_ts ON auth_events(ts);
+CREATE INDEX IF NOT EXISTS idx_auth_events_username ON auth_events(username, ts);
+
 -- ════════════════════════════════════════════════
 -- Login com Google/Microsoft — configuração feita pela própria UI
 -- (Settings → System → OAuth Integrations, admin-only) em vez de só pelas

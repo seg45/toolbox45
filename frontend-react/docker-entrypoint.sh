@@ -11,6 +11,23 @@
 # ════════════════════════════════════════════════════════════════════════
 set -e
 
+# IP do gateway da rede Docker (rota padrao deste container). Se as conexoes
+# dos usuarios chegarem com esse IP (docker-proxy/userland-proxy reescreve a
+# origem), o limite de taxa POR IP do nginx viraria global; o nginx.conf usa
+# $tb_gw para nao limitar essa origem (ver bloco "Limites de taxa" la).
+# /run e tmpfs (rootfs somente-leitura) -- ver docker-compose.yml.
+GW=$(ip route 2>/dev/null | awk '/^default/ {print $3; exit}')
+mkdir -p /run/toolbox45
+case "$GW" in
+  *[!0-9.]*|"")   # vazio ou nao-IPv4: nenhum gateway conhecido (limite por IP normal)
+    printf 'geo $tb_gw {\n  default 0;\n}\n' > /run/toolbox45/tb-gateway.conf
+    ;;
+  *)
+    printf 'geo $tb_gw {\n  default 0;\n  %s 1;\n}\n' "$GW" > /run/toolbox45/tb-gateway.conf
+    echo "toolbox45-frontend: gateway Docker $GW sem limite de taxa por IP (origem indistinguivel)"
+    ;;
+esac
+
 (
   while true; do
     inotifywait -q -e modify,create,move,delete,close_write /etc/nginx/tls 2>/dev/null

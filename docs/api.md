@@ -70,7 +70,8 @@ o acesso de cada rota é `server-py/app/deps.py` (`require_user`, `require_admin
   `POST /api/backups/:filename/restore`; um backup carrega os hashes de senha e restaurar
   sobrescreve a tabela `users`), o **certificado SSL/TLS** (`/api/system/ssl-certificate*`,
   inclui a chave privada) e a **configuração OAuth** (`/api/system/oauth*`, inclui o client
-  secret). API keys nunca têm `super_admin`, então também recebem `403` nessas rotas.
+  secret) e o **registro de acessos** (`GET /api/auth-events`). API keys nunca têm
+  `super_admin`, então também recebem `403` nessas rotas.
   Nas seções abaixo, esses endpoints vêm marcados **(super_admin)**.
 
 **Exemplo (curl, API key):**
@@ -671,6 +672,35 @@ mais recente primeiro, limite de 1000 linhas.
 
 ---
 
+## Registro de acessos (`GET /api/auth-events`) — **(super_admin)**
+Quem entrou, quem errou a senha e quem foi bloqueado — separado do audit log de comandos
+(tabela própria `auth_events`, retenção de **180 dias**, teto de 200 000 linhas; a limpeza
+roda sozinha a cada ~10 min). Mais recente primeiro. Na UI: Configurações → Database →
+**View access log**.
+
+Query: `limit` (1–1000, padrão 200), `event` (um dos valores abaixo), `username`
+(exato) e `hours` (só os últimos N horas). Valor inválido → `400 validation_error`.
+```json
+[{ "id": 913, "ts": "2026-10-06T14:02:11.000Z", "event": "login_failed", "username": "ana@empresa.com",
+   "ip": "203.0.113.7", "user_agent": "Mozilla/5.0 ...", "detail": "bad_password" }]
+```
+`event`: `login_success`, `login_failed` (`detail`: `bad_password` | `unknown_user` |
+`account_disabled`), `login_blocked` (limite de tentativas; no máximo 1 linha por minuto
+por IP+usuário), `setup_completed`, `register`, `password_changed` (`detail` traz
+`other_sessions_revoked=N`), `password_change_failed`, `password_change_blocked`,
+`password_reset_by_admin` (`detail`: `by=<admin>; N session(s) revoked`), `oauth_login`,
+`oauth_pending` (conta nova aguardando aprovação) e `oauth_failed` (`detail`:
+`<provedor>:<motivo>`).
+
+Nunca grava senha nem hash. O `username` de um login que falhou só é guardado se tiver
+formato de e-mail (senão fica `(formato invalido)`, para não registrar uma senha digitada
+no campo errado); caracteres de controle são removidos e o user-agent é cortado em 200.
+Se a gravação do evento falhar, o login/rota segue normalmente (só vai para o log do
+servidor). `ip` é o IP real do cliente (`X-Real-IP`); se o Docker mascarar a origem
+(userland-proxy), aparece `docker-gateway` — ver docs/install-instructions.txt, seção 13.
+
+---
+
 ## Dados por usuário (`/api/user-data`, `/api/global-settings`)
 Armazenamento genérico chave/valor (tema, idioma, filtros, históricos de busca — o que
 antes vivia só no `localStorage` do navegador).
@@ -882,7 +912,9 @@ provedor fica desabilitado. As rotas de login em si (`/api/auth/google`,
 `/api/auth/microsoft`) estão nas seções **Login com Google/Microsoft** acima.
 
 - `GET /api/system/oauth` → estado dos dois provedores (o secret **nunca** é devolvido,
-  só `clientSecretSet`):
+  só `clientSecretSet`; `secretUnreadable: true` quando o secret está cifrado no banco mas
+  a chave `TOOLBOX45_SECRET_KEY` falta ou é outra — nesse caso a linha do banco é ignorada
+  e é preciso salvar o secret de novo):
   ```json
   { "google":    { "configured": true, "source": "db", "clientId": "...apps.googleusercontent.com", "clientSecretSet": true,
                    "redirectUri": "https://toolbox.seg45.com.br/api/auth/google/callback", "updatedAt": "...", "updatedBy": "admin" },
@@ -900,6 +932,15 @@ provedor fica desabilitado. As rotas de login em si (`/api/auth/google`,
   `400 validation_error`; `404 not_found` para provedor desconhecido.
 - `DELETE /api/system/oauth/:provider` — apaga a configuração do banco e recarrega →
   `200 { "ok": true }`. `404 not_found` para provedor desconhecido.
+
+**Secret cifrado em repouso.** Com `TOOLBOX45_SECRET_KEY` definida no `.env` (≥ 32
+caracteres; `scripts/init-secret-key.sh` gera e aplica), o client secret é gravado no banco
+como `enc:v1:<base64url>` (AES-256-GCM, chave derivada por HKDF-SHA256, vinculado ao
+provedor). A chave fica só no `.env` do servidor, fora do banco e dos backups: um dump ou
+backup vazado não revela o secret. Secrets antigos em texto puro são cifrados no boot.
+Sem a chave o comportamento é o antigo (texto puro, com aviso no log). Se a chave se perder
+é só reconfigurar o OAuth pela UI; um backup restaurado em outro servidor precisa da mesma
+chave.
 
 ---
 
@@ -938,5 +979,5 @@ mudam.
 ## Referências
 
 - Schema completo do banco: `server-py/app/schema.sql`.
-- Implementação das rotas: `server-py/app/routers/*.py` (um módulo por domínio: `auth`, `oauth`, `me`, `commands`, `folders`, `notes`, `links`, `shares`, `groups`, `users`, `catalog`, `system`, `api_keys`, `backup`); regras compartilhadas em `server-py/app/` (`deps.py` — autenticação/autorização, `commands.py`, `folders.py`, `catalog.py`, `audit.py`).
+- Implementação das rotas: `server-py/app/routers/*.py` (um módulo por domínio: `auth`, `oauth`, `me`, `commands`, `folders`, `notes`, `links`, `shares`, `groups`, `users`, `catalog`, `system`, `api_keys`, `backup`, `auth_events`); regras compartilhadas em `server-py/app/` (`deps.py` — autenticação/autorização, `commands.py`, `folders.py`, `catalog.py`, `audit.py`).
 - Modelo de containers/deploy: `docs/install-instructions.txt`.

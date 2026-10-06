@@ -22,9 +22,23 @@ O estado fica em memoria (um unico processo uvicorn -- ver Dockerfile): reinicia
 o backend zera os contadores. As estruturas sao limitadas (MAX_KEYS) para que
 uma enxurrada de usernames inventados nao consuma memoria sem fim.
 """
+import ipaddress
+import logging
 import time
 from collections import deque
 from typing import Deque, Dict, Optional, Tuple
+
+log = logging.getLogger("toolbox45.login_guard")
+
+# Marcador de "origem indistinguivel": o IP que o nginx viu e o do GATEWAY da
+# rede Docker (docker-proxy / userland-proxy reescreve a origem das conexoes
+# publicadas), ou seja, todos os usuarios chegam com o mesmo IP. Contar falhas
+# "por IP" nesse caso e perigoso -- 30 erros de UMA pessoa (ou de um atacante)
+# bloqueariam o login de TODO MUNDO. Com este marcador o limitador usa so o
+# limite por usuario. A correcao de verdade e do lado do Docker
+# (`"userland-proxy": false` em /etc/docker/daemon.json) -- ver docs/api.md.
+SHARED_SOURCE = "docker-gateway"
+_warned_shared = False
 
 WINDOW_SECONDS = 15 * 60
 MAX_KEYS = 20000
@@ -43,6 +57,9 @@ class FailureLimiter:
 
     def _keys(self, ip: str, username: str):
         ip, user = self._norm(ip) or "?", self._norm(username)
+        if ip == SHARED_SOURCE:
+            # origem indistinguivel: so o limite por usuario faz sentido
+            return (("u", user),)
         return (("uip", f"{ip}|{user}"), ("u", user), ("ip", ip))
 
     def _prune(self, dq: Deque[float], now: float) -> None:
@@ -95,11 +112,33 @@ login_limiter = FailureLimiter(per_user_ip=5, per_user=20, per_ip=30)
 password_change_limiter = FailureLimiter(per_user_ip=5, per_user=10, per_ip=30)
 
 
+def _docker_internal(real: str, peer: str) -> bool:
+    """True se `real` (X-Real-IP) esta na mesma rede /16 que o par direto (o
+    container nginx): so o gateway da bridge e o nginx moram ali, entao um
+    cliente "dentro" dessa rede e, na pratica, o gateway/docker-proxy."""
+    try:
+        r, p = ipaddress.ip_address(real), ipaddress.ip_address(peer)
+    except ValueError:
+        return False
+    if r.version != 4 or p.version != 4 or not p.is_private:
+        return False
+    return r in ipaddress.ip_network(f"{p}/16", strict=False)
+
+
 def client_ip(request) -> str:
     """IP do cliente. O backend so e alcancavel pelo nginx (compose sem `ports:`
     para ele), que SEMPRE sobrescreve X-Real-IP com $remote_addr; sem o
-    cabecalho (testes/acesso direto) vale o IP da conexao."""
-    real = request.headers.get("x-real-ip", "").strip()
-    if real:
-        return real[:64]
-    return request.client.host if request.client else "?"
+    cabecalho (testes/acesso direto) vale o IP da conexao. Se esse IP for o do
+    gateway da rede Docker (origem real perdida), devolve SHARED_SOURCE."""
+    global _warned_shared
+    peer = request.client.host if request.client else ""
+    real = request.headers.get("x-real-ip", "").strip()[:64]
+    if real and peer and _docker_internal(real, peer):
+        if not _warned_shared:
+            _warned_shared = True
+            log.warning(
+                "IP de origem dos clientes chega como %s (gateway da rede Docker): limite de "
+                "login por IP desativado, vale so o por usuario. Corrija com "
+                '"userland-proxy": false em /etc/docker/daemon.json (reiniciar o docker).', real)
+        return SHARED_SOURCE
+    return real or peer or "?"

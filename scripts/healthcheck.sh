@@ -114,10 +114,34 @@ if [ "$HAVE_DOCKER" = 1 ]; then
   nconf=$($DC exec -T toolbox45-frontend nginx -t 2>&1)
   echo "$nconf" | grep -q "test is successful" && ok "nginx: configuração válida" || bad "nginx -t falhou: $(echo "$nconf" | tail -1)"
   pw=$(docker exec toolbox45-backend printenv PGPASSWORD 2>/dev/null)
-  if [ -z "$pw" ]; then warn "não consegui ler PGPASSWORD do backend (pulei a checagem de senha padrão)"; elif [ "$pw" = "toolbox45" ]; then warn "banco usa a senha padrão (toolbox45); baixo risco porque a porta não é exposta, mas troque em produção (POSTGRES_PASSWORD no .env)"; else ok "senha do banco não é a padrão"; fi
+  if [ -z "$pw" ]; then warn "não consegui ler PGPASSWORD do backend (pulei a checagem de senha padrão)"; elif [ "$pw" = "toolbox45" ]; then warn "banco usa a senha padrão (toolbox45); baixo risco porque a porta não é exposta, mas troque: sudo bash scripts/rotate-db-password.sh"; else ok "senha do banco não é a padrão"; fi
+
+  # Endurecimento dos containers (docker-compose.yml): rootfs somente-leitura,
+  # sem capabilities extras e sem escalada de privilégio.
+  for c in toolbox45-db toolbox45-backend toolbox45-frontend; do
+    hz=$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}|{{.HostConfig.CapDrop}}|{{.HostConfig.SecurityOpt}}' "$c" 2>/dev/null) || continue
+    case "$hz" in
+      "true|[ALL]|[no-new-privileges"*) ok "$c: endurecido (rootfs somente-leitura, cap_drop ALL, no-new-privileges)" ;;
+      *) warn "$c: sem o endurecimento do compose (lido: $hz) — falta recriar com a versão atual do docker-compose.yml (docker compose up -d)" ;;
+    esac
+  done
+
+  # Cifra dos segredos em repouso (client secret do OAuth): chave no .env + nada em texto puro.
+  skey=$(docker exec toolbox45-backend printenv TOOLBOX45_SECRET_KEY 2>/dev/null)
+  plain=$(q "SELECT COUNT(*) FROM oauth_settings WHERE client_secret IS NOT NULL AND client_secret NOT LIKE 'enc:v1:%'" | head -1)
+  case "$plain" in
+    ''|*[!0-9]*) info "não consegui conferir os secrets do OAuth no banco: ${plain:-sem resposta}" ;;
+    0) if [ "${#skey}" -ge 32 ]; then ok "TOOLBOX45_SECRET_KEY configurada; nenhum secret do OAuth em texto puro no banco"
+       else info "nenhum secret do OAuth gravado no banco (sem OAuth configurado pela interface); para cifrar os futuros: sudo bash scripts/init-secret-key.sh"; fi ;;
+    *) warn "$plain secret(s) do OAuth em TEXTO PURO no banco (e nos backups): sudo bash scripts/init-secret-key.sh" ;;
+  esac
 else
   warn "docker não disponível neste ambiente (pulei containers)"
 fi
+
+# Imagens base fixadas por digest (Dockerfiles e compose): rebuild reprodutível.
+unpinned=$(grep -hE '^FROM |^[[:space:]]+image: (postgres|python|node|nginx)' server-py/Dockerfile frontend-react/Dockerfile docker-compose.yml 2>/dev/null | grep -v '@sha256:' | grep -v 'toolbox45-' | tr -s ' ' | head -3)
+if [ -z "$unpinned" ]; then ok "imagens base fixadas por digest (atualizar: bash scripts/update-image-digests.sh)"; else warn "imagem base sem digest fixo: $(printf '%s' "$unpinned" | tr '\n' ';')"; fi
 
 # ──────────────────────────────────────────────────────────────────────
 sec "3. Endpoints HTTP/HTTPS"
@@ -261,14 +285,22 @@ if [ "$HAVE_DOCKER" = 1 ]; then
 fi
 if [ "$HAVE_DOCKER" = 1 ]; then
   # Os limites de taxa do nginx (login/registro/API) são POR IP de origem. Se o
-  # Docker entregar todas as conexões com o IP do gateway da bridge (172.x.0.1),
-  # todos os usuários passam a dividir o mesmo limite: 6 logins/min no total.
+  # Docker entregar todas as conexões com o IP do gateway da bridge (172.x.0.1,
+  # efeito do userland-proxy), a origem real dos usuários se perde. A imagem
+  # trata isso (nginx não limita por IP essa origem e o backend conta as falhas
+  # de login só por usuário), mas sem IP real não há bloqueio por IP nem log útil.
   # Olha só linhas com mais de 1 min (as do próprio health check vêm do gateway).
   ips=$($DC logs --since 24h --until 1m toolbox45-frontend 2>/dev/null | grep -E '^toolbox45-frontend[[:space:]]*\|[[:space:]]*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ' | sed -E 's/^[^|]*\|[[:space:]]*([0-9.]+) .*/\1/' | sort | uniq -c | sort -rn)
   nips=$(printf '%s\n' "$ips" | grep -c . || true); ntot=$(printf '%s\n' "$ips" | awk '{s+=$1} END{print s+0}')
   if [ "${ntot:-0}" -lt 20 ]; then info "IP de origem nos logs do nginx: poucos acessos para avaliar ($ntot)"
   elif [ "$nips" = 1 ] && printf '%s' "$ips" | grep -q -E ' (172\.(1[6-9]|2[0-9]|3[01])|10)\.'; then
-    warn "todas as conexões chegam ao nginx com o mesmo IP de gateway ($(printf '%s' "$ips" | awk '{print $2}')) — o limite de taxa por IP vira GLOBAL; investigar o proxy do Docker (userland-proxy) antes de manter limit_req"
+    gw=$(printf '%s' "$ips" | awk '{print $2}')
+    warn "todas as conexões chegam ao nginx com o IP do gateway Docker ($gw): a origem real dos usuários se perde (sem bloqueio por IP e sem IP útil nos logs). Correção: \"userland-proxy\": false em /etc/docker/daemon.json + 'sudo systemctl restart docker' (reinicia os containers; faça numa janela de manutenção)"
+    if grep -q '"userland-proxy"[[:space:]]*:[[:space:]]*false' /etc/docker/daemon.json 2>/dev/null; then
+      info "daemon.json já tem userland-proxy=false: confira se o docker foi reiniciado depois e se o iptables/nftables do host está ativo"
+    else
+      info "/etc/docker/daemon.json não desativa o userland-proxy"
+    fi
   else ok "IP de origem preservado nos logs do nginx ($nips IP(s) distintos em $ntot acessos)"; fi
 fi
 kills=$(journalctl -k -o short-iso --since "24 hours ago" 2>/dev/null | grep "Out of memory: Killed process")

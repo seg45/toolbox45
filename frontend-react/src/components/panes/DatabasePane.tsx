@@ -21,8 +21,9 @@ import { ExportCommandsModal } from './ExportCommandsModal';
 import { ImportCommandsModal } from './ImportCommandsModal';
 import { BackupManagerModal } from './BackupManagerModal';
 import { AuditLogModal } from './AuditLogModal';
+import { AccessLogModal } from './AccessLogModal';
 
-type DatabaseModal = 'exportFolder' | 'importFolder' | 'exportCommands' | 'importCommands' | 'backup' | 'audit';
+type DatabaseModal = 'exportFolder' | 'importFolder' | 'exportCommands' | 'importCommands' | 'backup' | 'audit' | 'access';
 
 export function DatabasePane({ onCatalogsChanged }: { onCatalogsChanged: () => void | Promise<unknown> }) {
   const auth = useAuth();
@@ -112,6 +113,16 @@ export function DatabasePane({ onCatalogsChanged }: { onCatalogsChanged: () => v
               </svg>
               <span>View audit log</span>
             </button>
+            {/* Access log: login/falhas/bloqueios — só super admin (GET /api/auth-events). */}
+            {auth.isSuperAdmin && (
+              <button type="button" className="btn btn-ghost" id="accessLogBtn" onClick={() => setModal('access')}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                  <rect x="3.5" y="7" width="9" height="6.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                  <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+                <span>View access log</span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -124,6 +135,7 @@ export function DatabasePane({ onCatalogsChanged }: { onCatalogsChanged: () => v
           os modais admin-only também checam auth.isAdmin ao montar. */}
       {auth.isAdmin && modal === 'backup' && <BackupManagerModal onClose={close} />}
       {auth.isAdmin && modal === 'audit' && <AuditLogModal onClose={close} />}
+      {auth.isSuperAdmin && modal === 'access' && <AccessLogModal onClose={close} />}
     </div>
   );
 }

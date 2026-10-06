@@ -4,7 +4,10 @@
 # Build a partir da RAIZ do repo (nao de dentro de server-py/), porque o
 # contexto precisa enxergar server-py/ com caminhos relativos a raiz:
 #   docker build -f server-py/Dockerfile -t toolbox45-backend:latest .
-FROM python:3.12-slim
+# Imagem base FIXADA por digest (auditoria de seguranca, out/2026): um rebuild nao
+# puxa, sem aviso, uma imagem diferente da que foi testada. A tag fica antes do
+# digest so para leitura. Para atualizar: scripts/update-image-digests.sh.
+FROM python:3.12-slim@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
 
 WORKDIR /app
 
@@ -34,7 +37,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY server-py/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# pip atualizado antes: o pip da imagem base acumula avisos do pip-audit.
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
 # schema.sql vive em server-py/app/schema.sql (ver app/db.py) -- ja vem junto
 # com o COPY do pacote Python abaixo.
@@ -56,6 +61,8 @@ RUN groupadd --system --gid 999 toolbox45 \
     && chown -R toolbox45:toolbox45 /app
 USER toolbox45
 
+# Rootfs somente-leitura em producao (docker-compose.yml): nada de .pyc em /app.
+ENV PYTHONDONTWRITEBYTECODE=1
 ENV BACKUP_DIR=/app/backups
 ENV TLS_DIR=/app/tls
 

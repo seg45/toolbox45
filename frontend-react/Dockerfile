@@ -9,7 +9,8 @@
 # Build context é a raiz do repo, por causa dos caminhos frontend-react/...:
 #   docker build -f frontend-react/Dockerfile -t toolbox45-frontend:latest .
 # ════════════════════════════════════════════════════════════════════════
-FROM node:20-bookworm-slim AS build
+# Imagens base FIXADAS por digest (ver server-py/Dockerfile e scripts/update-image-digests.sh).
+FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS build
 WORKDIR /app
 # Limita o heap do Node no build (tsc + vite): sem teto, o V8 deixa o heap
 # crescer ate faltar RAM no host de ~1 GiB (docker01) e o kernel mata
@@ -21,7 +22,7 @@ RUN npm install
 COPY frontend-react/ .
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
 
 RUN apk add --no-cache inotify-tools
 

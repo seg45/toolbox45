@@ -11,9 +11,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from ..audit import log_audit
+from ..auth_events import log_auth_event
 from ..db import get_pool
 from ..deps import CurrentUser, require_super_admin, role_rank
 from ..handles import generate_unique_handle
@@ -96,7 +97,7 @@ async def create_user(body: dict = Body(default_factory=dict), user: CurrentUser
 
 
 @router.put("/{username}")
-async def update_user(username: str, body: dict = Body(default_factory=dict), user: CurrentUser = Depends(require_super_admin)):
+async def update_user(username: str, request: Request, body: dict = Body(default_factory=dict), user: CurrentUser = Depends(require_super_admin)):
     pool = get_pool()
     existing = await pool.fetchrow("SELECT * FROM users WHERE username = $1", username)
     if not existing:
@@ -168,6 +169,11 @@ async def update_user(username: str, body: dict = Body(default_factory=dict), us
     if sessions_revoked:
         detail = f"{detail}; {sessions_revoked} session(s) revoked"
     await log_audit(user["username"], "update", "user", username, username, detail)
+    if password:
+        await log_auth_event(
+            "password_reset_by_admin", request=request, username=username,
+            detail=f"by={user['username']}; {sessions_revoked} session(s) revoked",
+        )
     return dict(row)
 
 
