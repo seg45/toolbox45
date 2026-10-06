@@ -76,8 +76,15 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
       created=$(docker image inspect -f '{{.Created}}' "$img" 2>/dev/null)
       if [ -z "$created" ]; then warn "imagem $img não encontrada"; continue; fi
       img_ts=$(date -d "$created" +%s 2>/dev/null || echo 0)
-      code_ts=$(git log -1 --format=%ct -- "$dir" docker-compose.yml 2>/dev/null || echo 0)
-      if [ "$img_ts" -ge "$code_ts" ]; then ok "imagem $img é mais nova que o último commit de $dir"; else warn "imagem $img (de $(date -d "@$img_ts" '+%F %R')) é mais antiga que o último commit em $dir (de $(date -d "@$code_ts" '+%F %R')) — falta rebuild"; fi
+      # Só conta mudança no CÓDIGO da imagem: testes, README, docs e Dockerfile/compose
+      # não mudam o conteúdo servido (e um build 100% em cache mantém a data antiga).
+      if [ "$dir" = server-py ]; then
+        code_ts=$(git log -1 --format=%ct -- server-py ':(exclude)server-py/tests' ':(exclude)server-py/README.md' 2>/dev/null || echo 0)
+      else
+        code_ts=$(git log -1 --format=%ct -- frontend-react ':(exclude)frontend-react/test' ':(exclude)frontend-react/Dockerfile' 2>/dev/null || echo 0)
+      fi
+      code_ts=${code_ts:-0}
+      if [ "$img_ts" -ge "$code_ts" ]; then ok "imagem $img está em dia com o código de $dir"; else warn "imagem $img (de $(date -d "@$img_ts" '+%F %R')) é mais antiga que a última mudança de código em $dir (de $(date -d "@$code_ts" '+%F %R')) — falta rebuild"; fi
     done
   fi
 else
@@ -87,6 +94,7 @@ fi
 
 # ──────────────────────────────────────────────────────────────────────
 sec "2. Containers"
+OOM_PROTECTED=0; BACKEND_STARTED=""
 if [ "$HAVE_DOCKER" = 1 ]; then
   for c in toolbox45-db toolbox45-backend toolbox45-frontend; do
     st=$(docker inspect -f '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}}|{{.RestartCount}}|{{.State.OOMKilled}}|{{.HostConfig.OomScoreAdj}}|{{.State.StartedAt}}' "$c" 2>/dev/null)
@@ -96,7 +104,8 @@ if [ "$HAVE_DOCKER" = 1 ]; then
     case "$health" in healthy|-) ;; *) bad "$c: healthcheck=$health" ;; esac
     [ "$oomk" = "true" ] && bad "$c: foi morto por OOM" || true
     [ "$restarts" != "0" ] && warn "$c: reiniciou $restarts vez(es) desde a criação"
-    case "$c" in toolbox45-db|toolbox45-backend) [ "$oomadj" = "-500" ] && ok "$c: oom_score_adj=-500 (protegido)" || warn "$c: oom_score_adj=$oomadj (esperado -500, ver docker-compose.yml)" ;; esac
+    [ "$c" = toolbox45-backend ] && BACKEND_STARTED="$started"
+    case "$c" in toolbox45-db|toolbox45-backend) [ "$oomadj" = "-500" ] && OOM_PROTECTED=$((OOM_PROTECTED+1)); [ "$oomadj" = "-500" ] && ok "$c: oom_score_adj=-500 (protegido)" || warn "$c: oom_score_adj=$oomadj (esperado -500, ver docker-compose.yml)" ;; esac
   done
   nconf=$($DC exec -T toolbox45-frontend nginx -t 2>&1)
   echo "$nconf" | grep -q "test is successful" && ok "nginx: configuração válida" || bad "nginx -t falhou: $(echo "$nconf" | tail -1)"
@@ -206,7 +215,9 @@ if [ "$HAVE_DOCKER" = 1 ]; then
   sched=$(q "SELECT string_agg(data_key||'='||value, ' ' ORDER BY data_key) FROM user_data WHERE username='__global_defaults__' AND data_key LIKE 'backupSchedule%';" | head -1)
   info "agendamento: ${sched:-(não configurado)}"
   newest=$(docker exec toolbox45-backend sh -c 'ls -t /app/backups 2>/dev/null | head -1')
-  if [ -z "$newest" ]; then warn "nenhum arquivo em /app/backups"; else
+  if [ -z "$newest" ]; then
+    if echo "$sched" | grep -q 'backupScheduleEnabled=1'; then warn "agendamento ativo, mas ainda não há nenhum arquivo em /app/backups"; else bad "NENHUM backup em /app/backups e o agendamento está desligado — os dados só têm a cópia do próprio banco"; fi
+  else
     mt=$(docker exec toolbox45-backend stat -c %Y "/app/backups/$newest" 2>/dev/null || echo 0); age=$(( ($(date +%s) - mt) / 3600 )); sz=$(docker exec toolbox45-backend stat -c %s "/app/backups/$newest" 2>/dev/null || echo 0)
     info "mais recente: $newest ($((sz/1024)) KiB, há ${age}h)"
     [ "$sz" -gt 1024 ] 2>/dev/null || bad "o backup mais recente está vazio ou minúsculo"
@@ -225,8 +236,21 @@ if [ "$HAVE_DOCKER" = 1 ]; then
   db=$($DC logs --since 24h toolbox45-db 2>&1 | grep -c -E "FATAL|PANIC|ERROR" || true)
   [ "${db:-0}" = 0 ] && ok "postgres: sem FATAL/ERROR" || warn "postgres: $db linha(s) FATAL/ERROR"
 fi
-oomk=$(journalctl -k --since "24 hours ago" 2>/dev/null | grep -c -i -E "out of memory|oom-kill" || true)
-[ "${oomk:-0}" = 0 ] && ok "kernel: sem OOM nas últimas 24 h" || bad "kernel: $oomk evento(s) de OOM nas últimas 24 h"
+kills=$(journalctl -k -o short-iso --since "24 hours ago" 2>/dev/null | grep "Out of memory: Killed process")
+nk=$(printf '%s' "$kills" | grep -c . || true)
+if [ "${nk:-0}" = 0 ]; then ok "kernel: nenhum processo morto por OOM nas últimas 24 h"; else
+  last=$(printf '%s\n' "$kills" | tail -1 | awk '{print $1}')
+  names=$(printf '%s\n' "$kills" | grep -o 'Killed process [0-9]* ([^)]*)' | sed 's/Killed process [0-9]* //' | sort | uniq -c | sort -rn | head -5 | awk '{printf "%s×%s ", $1, $2}')
+  last_ts=$(date -d "$last" +%s 2>/dev/null || echo 0)
+  start_ts=$(date -d "${BACKEND_STARTED:-1970-01-01}" +%s 2>/dev/null || echo 0)
+  info "mortos por OOM: $names"
+  info "último: $last"
+  if [ "$OOM_PROTECTED" = 2 ] && [ "$last_ts" -lt "$start_ts" ]; then
+    warn "$nk processo(s) morto(s) por OOM nas últimas 24 h, mas TODOS antes do último restart do backend (${BACKEND_STARTED%%.*}), que já roda protegido (oom_score_adj=-500) — se não houver novos, está resolvido"
+  else
+    bad "$nk processo(s) morto(s) por OOM nas últimas 24 h (o último em $last)"
+  fi
+fi
 
 # ──────────────────────────────────────────────────────────────────────
 sec "9. Host (recursos e sistema)"
@@ -238,7 +262,7 @@ swt=$(free -m | awk '/^Swap:/{print $2}'); swu=$(free -m | awk '/^Swap:/{print $
 du=$(df -P / | awk 'NR==2{gsub("%","",$5); print $5}'); [ "$du" -lt 80 ] && ok "disco /: ${du}% usado" || { [ "$du" -lt 90 ] && warn "disco /: ${du}% usado" || bad "disco /: ${du}% usado"; }
 cores=$(nproc); load=$(awk '{print $2}' /proc/loadavg); awk -v l="$load" -v c="$cores" 'BEGIN{exit !(l<c)}' && ok "load (5 min) $load com $cores vCPU" || warn "load (5 min) $load ≥ $cores vCPU"
 ntp=$(timedatectl show -p NTPSynchronized --value 2>/dev/null); [ "$ntp" = yes ] && ok "relógio sincronizado (NTP)" || warn "relógio não sincronizado (NTP=$ntp) — afeta expiração de sessão e certificado"
-[ -e /var/run/reboot-required ] && warn "o sistema pede reinício (/var/run/reboot-required)" || ok "sem reinício pendente"
+if [ -e /var/run/reboot-required ]; then warn "o sistema pede reinício (/var/run/reboot-required): $(tr '\n' ' ' < /var/run/reboot-required.pkgs 2>/dev/null | cut -c1-80)"; else ok "sem reinício pendente"; fi
 fu=$(systemctl --failed --no-legend 2>/dev/null | wc -l); [ "$fu" = 0 ] && ok "nenhuma unidade systemd com falha" || warn "$fu unidade(s) systemd com falha: $(systemctl --failed --no-legend | awk '{print $2}' | head -3 | tr '\n' ' ')"
 [ "$(systemctl is-active docker 2>/dev/null)" = active ] && ok "serviço docker ativo" || warn "serviço docker não está 'active'"
 info "uptime: $(uptime -p 2>/dev/null)"
