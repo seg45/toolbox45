@@ -18,7 +18,8 @@ from ..db import get_pool
 from ..deps import CurrentUser, require_super_admin, role_rank
 from ..handles import generate_unique_handle
 from ..password_policy import password_problem
-from ..security import hash_password
+from ..security import hash_password_async
+from ..session import delete_user_sessions
 from .auth import EMAIL_RE
 
 logger = logging.getLogger("toolbox45")
@@ -84,7 +85,7 @@ async def create_user(body: dict = Body(default_factory=dict), user: CurrentUser
     await pool.execute(
         """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at)
            VALUES ($1, $2, $3, 1, $4, 'local', $5, NOW())""",
-        trimmed, hash_password(password), role_val, user["username"], handle,
+        trimmed, await hash_password_async(password), role_val, user["username"], handle,
     )
     await _ensure_default_folder(trimmed)
     row = await pool.fetchrow(f"SELECT {USERS_PUBLIC_COLUMNS} FROM users WHERE username = $1", trimmed)
@@ -129,7 +130,7 @@ async def update_user(username: str, body: dict = Body(default_factory=dict), us
         problem = password_problem(password, username)
         if problem:
             raise HTTPException(status_code=400, detail={"error": "validation_error", "message": problem})
-        password_hash = hash_password(password)
+        password_hash = await hash_password_async(password)
 
     # Aprovando uma conta pendente (disabled: true -> false, primeira vez --
     # ver CREATE TABLE users em schema.sql): grava approved_at agora. Nao mexe
@@ -145,6 +146,12 @@ async def update_user(username: str, body: dict = Body(default_factory=dict), us
     )
     row = await pool.fetchrow(f"SELECT {USERS_PUBLIC_COLUMNS} FROM users WHERE username = $1", username)
 
+    # Senha redefinida ou conta desativada: as sessoes abertas dessa conta caem
+    # na hora (quem estava logado -- ou tinha um cookie roubado -- sai).
+    sessions_revoked = 0
+    if password or (new_disabled and not was_disabled):
+        sessions_revoked = await delete_user_sessions(username)
+
     # Nunca grava senha/hash no audit_log -- so sinaliza QUE ela mudou (sem o
     # valor), junto de role/disabled reais.
     changed = []
@@ -154,7 +161,10 @@ async def update_user(username: str, body: dict = Body(default_factory=dict), us
         changed.append("disabled")
     if password:
         changed.append("password")
-    await log_audit(user["username"], "update", "user", username, username, f"Changed: {', '.join(changed)}" if changed else None)
+    detail = f"Changed: {', '.join(changed)}" if changed else None
+    if sessions_revoked:
+        detail = f"{detail}; {sessions_revoked} session(s) revoked"
+    await log_audit(user["username"], "update", "user", username, username, detail)
     return dict(row)
 
 

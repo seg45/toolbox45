@@ -4,14 +4,17 @@ basicos, troca de handle e troca de senha (self-service).
 """
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from ..db import get_pool
 from ..deps import CurrentUser, require_user, role_rank
 from ..audit import log_audit
 from ..handles import HANDLE_RE, normalize_handle
-from ..security import hash_password, verify_password
+from ..login_guard import client_ip, password_change_limiter
+from ..password_policy import password_problem
+from ..security import hash_password_async, verify_password_async
+from ..session import SESSION_COOKIE_NAME, delete_user_sessions
 
 router = APIRouter(prefix="/api/me", tags=["me"])
 
@@ -83,7 +86,7 @@ async def update_handle(body: HandleUpdate, user: CurrentUser = Depends(require_
 
 
 @router.put("/password", status_code=204)
-async def update_password(body: dict = Body(default_factory=dict), user: CurrentUser = Depends(require_user)):
+async def update_password(request: Request, body: dict = Body(default_factory=dict), user: CurrentUser = Depends(require_user)):
     if user["api_key"]:
         raise HTTPException(
             status_code=400, detail={"error": "validation_error", "message": "Not applicable to API key requests"}
@@ -104,15 +107,34 @@ async def update_password(body: dict = Body(default_factory=dict), user: Current
                 "message": "This account signs in with Google — there is no local password to change.",
             },
         )
-    if not current_password or not verify_password(current_password, row["password_hash"]):
+    ip = client_ip(request)
+    wait = password_change_limiter.retry_after(ip, username)
+    if wait:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "too_many_attempts",
+                "message": f"Too many failed attempts. Try again in {max(1, -(-wait // 60))} minute(s).",
+            },
+            headers={"Retry-After": str(wait)},
+        )
+    if not current_password or not await verify_password_async(current_password, row["password_hash"]):
+        password_change_limiter.record_failure(ip, username)
         raise HTTPException(status_code=401, detail={"error": "unauthorized", "message": "Current password is incorrect"})
-    if not new_password or not isinstance(new_password, str) or len(new_password) < 4:
+    password_change_limiter.record_success(ip, username)
+    problem = password_problem(new_password, username)
+    if problem:
         raise HTTPException(
             status_code=400,
-            detail={"error": "validation_error", "message": '"new_password" must be at least 4 characters'},
+            detail={"error": "validation_error", "message": problem.replace('"password"', '"new_password"')},
         )
 
-    await pool.execute("UPDATE users SET password_hash = $1 WHERE username = $2", hash_password(new_password), username)
+    await pool.execute(
+        "UPDATE users SET password_hash = $1 WHERE username = $2", await hash_password_async(new_password), username
+    )
+    # Trocou a senha: todas as OUTRAS sessoes dessa conta caem (um cookie roubado
+    # ou esquecido em outro aparelho deixa de valer); a atual continua.
+    await delete_user_sessions(username, except_token=request.cookies.get(SESSION_COOKIE_NAME))
 
     # Nunca grava a senha (nem o hash) no audit_log.
     await log_audit(username, "update", "user", username, username, "Changed: password (self-service)")

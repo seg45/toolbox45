@@ -54,20 +54,55 @@ def clear_session_cookie(response: Response, secure: bool = False) -> None:
     response.delete_cookie(key=SESSION_COOKIE_NAME, path="/", httponly=True, samesite="lax", secure=secure)
 
 
+MAX_SESSIONS_PER_USER = 10
+
+
 async def create_session(username: str) -> str:
     token = generate_session_token()
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=SESSION_TTL_SECONDS)
     pool = get_pool()
-    await pool.execute(
-        "INSERT INTO sessions (token, username, expires_at) VALUES ($1, $2, $3)",
-        token, username, expires_at,
-    )
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "INSERT INTO sessions (token, username, expires_at) VALUES ($1, $2, $3)",
+                token, username, expires_at,
+            )
+            # Faxina oportunista: sessoes vencidas de qualquer usuario saem da
+            # tabela (o indice idx_sessions_expires torna isto barato) e cada
+            # usuario guarda no maximo MAX_SESSIONS_PER_USER sessoes -- as mais
+            # antigas caem. Sem isto, logins repetidos (ou um script) so fariam
+            # a tabela crescer.
+            await conn.execute("DELETE FROM sessions WHERE expires_at < NOW()")
+            await conn.execute(
+                """DELETE FROM sessions WHERE username = $1 AND token NOT IN (
+                       SELECT token FROM sessions WHERE username = $1
+                       ORDER BY created_at DESC, token LIMIT $2)""",
+                username, MAX_SESSIONS_PER_USER,
+            )
     return token
 
 
 async def delete_session(token: str) -> None:
     pool = get_pool()
     await pool.execute("DELETE FROM sessions WHERE token = $1", token)
+
+
+async def delete_user_sessions(username: str, except_token: Optional[str] = None) -> int:
+    """Encerra as sessoes de `username` (todas, ou todas menos `except_token`).
+    Usada quando algo que protege a conta muda -- senha trocada/redefinida, conta
+    desativada -- para que um cookie roubado ou esquecido num PC alheio pare de
+    valer na hora, e nao so daqui a ate 12 h."""
+    pool = get_pool()
+    if except_token:
+        result = await pool.execute(
+            "DELETE FROM sessions WHERE username = $1 AND token <> $2", username, except_token
+        )
+    else:
+        result = await pool.execute("DELETE FROM sessions WHERE username = $1", username)
+    try:
+        return int(result.rsplit(" ", 1)[-1])
+    except (ValueError, AttributeError):
+        return 0
 
 
 async def get_current_session(request: Request) -> Optional[CurrentSession]:

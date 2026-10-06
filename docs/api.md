@@ -32,7 +32,11 @@ abaixo):
    `POST /api/auth/login` (ver **Login local e usuários** abaixo) OU login com Google
    (ver **Login com Google** abaixo); os dois usam exatamente o mesmo cookie/sessão — só
    muda a FORMA de chegar até ele. `authMethod` reporta `"local"` ou `"google"`
-   separadamente para essas contas.
+   separadamente para essas contas. Cada usuário guarda no máximo **10 sessões** abertas
+   (as mais antigas caem quando entra uma nova) e sessões vencidas são apagadas
+   automaticamente. As sessões de uma conta são **encerradas** quando a senha é trocada
+   (`PUT /api/me/password` — só as outras; a atual continua), redefinida por um
+   super_admin ou quando a conta é desabilitada.
 
 Não existe mais identificação automática por login do Windows (NTLM) nem um fallback
 "anônimo" (dev/usuário do SO) — removidos a pedido do usuário ("deixar somente
@@ -92,8 +96,10 @@ protegido), `structural_dependency` (409 — parâmetro estrutural, ver Parâmet
 endpoint exige `role: admin`), `too_large` (400 — valor/imagem grande demais),
 `too_many_keys` (400 — teto de chaves em `/api/user-data`), `too_many_requests` (429 — limite
 de taxa do nginx, ver abaixo), `payload_too_large` (413 — corpo acima do limite da rota),
-`internal_error` (500 — a mensagem é sempre genérica; o detalhe só vai para o log do
-servidor). Alguns erros `in_use`/
+`too_many_attempts` (429 — bloqueio por senhas erradas, ver **Login local**; traz o
+cabeçalho `Retry-After`), `server_busy` (503 — fila de cálculo de hash de senha cheia;
+`Retry-After: 5`), `internal_error` (500 — a mensagem é sempre genérica; o detalhe só vai
+para o log do servidor). Alguns erros `in_use`/
 `structural_dependency` também trazem `"count": <n>`.
 
 ---
@@ -366,6 +372,14 @@ compartilhamento do usuário (ver seção **Compartilhamento entre usuários** a
 
 ---
 
+## `PUT /api/me/password`
+Troca a própria senha (só conta local; não vale com API key). Corpo `{ "current_password",
+"new_password" }`; `new_password` segue a regra de 8 a 256 caracteres, diferente do e-mail.
+`204` em sucesso — as **outras** sessões da conta são encerradas, a atual continua. `401
+unauthorized` se a senha atual estiver errada; `400 validation_error` se a nova for
+inválida. Errar a senha atual conta para o bloqueio (5 por (IP, usuário), 10 por usuário e 30
+por IP em 15 min): depois disso `429 too_many_attempts` com `Retry-After`.
+
 ## Compartilhamento entre usuários (`/api/me/handle`, `/api/shares`)
 
 Por padrão, pastas e comandos de um usuário são **privados**: os demais só os veem se
@@ -452,7 +466,20 @@ Loga com uma conta local (usuário/senha). Corpo: `{ "username": "admin", "passw
 "admin" }`. Sucesso: `200` `{ "username": "admin", "role": "super_admin" }` + `Set-Cookie:
 tb45_session=...` (`HttpOnly`, 12h). Falha: `401 invalid_credentials` (usuário local
 inexistente, senha errada, ou conta desabilitada). Rota pública (não exige sessão
-prévia — senão ninguém conseguiria logar). Limitada a ~6 tentativas/min por IP (`429`).
+prévia — senão ninguém conseguiria logar). Limitada a ~6 tentativas/min por IP (`429
+too_many_requests`, nginx).
+
+**Bloqueio por senha errada (backend).** Só as tentativas que erram a senha contam, numa
+janela deslizante de 15 min: 5 por (IP, usuário), 20 por usuário (ataque distribuído) e 30
+por IP (password spraying). Estourado o limite, o login responde `429 too_many_attempts` com
+`Retry-After` (segundos) — inclusive para a senha certa — até a janela liberar; enquanto
+bloqueado nenhum hash de senha é calculado. Um login correto zera o contador do (IP,
+usuário). Os contadores ficam em memória (reiniciar o backend os zera) e o IP vem de
+`X-Real-IP`, que o nginx sobrescreve. Efeito colateral aceito: quem errar a senha de
+propósito consegue deixar uma conta indisponível por até 15 min. Para usuário
+inexistente/desabilitado o servidor calcula o mesmo hash, então o tempo de resposta não
+revela quais contas existem. O cálculo do hash roda em thread (no máximo 2 simultâneos); com
+a fila cheia a resposta é `503 server_busy`.
 
 ### `POST /api/auth/register`
 Auto-cadastro público. Corpo `{ "email", "password" }`; a conta nasce **desabilitada,
@@ -591,7 +618,9 @@ Corpo parcial — qualquer combinação de `{ "role": "admin"|"user", "disabled"
 "password": "..." }`. `password` só é aceito para contas locais (`400
 validation_error` para conta Google; a mesma regra de 8 a 256 caracteres do cadastro vale
 para a senha nova — senhas antigas mais curtas continuam funcionando no login até serem
-trocadas). Recusa com `409 conflict` qualquer mudança que
+trocadas). Redefinir a senha ou desabilitar a conta **encerra todas as sessões** do usuário
+(o `audit_log` registra quantas: `... ; N session(s) revoked`); mudar só o `role` não derruba a
+sessão (o papel é lido a cada requisição). Recusa com `409 conflict` qualquer mudança que
 deixaria a aplicação **sem nenhum admin habilitado** (trava de segurança contra
 lockout).
 

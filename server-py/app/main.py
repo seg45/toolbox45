@@ -102,6 +102,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from . import backup, db, oauth, tls
+from .security import HashingBusy
 from .routers import api_keys as api_keys_router
 from .routers import auth as auth_router
 from .routers import backup as backup_router
@@ -168,6 +169,17 @@ async def flat_http_exception_handler(request: Request, exc: HTTPException) -> J
         status_code=exc.status_code,
         content={"error": "error", "message": str(exc.detail)},
         headers=exc.headers,
+    )
+
+
+@app.exception_handler(HashingBusy)
+async def hashing_busy_handler(request: Request, exc: HashingBusy) -> JSONResponse:
+    # Fila de calculo de scrypt cheia (ver app/security.py): recusa na hora em
+    # vez de acumular requisicoes e derrubar o servico.
+    return JSONResponse(
+        status_code=503,
+        content={"error": "server_busy", "message": "The server is busy. Try again in a few seconds."},
+        headers={"Retry-After": "5"},
     )
 
 

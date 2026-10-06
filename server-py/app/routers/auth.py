@@ -17,7 +17,8 @@ from pydantic import BaseModel
 from .. import oauth
 from ..db import get_pool
 from ..handles import generate_unique_handle
-from ..security import hash_password, verify_password
+from ..login_guard import client_ip, login_limiter
+from ..security import burn_verify, hash_password_async, verify_password_async
 from ..password_policy import password_problem
 from ..session import (
     SESSION_COOKIE_NAME,
@@ -68,15 +69,37 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
             detail={"error": "validation_error", "message": '"username" and "password" are required'},
         )
 
+    ip = client_ip(request)
+    wait = login_limiter.retry_after(ip, username)
+    if wait:
+        # Bloqueado: responde sem calcular scrypt (rejeicao barata).
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "too_many_attempts",
+                "message": f"Too many failed login attempts. Try again in {max(1, -(-wait // 60))} minute(s).",
+            },
+            headers={"Retry-After": str(wait)},
+        )
+
     pool = get_pool()
     user = await pool.fetchrow(
         "SELECT * FROM users WHERE username = $1 AND is_local = 1", username
     )
-    if not user or user["disabled"] or not verify_password(password, user["password_hash"]):
+    if user and not user["disabled"]:
+        ok = await verify_password_async(password, user["password_hash"])
+    else:
+        # Usuario inexistente/desativado: gasta o mesmo scrypt, para o tempo
+        # de resposta nao revelar quais contas existem.
+        await burn_verify(password)
+        ok = False
+    if not ok:
+        login_limiter.record_failure(ip, username)
         raise HTTPException(
             status_code=401,
             detail={"error": "invalid_credentials", "message": "Invalid username or password"},
         )
+    login_limiter.record_success(ip, username)
 
     token = await create_session(user["username"])
     set_session_cookie(response, token, secure=request_is_https(request))
@@ -134,7 +157,7 @@ async def register(payload: RegisterRequest) -> dict:
         await conn.execute(
             """INSERT INTO users (username, password_hash, role, is_local, disabled, created_by, auth_provider, handle)
                VALUES ($1, $2, 'user', 1, 1, 'self-registration', 'local', $3)""",
-            normalized_email, hash_password(password), handle,
+            normalized_email, await hash_password_async(password), handle,
         )
         # ensureDefaultFolder(): toda conta nova ja nasce com a pasta
         # "Favorites" -- ON CONFLICT DO NOTHING pelo mesmo motivo do Node

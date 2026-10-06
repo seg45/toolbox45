@@ -22,9 +22,11 @@ Parametros scrypt: todos default do Node (N=16384, r=8, p=1, dklen=64) --
 Node e Python tambem usam o mesmo default de maxmem (32 MiB) quando nao
 especificado, entao nao precisa ser passado explicitamente aqui.
 """
+import asyncio
 import hashlib
 import hmac
 import secrets
+from typing import Callable, Optional
 
 _N = 16384
 _R = 8
@@ -64,3 +66,71 @@ def verify_password(password, stored) -> bool:
 
 def generate_session_token() -> str:
     return secrets.token_hex(32)
+
+
+# ---------------------------------------------------------------------------
+# scrypt FORA do event loop
+#
+# hashlib.scrypt leva dezenas de ms de CPU (e 16 MiB de memoria) por chamada. Se
+# rodar direto dentro de uma rota `async def`, trava o event loop inteiro
+# enquanto calcula: uma rajada de tentativas de login deixava TODAS as
+# requisicoes (inclusive /api/health e o healthcheck do Docker) esperando em
+# fila. Aqui o calculo vai para uma thread (hashlib.scrypt solta o GIL) e um
+# semaforo limita quantos rodam ao mesmo tempo (memoria e CPU previsiveis); o
+# que passar de MAX_PENDING na fila e recusado na hora (HashingBusy -> 503)
+# em vez de acumular.
+# ---------------------------------------------------------------------------
+SCRYPT_CONCURRENCY = 2
+MAX_PENDING = 32
+
+
+class HashingBusy(Exception):
+    """Fila de calculo de hash cheia -- o servidor esta sob carga."""
+
+
+_sem_loop: Optional[asyncio.AbstractEventLoop] = None
+_sem: Optional[asyncio.Semaphore] = None
+_pending = 0
+
+
+def _semaphore() -> asyncio.Semaphore:
+    # Um asyncio.Semaphore pertence a um event loop; recria se o loop mudou
+    # (so acontece em testes que abrem mais de um loop).
+    global _sem, _sem_loop
+    loop = asyncio.get_running_loop()
+    if _sem is None or _sem_loop is not loop:
+        _sem, _sem_loop = asyncio.Semaphore(SCRYPT_CONCURRENCY), loop
+    return _sem
+
+
+async def _run_limited(fn: Callable, *args):
+    global _pending
+    if _pending >= MAX_PENDING:
+        raise HashingBusy()
+    _pending += 1
+    try:
+        async with _semaphore():
+            return await asyncio.to_thread(fn, *args)
+    finally:
+        _pending -= 1
+
+
+async def hash_password_async(password: str) -> str:
+    return await _run_limited(hash_password, password)
+
+
+async def verify_password_async(password, stored) -> bool:
+    return await _run_limited(verify_password, password, stored)
+
+
+# Hash descartavel: quando o usuario nao existe (ou esta desativado), o login
+# ainda assim calcula um scrypt, para a resposta demorar o mesmo e nao revelar
+# quais usuarios existem.
+_dummy_hash: Optional[str] = None
+
+
+async def burn_verify(password) -> None:
+    global _dummy_hash
+    if _dummy_hash is None:
+        _dummy_hash = hash_password(secrets.token_hex(8))
+    await _run_limited(verify_password, password, _dummy_hash)
