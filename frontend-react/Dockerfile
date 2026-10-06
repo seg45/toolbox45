@@ -11,6 +11,11 @@
 # ════════════════════════════════════════════════════════════════════════
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
+# Limita o heap do Node no build (tsc + vite): sem teto, o V8 deixa o heap
+# crescer ate faltar RAM no host de ~1 GiB (docker01) e o kernel mata
+# processos por OOM. O build precisa de bem menos que isso (testado: passa
+# com 256 MB); 384 MB deixa folga.
+ENV NODE_OPTIONS=--max-old-space-size=384
 COPY frontend-react/package.json frontend-react/package-lock.json* ./
 RUN npm install
 COPY frontend-react/ .

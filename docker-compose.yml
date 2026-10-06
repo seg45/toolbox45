@@ -8,6 +8,13 @@ services:
     image: postgres:16-alpine
     container_name: toolbox45-db
     restart: unless-stopped
+    # Prioridade de sobrevivência no OOM: o docker01 tem ~1 GiB de RAM e um
+    # `docker compose build` do frontend (npm + tsc + vite) chega a esgotar a
+    # memória do host — em 05/out o kernel matou o uvicorn do backend em
+    # produção no meio de um build. Com oom_score_adj negativo o kernel
+    # prefere matar processos do build (que são descartáveis) a este
+    # container. (-500 numa escala de -1000..1000; padrão = 0.)
+    oom_score_adj: -500
     environment:
       POSTGRES_DB: "${POSTGRES_DB:-toolbox45}"
       POSTGRES_USER: "${POSTGRES_USER:-toolbox45}"
@@ -37,6 +44,9 @@ services:
     image: toolbox45-backend:latest
     container_name: toolbox45-backend
     restart: unless-stopped
+    # Ver o racional em toolbox45-db acima: protege a API de produção quando
+    # um build no mesmo host estoura a RAM.
+    oom_score_adj: -500
     depends_on:
       toolbox45-db:
         condition: service_healthy

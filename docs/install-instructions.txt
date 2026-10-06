@@ -248,6 +248,13 @@ serviço toolbox45-backend quanto o toolbox45-frontend já usam
       sudo mkswap /swapfile && sudo swapon /swapfile
       echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
   Confirme com "free -m" e "dmesg | grep -i oom".
+  No docker01 o swap hoje é de 2 GB (dois arquivos de 1 GB: /swapfile e
+  /swapfile2) com vm.swappiness=10 (/etc/sysctl.d/99-toolbox45.conf). Para
+  o banco e o backend nao serem mortos pelo kernel quando um build estoura
+  a RAM, o docker-compose.yml define oom_score_adj: -500 nos dois, e o
+  Dockerfile do frontend limita o heap do Node no build
+  (NODE_OPTIONS=--max-old-space-size=384). Para ver se houve OOM:
+      sudo journalctl -k --since "7 days ago" | grep -i -E "out of memory|oom-kill"
 
 - Login não funciona / usuário não consegue entrar: o Toolbox45 só aceita
   login local (usuário/senha, Settings → Users) ou login com
