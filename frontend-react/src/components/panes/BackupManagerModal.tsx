@@ -10,6 +10,7 @@
 // ════════════════════════════════════════════════
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useAuth } from '../../lib/auth';
 import { useConfirm } from '../../lib/useConfirm';
 import {
   backupDownloadUrl,
@@ -35,6 +36,9 @@ type ListState = 'loading' | 'error' | 'ready';
 
 export function BackupManagerModal({ onClose }: { onClose: () => void }) {
   const confirm = useConfirm();
+  // Download e Restore de backup são só do super admin (item 8 da auditoria
+  // de segurança, out/2026) — o backend responde 403 ao admin comum.
+  const { isSuperAdmin } = useAuth();
 
   // ── Lista ──
   const [listState, setListState] = useState<ListState>('loading');
@@ -377,12 +381,16 @@ export function BackupManagerModal({ onClose }: { onClose: () => void }) {
                         <td>{formatBackupDate(r.createdAt)}</td>
                         <td>{formatBackupSize(r.sizeBytes)}</td>
                         <td style={{ whiteSpace: 'nowrap', display: 'flex', gap: 6 }}>
-                          <a className="btn btn-sm" href={backupDownloadUrl(r.filename)} download>
-                            ⬇️ Download
-                          </a>
-                          <button type="button" className="btn btn-sm" onClick={() => handleRestore(r.filename)}>
-                            ♻️ Restore
-                          </button>
+                          {isSuperAdmin && (
+                            <a className="btn btn-sm" href={backupDownloadUrl(r.filename)} download>
+                              ⬇️ Download
+                            </a>
+                          )}
+                          {isSuperAdmin && (
+                            <button type="button" className="btn btn-sm" onClick={() => handleRestore(r.filename)}>
+                              ♻️ Restore
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}

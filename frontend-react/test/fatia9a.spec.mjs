@@ -280,7 +280,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 2: admin vê os 3 grupos (e abrir a aba não dispara requests) ──
 await withPage(browser, async page => {
-  const counters = await mockBase(page, { isAdmin: true });
+  const counters = await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeBackupState();
   await mockBackupApi(page, state);
   await goToApp(page);
@@ -321,7 +321,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 4: abertura dispara GET /api/backups e /api/backup-schedule; título; "Loading…" ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeBackupState({ backups: SAMPLE_BACKUPS });
   state.listGate = makeGate();
   await mockBackupApi(page, state);
@@ -346,7 +346,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 5: formato das linhas (filename, data, tamanho, Download, Restore) ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const backups = [...SAMPLE_BACKUPS, { filename: 'weird date.dump', createdAt: 'not-a-date', sizeBytes: 0 }, { filename: 'edge.dump', createdAt: '2026-03-05T14:30:00Z', sizeBytes: 1024 * 1024 - 1 }, { filename: 'a b#c&d.dump', createdAt: '2026-03-05T00:00:00Z', sizeBytes: 1023 }];
   const state = makeBackupState({ backups });
   await mockBackupApi(page, state);
@@ -395,7 +395,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 7: falha no GET /api/backups (500) ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeBackupState({ backups: SAMPLE_BACKUPS });
   state.listStatus = 500;
   await mockBackupApi(page, state);
@@ -456,7 +456,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 9b: reabrir o modal limpa o status do "Backup now" (openBackupManagerModal zera os status) ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeBackupState({ backups: SAMPLE_BACKUPS, schedule: { enabled: true } });
   await mockBackupApi(page, state);
   await goToApp(page);
@@ -481,7 +481,7 @@ function restoreConfirmText(fn) {
   return `Restore "${fn}"? This replaces the current database with this backup's contents. A safety copy of the current database is taken automatically first.`;
 }
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeBackupState({ backups: SINGLE });
   await mockBackupApi(page, state);
   const dialogs = [];
@@ -506,7 +506,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 11: Restore — Escape na confirmação -> nenhum POST ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeBackupState({ backups: SINGLE });
   await mockBackupApi(page, state);
   const dialogs = [];
@@ -525,7 +525,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 11b: clique no fundo da confirmação e ✕ também cancelam ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeBackupState({ backups: SINGLE });
   await mockBackupApi(page, state);
   page.on('dialog', d => d.accept());
@@ -547,7 +547,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 12: Restore — confirmar -> POST codificado, alert com a message do servidor, depois RELOAD ──
 await withPage(browser, async page => {
-  const counters = await mockBase(page, { isAdmin: true });
+  const counters = await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const fn = "it's a b#c.dump";
   const state = makeBackupState({ backups: [{ filename: fn, createdAt: '2026-03-05T14:30:00Z', sizeBytes: 500 }] });
   await mockBackupApi(page, state);
@@ -582,7 +582,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 13: Restore — resposta sem message -> 'Restore complete.' + reload ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeBackupState({ backups: SINGLE });
   state.restoreBody = { ok: true };
   await mockBackupApi(page, state);
@@ -603,7 +603,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 14: Restore — falha (500) -> alert fixo e SEM reload ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeBackupState({ backups: SINGLE });
   state.restoreStatus = 500;
   await mockBackupApi(page, state);
@@ -1225,6 +1225,22 @@ await withPage(browser, async page => {
   await sleep(400);
   assert((await dbPane(page).locator('button', { hasText: 'Backup & Restore' }).count()) === 0 && (await dbPane(page).locator('button', { hasText: 'View audit log' }).count()) === 0, 'cenário 34: flags de admin residuais no localStorage NÃO liberam os botões (gate vem de /api/me)');
   assert(counters.backupishRequests.length === 0, 'cenário 34: nenhum request admin-only disparado');
+});
+
+// ── Cenário 35 (auditoria de segurança, item 8): admin COMUM não vê Download/Restore ──
+// O backend responde 403 a esses endpoints para o admin comum; a UI não
+// deve oferecer os controles (o resto — listar, Backup now — continua).
+await withPage(browser, async page => {
+  await mockBase(page, { isAdmin: true, isSuperAdmin: false });
+  const state = makeBackupState({ backups: SAMPLE_BACKUPS });
+  await mockBackupApi(page, state);
+  await goToApp(page);
+  await openDatabasePane(page);
+  const m = await openBackupModal(page);
+  await assertEventually(async () => (await m.locator('#backupListTbody tr').count()) === SAMPLE_BACKUPS.length, 'cenário 35: admin comum vê a lista de backups');
+  assert((await m.locator('#backupListTbody tr button', { hasText: 'Restore' }).count()) === 0, 'cenário 35: admin comum NÃO vê botão Restore');
+  assert((await m.locator('#backupListTbody tr a').count()) === 0, 'cenário 35: admin comum NÃO vê link Download');
+  assert((await m.locator('button', { hasText: 'Backup now' }).count()) === 1, 'cenário 35: admin comum continua vendo "Backup now"');
 });
 
 await browser.close();

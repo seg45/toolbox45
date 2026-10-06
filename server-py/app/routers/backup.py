@@ -2,11 +2,13 @@
 Configuracoes -> "Backup & Restore" (ver js/backup.js) + GET
 /api/audit-log -- porta 1:1 de server/index.js.
 
-Modelo de autorizacao (CONFERIDO DIRETO no server/index.js real do
-Rodrigo -- ver server/index.js linhas ~4283-4470 para backup/restore e
-~2765 para audit-log): TODAS as 8 rotas desta fatia exigem require_admin
-(nenhuma e require_super_admin nem publica) -- padrao uniforme, ao
-contrario da fatia 9 (Sistema).
+Modelo de autorizacao: no backend Node original as 8 rotas desta fatia
+exigiam require_admin. Desde a auditoria de seguranca (out/2026, item 8),
+DOWNLOAD, DELETE e RESTORE de backup exigem require_super_admin: um backup
+contem os hashes de senha e o segredo do OAuth, e restaurar um dump
+sobrescreve ate a tabela `users` -- um admin comum podia se promover a
+super_admin com um dump forjado. Listar, criar backup, agendamento e audit
+log continuam com require_admin.
 
 /api/backups/:filename/download e /api/backups/:filename/restore usam o
 filename vindo da URL, protegido por resolve_backup_path() (ver
@@ -23,7 +25,7 @@ from fastapi.responses import FileResponse
 from .. import backup
 from ..audit import AUDIT_LOG_RETENTION_DAYS
 from ..db import get_pool
-from ..deps import CurrentUser, require_admin
+from ..deps import CurrentUser, require_admin, require_super_admin
 from .system import _read_global_setting, _write_global_setting
 
 logger = logging.getLogger("toolbox45")
@@ -61,7 +63,7 @@ async def create_backup(user: CurrentUser = Depends(require_admin)) -> dict:
 
 
 @router.get("/api/backups/{filename}/download")
-async def download_backup(filename: str, user: CurrentUser = Depends(require_admin)) -> FileResponse:
+async def download_backup(filename: str, user: CurrentUser = Depends(require_super_admin)) -> FileResponse:
     full = backup.resolve_backup_path(filename)
     if not full:
         raise HTTPException(status_code=404, detail={"error": "not_found"})
@@ -74,7 +76,7 @@ async def download_backup(filename: str, user: CurrentUser = Depends(require_adm
 
 
 @router.delete("/api/backups/{filename}", status_code=204)
-async def delete_backup(filename: str, user: CurrentUser = Depends(require_admin)) -> None:
+async def delete_backup(filename: str, user: CurrentUser = Depends(require_super_admin)) -> None:
     full = backup.resolve_backup_path(filename)
     if not full:
         raise HTTPException(status_code=404, detail={"error": "not_found"})
@@ -85,7 +87,7 @@ async def delete_backup(filename: str, user: CurrentUser = Depends(require_admin
 
 
 @router.post("/api/backups/{filename}/restore")
-async def restore_backup(filename: str, user: CurrentUser = Depends(require_admin)) -> dict:
+async def restore_backup(filename: str, user: CurrentUser = Depends(require_super_admin)) -> dict:
     # Por seguranca, tira uma foto do banco ATUAL antes de sobrescrever
     # (prefixo "pre-restore-"), para permitir desfazer.
     full = backup.resolve_backup_path(filename)

@@ -59,15 +59,19 @@ o acesso de cada rota é `server-py/app/deps.py` (`require_user`, `require_admin
   próprio; excluir comando de outro usuário ou `System` exige `admin`.
 - **`admin` ou `super_admin` (endpoints marcados **(admin)** abaixo):** todas as rotas
   de escrita dos catálogos (vendors, systems, versions, environments, topics, parameters,
-  prompts, exports e seus vínculos), Backup & Restore (`/api/backups*`,
-  `/api/backup-schedule`), audit log (`GET /api/audit-log`), API keys (`/api/api-keys*`),
-  certificado SSL (`/api/system/ssl-certificate*`), logo (`PUT`/`DELETE /api/system/logo`)
-  e configuração OAuth (`/api/system/oauth*`).
+  prompts, exports e seus vínculos), listar e criar backup (`GET`/`POST /api/backups`) e o
+  agendamento (`/api/backup-schedule`), audit log (`GET /api/audit-log`), API keys
+  (`/api/api-keys*`) e logo (`PUT`/`DELETE /api/system/logo`).
 - **Somente `super_admin`:** administração de usuários (`/api/users*`), grupos
-  (`/api/groups*`) e a aparência padrão da organização (`PUT /api/system/appearance`).
-  Nas seções abaixo, os endpoints de usuários, grupos e aparência vêm marcados
-  **(super_admin)**; logo e OAuth ficam na seção **Personalização e login (logo,
-  aparência, OAuth)**.
+  (`/api/groups*`), a aparência padrão da organização (`PUT /api/system/appearance`) e —
+  desde a auditoria de segurança de out/2026 — as operações que dariam a um `admin` o
+  caminho para virar `super_admin`: **baixar, excluir e restaurar backup**
+  (`GET /api/backups/:filename/download`, `DELETE /api/backups/:filename`,
+  `POST /api/backups/:filename/restore`; um backup carrega os hashes de senha e restaurar
+  sobrescreve a tabela `users`), o **certificado SSL/TLS** (`/api/system/ssl-certificate*`,
+  inclui a chave privada) e a **configuração OAuth** (`/api/system/oauth*`, inclui o client
+  secret). API keys nunca têm `super_admin`, então também recebem `403` nessas rotas.
+  Nas seções abaixo, esses endpoints vêm marcados **(super_admin)**.
 
 **Exemplo (curl, API key):**
 ```bash
@@ -807,18 +811,18 @@ etc.), administrados na aba Parâmetros da tela de catálogo.
 
 ---
 
-## Backup & Restore (`/api/backups`, `/api/backup-schedule`) — **(admin)**
+## Backup & Restore (`/api/backups`, `/api/backup-schedule`) — **(admin)**, exceto download/exclusão/restauração: **(super_admin)**
 Dumps do PostgreSQL via `pg_dump`/`pg_restore` (formato "custom"), guardados no volume
 `toolbox45-backups` do container backend.
 
 - `GET /api/backups` → `[{ "filename": "backup-20260804-020000.dump", "sizeBytes": 123456, "createdAt": "..." }]`.
 - `POST /api/backups` → cria um dump agora → `201 { "filename": "..." }`.
-- `GET /api/backups/:filename/download` → baixa o arquivo `.dump`.
-- `DELETE /api/backups/:filename` → apaga o arquivo → `204`.
+- `GET /api/backups/:filename/download` — **(super_admin)** → baixa o arquivo `.dump`.
+- `DELETE /api/backups/:filename` — **(super_admin)** → apaga o arquivo → `204`.
 - Falhas de backup/restore respondem `500 internal_error` com mensagem genérica (o stderr
   do `pg_dump`/`pg_restore` vai só para o log do backend). A senha do banco é passada ao
   `pg_dump`/`pg_restore` pela variável `PGPASSWORD`, nunca na linha de comando.
-- `POST /api/backups/:filename/restore` → tira um snapshot de segurança do estado
+- `POST /api/backups/:filename/restore` — **(super_admin)** → tira um snapshot de segurança do estado
   atual (prefixo `pre-restore-`) e então restaura (`pg_restore --clean --if-exists`) →
   `200 { "ok": true, "message": "..." }`.
 - `GET`/`PUT /api/backup-schedule` → agendamento diário/semanal/mensal, ex.:
@@ -870,7 +874,7 @@ tema/cor próprios mantém os seus.
   sentinela `__global_defaults__` (chaves `appearanceTheme` e `appearanceAccent`) — a
   mesma área dos defaults de `/api/global-settings`.
 
-### Configuração do login Google/Microsoft (`/api/system/oauth`) — **(admin)**
+### Configuração do login Google/Microsoft (`/api/system/oauth`) — **(super_admin)**
 Permite configurar os provedores OAuth pela interface, sem editar variáveis de
 ambiente. **Prioridade: banco > ambiente** — ao salvar aqui, a configuração do banco
 passa a valer; ao remover, volta para as variáveis de ambiente (se existirem) ou o
@@ -899,7 +903,7 @@ provedor fica desabilitado. As rotas de login em si (`/api/auth/google`,
 
 ---
 
-## SSL Certificate (`/api/system/ssl-certificate`) — **(admin)**
+## SSL Certificate (`/api/system/ssl-certificate`) — **(super_admin)**
 Certificado/chave usados pelo nginx do `toolbox45-frontend` para servir HTTPS (porta
 443) — guardados no volume `toolbox45-tls`, compartilhado (rw aqui, ro no frontend). No
 primeiro boot (e sempre que não houver certificado customizado), o backend gera um

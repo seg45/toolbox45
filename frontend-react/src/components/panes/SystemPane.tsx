@@ -8,6 +8,10 @@
 // `display:none`). Se `!auth.isAdmin`, a aba fica efetivamente vazia —
 // comportamento esperado, não um estado de erro.
 //
+// Auditoria de segurança (out/2026, item 8): SSL Certificate e OAuth
+// Integrations são só para super admin (o backend responde 403 ao admin
+// comum), então os dois widgets só aparecem com `auth.isSuperAdmin`.
+//
 // Logo/Default theme & colors/SSL Certificate têm um botão "Manage …" (com
 // ícone, como no original) que abre o modal cheio; OAuth Integrations lista
 // as duas linhas com "Configure" — só "API access" é
@@ -89,10 +93,9 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
   }, []);
 
   useEffect(() => {
-    if (!auth.isAdmin) return;
-    loadOauthStatus();
-    loadApiKeys();
-  }, [auth.isAdmin, loadOauthStatus, loadApiKeys]);
+    if (auth.isSuperAdmin) loadOauthStatus();
+    if (auth.isAdmin) loadApiKeys();
+  }, [auth.isAdmin, auth.isSuperAdmin, loadOauthStatus, loadApiKeys]);
 
   // createApiKey() do original: a mutação de rede em si (POST + refresh da
   // lista + abrir o reveal) mora aqui, não dentro de NewApiKeyModal — ver
@@ -150,7 +153,7 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
         </div>
       )}
 
-      {auth.isAdmin && (
+      {auth.isSuperAdmin && (
         <div className="set-group" id="sysGroupSslCertificate">
           <span className="set-label">SSL Certificate</span>
           <div className="settings-action-row">
@@ -162,7 +165,7 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
         </div>
       )}
 
-      {auth.isAdmin && (
+      {auth.isSuperAdmin && (
         <div className="set-group" id="sysGroupOAuth">
           <span className="set-label">OAuth Integrations</span>
           <span className="set-hint">

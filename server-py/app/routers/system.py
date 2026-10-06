@@ -11,8 +11,12 @@ require_super_admin). Aqui cada rota tem seu proprio nivel:
   - GET /api/system/logo e GET /api/system/appearance: PUBLICAS (sem
     Depends nenhum) -- login.html precisa delas ANTES de qualquer sessao
     existir (mesmo motivo de GET /api/auth/providers, fatia 2).
-  - PUT/DELETE /api/system/logo, GET/PUT/DELETE /api/system/oauth[/:provider],
-    GET/POST/DELETE /api/system/ssl-certificate: require_admin (rank>=1).
+  - PUT/DELETE /api/system/logo: require_admin (rank>=1).
+  - GET/PUT/DELETE /api/system/oauth[/:provider] e GET/POST/DELETE
+    /api/system/ssl-certificate: require_super_admin (rank>=2). Mudanca da
+    auditoria de seguranca (out/2026, item 8): um admin comum podia trocar o
+    provedor OAuth e a chave privada do TLS -- o que, somado ao restore de
+    backup, o deixava a um passo de virar super_admin.
   - PUT /api/system/appearance: require_super_admin (rank>=2) -- MAIS
     restrito que os outros cadastros de Sistema, porque afeta a aparencia
     vista por TODO MUNDO, inclusive antes do login.
@@ -324,7 +328,7 @@ OAUTH_PROVIDERS = {"google", "microsoft"}
 
 
 @router.get("/api/system/oauth")
-async def get_oauth_settings(user: CurrentUser = Depends(require_admin)) -> dict:
+async def get_oauth_settings(user: CurrentUser = Depends(require_super_admin)) -> dict:
     pool = get_pool()
     rows = await pool.fetch("SELECT * FROM oauth_settings")
     by_provider = {r["provider"]: r for r in rows}
@@ -348,7 +352,7 @@ async def get_oauth_settings(user: CurrentUser = Depends(require_admin)) -> dict
 
 
 @router.put("/api/system/oauth/{provider}")
-async def update_oauth_settings(provider: str, body: dict = Body(default_factory=dict), user: CurrentUser = Depends(require_admin)) -> dict:
+async def update_oauth_settings(provider: str, body: dict = Body(default_factory=dict), user: CurrentUser = Depends(require_super_admin)) -> dict:
     if provider not in OAUTH_PROVIDERS:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Unknown provider."})
 
@@ -397,7 +401,7 @@ async def update_oauth_settings(provider: str, body: dict = Body(default_factory
 
 
 @router.delete("/api/system/oauth/{provider}")
-async def delete_oauth_settings(provider: str, user: CurrentUser = Depends(require_admin)) -> dict:
+async def delete_oauth_settings(provider: str, user: CurrentUser = Depends(require_super_admin)) -> dict:
     if provider not in OAUTH_PROVIDERS:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": "Unknown provider."})
     pool = get_pool()
@@ -415,17 +419,17 @@ async def delete_oauth_settings(provider: str, user: CurrentUser = Depends(requi
 
 
 # ════════════════════════════════════════════════
-# Certificado SSL/TLS customizavel -- require_admin nas 3 rotas. Geracao do
+# Certificado SSL/TLS customizavel -- require_super_admin nas 3 rotas. Geracao do
 # autoassinado default (ensure_tls_bootstrap) roda no BOOT do processo, ver
 # app/main.py (lifespan) e app/tls.py.
 # ════════════════════════════════════════════════
 @router.get("/api/system/ssl-certificate")
-async def get_ssl_certificate(user: CurrentUser = Depends(require_admin)) -> dict:
+async def get_ssl_certificate(user: CurrentUser = Depends(require_super_admin)) -> dict:
     return tls.read_cert_info()
 
 
 @router.post("/api/system/ssl-certificate", status_code=200)
-async def import_ssl_certificate(body: dict = Body(default_factory=dict), user: CurrentUser = Depends(require_admin)) -> dict:
+async def import_ssl_certificate(body: dict = Body(default_factory=dict), user: CurrentUser = Depends(require_super_admin)) -> dict:
     cert = body.get("cert")
     key = body.get("key")
     chain = body.get("chain")
@@ -464,7 +468,7 @@ async def import_ssl_certificate(body: dict = Body(default_factory=dict), user: 
 
 
 @router.delete("/api/system/ssl-certificate", status_code=200)
-async def reset_ssl_certificate(user: CurrentUser = Depends(require_admin)) -> dict:
+async def reset_ssl_certificate(user: CurrentUser = Depends(require_super_admin)) -> dict:
     tls.backup_current_tls_files()
     await tls.generate_self_signed_cert()
     await log_audit(user["username"], "delete", "ssl_certificate", None, None, "Removed custom SSL certificate — reverted to a self-signed default")

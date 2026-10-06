@@ -322,7 +322,7 @@ await withPage(browser, async page => {
   assert((await page.locator('.settings-pane[data-pane="system"] .set-group').count()) === 0, 'cenário 1: nenhum dos 5 widgets (.set-group) aparece pra usuário comum');
 });
 
-// ── Cenário 2: admin comum vê 4 widgets (sem "Default theme & colors") ──
+// ── Cenário 2: admin comum vê 2 widgets (Logo e API access) — SSL/OAuth/Appearance são só do super admin ──
 await withPage(browser, async page => {
   await mockBase(page, { isAdmin: true, isSuperAdmin: false });
   const state = makeSystemState();
@@ -332,8 +332,8 @@ await withPage(browser, async page => {
 
   const labels = await labelsTextLower(systemWidgetLabels(page));
   assert(
-    JSON.stringify(labels) === JSON.stringify(['logo', 'ssl certificate', 'oauth integrations', 'api access']),
-    `cenário 2: admin comum vê 4 widgets, sem Appearance (lido: ${JSON.stringify(labels)})`
+    JSON.stringify(labels) === JSON.stringify(['logo', 'api access']),
+    `cenário 2: admin comum vê 2 widgets (Logo e API access; sem Appearance, SSL e OAuth) (lido: ${JSON.stringify(labels)})`
   );
   await page.screenshot({ path: `${SHOTS}/2-system-admin.png` });
 });
@@ -527,7 +527,7 @@ async function openOauthModal(page, providerLabel, fresh = true) {
 
 // ── Cenário 10: status "Not configured" quando configured:false ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState();
   await mockSystemPane(page, state);
   await goToApp(page);
@@ -541,7 +541,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 11: Tenant ID só aparece pro Microsoft ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState();
   await mockSystemPane(page, state);
   await goToApp(page);
@@ -557,7 +557,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 12: salvar sem Client ID mostra mensagem inline (sem alert nativo) ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState();
   await mockSystemPane(page, state);
   await goToApp(page);
@@ -574,7 +574,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 13: "Danger zone" só aparece com source:"db" ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState({ oauth: { google: { configured: true, source: 'db', clientId: 'abc', clientSecretSet: true } } });
   await mockSystemPane(page, state);
   await goToApp(page);
@@ -589,7 +589,7 @@ await withPage(browser, async page => {
 });
 
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState({ oauth: { microsoft: { configured: true, source: 'env', clientId: 'abc', clientSecretSet: true } } });
   await mockSystemPane(page, state);
   await goToApp(page);
@@ -601,7 +601,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 14: salvar com sucesso limpa o Client Secret e mostra status ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState();
   await mockSystemPane(page, state);
   await goToApp(page);
@@ -631,7 +631,7 @@ async function openSslModal(page) {
 
 // ── Cenário 15: salvar sem cert/key mostra status inline ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState();
   await mockSystemPane(page, state);
   await goToApp(page);
@@ -644,7 +644,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 16: upload de arquivo de certificado cai no textarea (trimmed) ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState();
   await mockSystemPane(page, state);
   await goToApp(page);
@@ -663,7 +663,7 @@ await withPage(browser, async page => {
 
 // ── Cenário 17: badges "expired"/"self-signed" ──
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState({ ssl: { isExpired: true, isSelfSigned: false } });
   await mockSystemPane(page, state);
   await goToApp(page);
@@ -674,7 +674,7 @@ await withPage(browser, async page => {
 });
 
 await withPage(browser, async page => {
-  await mockBase(page, { isAdmin: true });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState({ ssl: { isExpired: false, isSelfSigned: true } });
   await mockSystemPane(page, state);
   await goToApp(page);
@@ -821,6 +821,22 @@ await withPage(browser, async page => {
     () => state.calls.userDataPut.length > putsBefore && state.calls.userDataPut.some(body => 'cpa-theme' in body),
     'cenário 23: PUT /api/user-data foi chamado com um corpo contendo "cpa-theme" após o toggle de tema pessoal'
   );
+});
+
+// ── Cenário 24 (auditoria de segurança, item 8): admin COMUM não vê SSL nem OAuth ──
+await withPage(browser, async page => {
+  const oauthCalls = [];
+  page.on('request', r => { if (r.url().includes('/api/system/oauth') || r.url().includes('/api/system/ssl-certificate')) oauthCalls.push(r.url()); });
+  await mockBase(page, { isAdmin: true, isSuperAdmin: false });
+  const state = makeSystemState();
+  await mockSystemPane(page, state);
+  await goToApp(page);
+  await openSystemPane(page);
+  await page.waitForTimeout(400);
+  assert((await page.locator('#sysGroupSslCertificate').count()) === 0, 'cenário 24: admin comum NÃO vê o widget SSL Certificate');
+  assert((await page.locator('#sysGroupOAuth').count()) === 0, 'cenário 24: admin comum NÃO vê o widget OAuth Integrations');
+  assert((await page.locator('#sysGroupApiAccess, .set-group:has(.set-label:text-is("API access"))').count()) >= 1, 'cenário 24: admin comum continua vendo API access');
+  assert(oauthCalls.length === 0, `cenário 24: nenhum request a /api/system/oauth ou ssl-certificate (lido: ${JSON.stringify(oauthCalls)})`);
 });
 
 await browser.close();
