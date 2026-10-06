@@ -499,7 +499,7 @@ await withPage(browser, async page => {
 
   await page.locator('.content-toolbar .dd-btn', { hasText: 'My folders' }).click();
   await page.waitForSelector('.dd-panel .dd-search-input');
-  assert(await page.isVisible('.dd-panel.seg .seg-btn >> text="bob"'), 'cenário 8: "bob" aparece na lista antes de buscar');
+  await assertEventually(async () => page.isVisible('.dd-panel.seg .seg-btn >> text="bob"'), 'cenário 8: "bob" aparece na lista antes de buscar');
 
   await page.fill('.dd-panel .dd-search-input', 'zzz-no-match');
   await assertEventually(async () => !(await page.isVisible('.dd-panel.seg .seg-btn >> text="bob"')), 'cenário 8: busca sem resultado esconde "bob" da lista');

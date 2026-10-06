@@ -14,7 +14,7 @@
 // switchSettingsPane('account') disparar renderSharingPanel() no original —
 // aqui a própria aba já SER o componente monta tudo de uma vez.
 // ════════════════════════════════════════════════
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../lib/auth';
 import { useConfirm } from '../../lib/useConfirm';
 import { ApiError, updateHandle, updatePassword } from '../../lib/api';
@@ -78,6 +78,7 @@ export function AccountPane() {
   const [sharesLoading, setSharesLoading] = useState(true);
   const [sharesLoadError, setSharesLoadError] = useState('');
   const [shareHandle, setShareHandle] = useState('');
+  const shareHandleRef = useRef<HTMLInputElement>(null);
   const [shareFolders, setShareFolders] = useState(false);
   const [shareCommands, setShareCommands] = useState(false);
   const [newShareError, setNewShareError] = useState('');
@@ -103,7 +104,10 @@ export function AccountPane() {
   async function submitNewShare() {
     setNewShareError('');
     const handle = shareHandle.trim().toLowerCase();
-    if (!handle) return;
+    if (!handle) {
+      shareHandleRef.current?.focus();
+      return;
+    }
     if (!shareFolders && !shareCommands) {
       setNewShareError('Choose Folders and/or Commands to share.');
       return;
@@ -168,47 +172,47 @@ export function AccountPane() {
         )}
       </div>
 
-      <div className="set-group" style={{ marginTop: 10 }}>
-        <span className="set-label">Your handle</span>
-        <div className="acct-inline-row">
-          {!editingHandle ? (
-            <>
-              <code>{handleValue || '—'}</code>
-              <button type="button" className="btn btn-sm" onClick={() => setEditingHandle(true)}>Change</button>
-            </>
-          ) : (
-            <>
-              <input
-                className="set-input"
-                type="text"
-                style={{ maxWidth: 180 }}
-                placeholder="your-handle"
-                autoComplete="off"
-                value={handleValue}
-                onChange={e => setHandleValue(e.target.value)}
-              />
-              <button type="button" className="btn btn-sm btn-primary" disabled={handleBusy} onClick={saveHandle}>Save</button>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => {
-                  setHandleValue(auth.me?.handle || '');
-                  setHandleError('');
-                  setEditingHandle(false);
-                }}
-              >
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
-        {handleError && <div className="set-hint" style={{ color: 'var(--red)' }}>{handleError}</div>}
-      </div>
       <div className="set-group" id="acctGroupSharing">
         <span className="set-label">Sharing</span>
         <div className="set-hint">
           Folders and commands are private by default. Share your handle with someone so they can see yours, or share below to see someone
           else's.
+        </div>
+        <div className="set-group" style={{ marginTop: 10 }}>
+          <span className="set-label">Your handle</span>
+          <div className="acct-inline-row">
+            {!editingHandle ? (
+              <>
+                <code>{handleValue || '—'}</code>
+                <button type="button" className="btn btn-sm" onClick={() => setEditingHandle(true)}>Change</button>
+              </>
+            ) : (
+              <>
+                <input
+                  className="set-input"
+                  type="text"
+                  style={{ maxWidth: 180 }}
+                  placeholder="your-handle"
+                  autoComplete="off"
+                  value={handleValue}
+                  onChange={e => setHandleValue(e.target.value)}
+                />
+                <button type="button" className="btn btn-sm btn-primary" disabled={handleBusy} onClick={saveHandle}>Save</button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setHandleValue(auth.me?.handle || '');
+                    setHandleError('');
+                    setEditingHandle(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+          </div>
+          {handleError && <div className="set-hint" style={{ color: 'var(--red)' }}>{handleError}</div>}
         </div>
         <div className="set-group" style={{ marginTop: 14 }}>
           <span className="set-label">Share with someone</span>
@@ -218,6 +222,7 @@ export function AccountPane() {
               type="text"
               style={{ maxWidth: 180 }}
               placeholder="Their handle"
+              ref={shareHandleRef}
               autoComplete="off"
               value={shareHandle}
               onChange={e => setShareHandle(e.target.value)}
@@ -233,7 +238,7 @@ export function AccountPane() {
               <input type="checkbox" checked={shareCommands} onChange={e => setShareCommands(e.target.checked)} />
               <span>Commands</span>
             </label>
-            <button type="button" className="btn btn-sm btn-primary" disabled={shareBusy || !shareHandle.trim()} onClick={submitNewShare}>
+            <button type="button" className="btn btn-sm btn-primary" disabled={shareBusy} onClick={submitNewShare}>
               Share
             </button>
           </div>

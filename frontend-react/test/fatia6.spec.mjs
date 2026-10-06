@@ -729,6 +729,29 @@ await withPage(browser, async page => {
   assert(state.calls.create.length === 0, 'cenário 17: nenhum POST /api/shares foi disparado');
 });
 
+// ── Cenário 17b: como no original — "Share" fica sempre ativo; com handle vazio só foca o campo; "Your handle" mora dentro do bloco Sharing ──
+await withPage(browser, async page => {
+  await mockBase(page);
+  const state = makeSharesState(SHARES_FIXTURE_GIVEN, SHARES_FIXTURE_RECEIVED);
+  await mockShares(page, state);
+  await goToApp(page);
+  await openUserAccountPane(page);
+
+  const content = page.locator('.settings-content');
+  const shareBtn = content.locator('button', { hasText: 'Share' });
+  assert(await shareBtn.isEnabled(), 'cenário 17b: botão "Share" ativo mesmo com o campo vazio');
+  await shareBtn.click();
+  assert(
+    await content.locator('input[placeholder="Their handle"]').evaluate(el => el === document.activeElement),
+    'cenário 17b: clicar em "Share" com handle vazio foca o campo'
+  );
+  assert(state.calls.create.length === 0, 'cenário 17b: nenhum POST /api/shares com handle vazio');
+  assert(
+    (await content.locator('#acctGroupSharing .set-label', { hasText: 'Your handle' }).count()) === 1,
+    'cenário 17b: "Your handle" fica dentro do bloco Sharing'
+  );
+});
+
 // ── Cenário 18: handle em MAIÚSCULAS é enviado em minúsculas ──
 await withPage(browser, async page => {
   await mockBase(page);
