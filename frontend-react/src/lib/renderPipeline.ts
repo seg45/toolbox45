@@ -408,19 +408,28 @@ function filterSectionCards(sec: SectionData, query: string, catalogs: Catalogs 
   return { ...sec, cards, count: cards.length };
 }
 
+// Durante a busca, seção sem nenhum card que case some (como no original, que
+// escondia as seções sem match) — senão o usuário vê todos os Tópicos/Versões
+// do catálogo com contador 0.
+function filterSections(sections: SectionData[], query: string, catalogs: Catalogs | null): SectionData[] {
+  return sections.map(s => filterSectionCards(s, query, catalogs)).filter(s => s.count > 0);
+}
+
 function applySearchFilterToBlocks(blocks: ComboBlockData[], query: string, catalogs: Catalogs | null): ComboBlockData[] {
   return blocks.map(block => {
     if (block.groupBy === 'creator' && block.creatorGroups) {
-      const creatorGroups = block.creatorGroups.map(g => {
-        const sections = g.sections.map(s => filterSectionCards(s, query, catalogs));
-        const count = sections.reduce((n, s) => n + s.count, 0);
-        return { ...g, sections, count };
-      });
+      const creatorGroups = block.creatorGroups
+        .map(g => {
+          const sections = filterSections(g.sections, query, catalogs);
+          const count = sections.reduce((n, s) => n + s.count, 0);
+          return { ...g, sections, count };
+        })
+        .filter(g => g.count > 0);
       const cardCount = creatorGroups.reduce((n, g) => n + g.count, 0);
       return { ...block, creatorGroups, cardCount };
     }
     if (block.sections) {
-      const sections = block.sections.map(s => filterSectionCards(s, query, catalogs));
+      const sections = filterSections(block.sections, query, catalogs);
       const cardCount = sections.reduce((n, s) => n + s.count, 0);
       return { ...block, sections, cardCount };
     }

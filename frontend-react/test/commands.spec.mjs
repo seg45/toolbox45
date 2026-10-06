@@ -330,6 +330,10 @@ await withPage(browser, async page => {
   await page.fill('.cmd-search', 'tlist');
   await assertEventually(async () => !(await page.isVisible('.card[data-cmd-id="1"]')), 'cenário 8: busca por "tlist" esconde o comando 1 (não bate)');
   assert(await page.isVisible('.card[data-cmd-id="2"]'), 'cenário 8: busca por "tlist" mantém o comando 2 visível');
+  // Regressão: seções de Tópico sem nenhum resultado não podem ficar na tela com contador 0.
+  assert(!(await page.isVisible('.section:has(.sec-count) >> text=/^Status/i')) && (await page.locator('.section', { hasText: 'Status' }).count()) === 0, 'cenário 8: busca esconde a seção "Status" (sem resultado) em vez de mostrá-la com 0');
+  assert((await page.locator('.sec-count', { hasText: /^0$/ }).count()) === 0, 'cenário 8: nenhuma seção com contador 0 durante a busca');
+  assert((await page.locator('.section', { hasText: 'VPN' }).count()) >= 1, 'cenário 8: a seção com resultado (VPN) continua visível');
 
   await page.fill('.cmd-search', 'zzz-nao-existe');
   await assertEventually(async () => page.isVisible('text=No commands found'), 'cenário 8: "No commands found" aparece quando nada bate');
