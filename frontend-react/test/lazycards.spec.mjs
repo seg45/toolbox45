@@ -70,18 +70,52 @@ const browser = await chromium.launch();
   const firstId = await page.evaluate(() => document.querySelector('.card-lazy').getAttribute('data-cmd-id'));
   assert(!(await page.locator(`.card[data-cmd-id="${lastId}"]`).count()), 'cenário 1: o último card da lista ainda não está montado');
 
-  const h0 = await page.evaluate(() => document.documentElement.scrollHeight);
-  await page.evaluate(() => { window.scrollTo(0, document.documentElement.scrollHeight); });
+  const h0 = await page.evaluate(() => document.querySelector('.main').scrollHeight);
+  await page.evaluate(() => { const m = document.querySelector('.main'); m.scrollTop = m.scrollHeight; });
   await assertEventually(async () => (await page.locator(`.card[data-cmd-id="${lastId}"]`).count()) === 1, 'cenário 1: rolar até o fim monta o último card');
   await assertEventually(async () => (await page.locator(`.card[data-cmd-id="${firstId}"]`).count()) === 0, 'cenário 1: o primeiro card, já longe, volta a ser placeholder (DOM enxuto)');
   assert((await live()) < 150, `cenário 1: DOM vivo continua limitado depois de rolar tudo (${await live()} cards montados)`);
   assert((await placeholders()) === 600, 'cenário 1: os 600 placeholders continuam (a altura é reservada)');
-  const h1 = await page.evaluate(() => document.documentElement.scrollHeight);
+  const h1 = await page.evaluate(() => document.querySelector('.main').scrollHeight);
   assert(Math.abs(h1 - h0) / h0 < 0.35, `cenário 1: altura total da lista estável depois de medir os cards (antes ${h0}, depois ${h1})`);
 
-  await page.evaluate(() => { window.scrollTo(0, 0); });
+  await page.evaluate(() => { document.querySelector('.main').scrollTop = 0; });
   await assertEventually(async () => (await page.locator(`.card[data-cmd-id="${firstId}"]`).count()) === 1, 'cenário 1: voltar ao topo monta o primeiro card de novo');
   assert((await page.locator(`.card[data-cmd-id="${firstId}"] .card-name`).innerText()) === 'Comando ' + (Number(firstId) - 1), 'cenário 1: o card remontado tem o conteúdo certo');
+  await ctx.close();
+}
+
+// ── Cenário 1b: layout — a PÁGINA não rola, quem rola é o .main; a sidebar (com a busca) fica no lugar; cards logo abaixo da dobra já estão montados ──
+{
+  const { ctx, page } = await openApp(browser, 600);
+  const geo = () => page.evaluate(() => {
+    const r = s => { const e = document.querySelector(s); const b = e.getBoundingClientRect(); return [Math.round(b.top), Math.round(b.height)]; };
+    const m = document.querySelector('.main');
+    return { docH: document.documentElement.scrollHeight, winH: innerHeight, scrollY: scrollY, mainScrolls: m.scrollHeight > m.clientHeight + 100, search: r('.sidebar .cmd-search-wrap'), sidebar: r('.sidebar'), hdr: r('.hdr') };
+  });
+  const g0 = await geo();
+  assert(g0.docH <= g0.winH, `cenário 1b: a página não rola (documento ${g0.docH}px, janela ${g0.winH}px)`);
+  assert(g0.mainScrolls, 'cenário 1b: o .main é o contêiner que rola');
+  assert(g0.sidebar[0] === 48 && g0.search[0] === 48, `cenário 1b: sidebar e busca encostam no cabeçalho (sidebar y=${g0.sidebar[0]}, busca y=${g0.search[0]})`);
+  await page.evaluate(() => { document.querySelector('.main').scrollTop = 5000; });
+  await page.waitForTimeout(700);
+  const g1 = await geo();
+  assert(g1.search[0] === g0.search[0] && g1.sidebar[0] === g0.sidebar[0] && g1.hdr[0] === 0, 'cenário 1b: depois de rolar a lista, busca, sidebar e cabeçalho continuam no mesmo lugar');
+  const below = await page.evaluate(() => [...document.querySelectorAll('.card-lazy')].filter(e => { const t = e.getBoundingClientRect().top; return t > innerHeight + 50 && t < innerHeight + 700; }).map(e => !!e.querySelector('.card')));
+  assert(below.length > 0 && below.every(Boolean), `cenário 1b: cards até ~700px abaixo da dobra já estão montados (${below.filter(Boolean).length}/${below.length}) — a margem de pré-carga funciona dentro do .main`);
+  await ctx.close();
+}
+
+// ── Cenário 1c: "System commands" ligado (muito mais comandos) não tira a busca da tela ──
+{
+  const { ctx, page } = await openApp(browser, 600);
+  await page.locator('.sidebar').getByText('System commands').click();
+  await page.waitForTimeout(500);
+  await page.evaluate(() => { document.querySelector('.main').scrollTop = 3000; });
+  await page.waitForTimeout(500);
+  assert(await page.locator('.sidebar .cmd-search-wrap').isVisible(), 'cenário 1c: a busca da sidebar continua visível depois de rolar a lista');
+  const top = await page.locator('.sidebar .cmd-search-wrap').evaluate(e => Math.round(e.getBoundingClientRect().top));
+  assert(top === 48, `cenário 1c: a busca fica logo abaixo do cabeçalho (y=${top})`);
   await ctx.close();
 }
 

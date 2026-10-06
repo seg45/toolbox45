@@ -38,18 +38,47 @@ function recordHeight(h: number) {
   avgHeight += (h - avgHeight) / measuredCount;
 }
 
-// Um único observer compartilhado (um por card seria caro com milhares).
-// Montar: margem de 900px acima/abaixo. Desmontar: só quando sai de uma
-// margem maior (2400px) — histerese pra não montar/desmontar na borda.
+// Observers compartilhados (um por card seria caro com milhares), um par por
+// contêiner de rolagem. Montar: margem de 900px acima/abaixo. Desmontar: só
+// quando sai de uma margem maior (2400px) — histerese pra não montar/
+// desmontar na borda.
+//
+// IMPORTANTE: o `rootMargin` só expande o próprio `root`; se o card rola
+// dentro de um contêiner com overflow (aqui é o `.main`) e o root fosse a
+// janela, o recorte do contêiner anularia a margem e os cards só montariam
+// quando já estivessem visíveis (flash de espaço em branco ao rolar rápido).
+// Por isso o root é o ancestral que realmente rola (ou null = janela, se
+// nenhum ancestral rola).
 type Cb = (near: boolean) => void;
-const mountCbs = new Map<Element, Cb>();
-const keepCbs = new Map<Element, Cb>();
-let mountIO: IntersectionObserver | null = null;
-let keepIO: IntersectionObserver | null = null;
-function ensureObservers() {
-  if (mountIO) return;
-  mountIO = new IntersectionObserver(entries => entries.forEach(e => mountCbs.get(e.target)?.(e.isIntersecting)), { rootMargin: '900px 0px' });
-  keepIO = new IntersectionObserver(entries => entries.forEach(e => keepCbs.get(e.target)?.(e.isIntersecting)), { rootMargin: '2400px 0px' });
+interface Observers {
+  mount: IntersectionObserver;
+  keep: IntersectionObserver;
+  mountCbs: Map<Element, Cb>;
+  keepCbs: Map<Element, Cb>;
+}
+const observersByRoot = new Map<Element | null, Observers>();
+
+function getScrollParent(el: HTMLElement): Element | null {
+  for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if (oy === 'auto' || oy === 'scroll') return p;
+  }
+  return null;
+}
+
+function getObservers(root: Element | null): Observers {
+  let o = observersByRoot.get(root);
+  if (o) return o;
+  const mountCbs = new Map<Element, Cb>();
+  const keepCbs = new Map<Element, Cb>();
+  o = {
+    mountCbs,
+    keepCbs,
+    mount: new IntersectionObserver(entries => entries.forEach(e => mountCbs.get(e.target)?.(e.isIntersecting)), { root, rootMargin: '900px 0px' }),
+    keep: new IntersectionObserver(entries => entries.forEach(e => keepCbs.get(e.target)?.(e.isIntersecting)), { root, rootMargin: '2400px 0px' }),
+  };
+  observersByRoot.set(root, o);
+  return o;
 }
 
 export function LazyCard(props: CardProps) {
@@ -65,11 +94,11 @@ export function LazyCard(props: CardProps) {
       setMounted(true);
       return;
     }
-    ensureObservers();
-    mountCbs.set(el, near => {
+    const obs = getObservers(getScrollParent(el));
+    obs.mountCbs.set(el, near => {
       if (near) setMounted(true);
     });
-    keepCbs.set(el, far => {
+    obs.keepCbs.set(el, far => {
       // `far` aqui é "ainda dentro da margem grande"; ao sair, desmonta
       // guardando a altura real.
       if (!far && mountedRef.current) {
@@ -81,13 +110,13 @@ export function LazyCard(props: CardProps) {
         setMounted(false);
       }
     });
-    mountIO!.observe(el);
-    keepIO!.observe(el);
+    obs.mount.observe(el);
+    obs.keep.observe(el);
     return () => {
-      mountCbs.delete(el);
-      keepCbs.delete(el);
-      mountIO!.unobserve(el);
-      keepIO!.unobserve(el);
+      obs.mountCbs.delete(el);
+      obs.keepCbs.delete(el);
+      obs.mount.unobserve(el);
+      obs.keep.unobserve(el);
     };
   }, []);
 

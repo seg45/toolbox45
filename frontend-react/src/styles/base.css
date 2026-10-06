@@ -2,3 +2,12 @@
 
 html, body { height: 100%; }
 body { background: var(--bg); color: var(--text); font-family: var(--sans); display: flex; flex-direction: column; min-height: 100%; }
+/* O React monta tudo dentro de <div id="root">, que NÃO existe no HTML original
+   (lá .hdr e .app eram filhos diretos do body). Como item flex sem altura
+   própria ele crescia com o conteúdo, a cadeia de altura 100% do body se
+   quebrava e, com listas longas (ex.: "System commands" ligado), a PÁGINA
+   inteira passava a rolar — a sidebar (sticky) e a busca saíam da tela junto.
+   display: contents tira o #root da árvore de layout e devolve a .hdr/.app o
+   mesmo pai flex do original (.app { flex:1; overflow:hidden } + .main
+   { overflow-y:auto } voltam a ser quem rola). */
+#root { display: contents; }
