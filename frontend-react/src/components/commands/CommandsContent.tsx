@@ -88,6 +88,7 @@ import { useFolderDrag, type FolderItemType, type FolderOrderedItem } from '../.
 import { useFolderPrompt } from '../../lib/useFolderPrompt';
 import { CollapsibleSection } from './CollapsibleSection';
 import { CommandCard } from './CommandCard';
+import { LAZY_CARD_THRESHOLD, LazyCard } from './LazyCard';
 import { CommandEditorModal, type EditorMode } from './CommandEditorModal';
 import { ContentToolbar } from './ContentToolbar';
 import { FolderSection } from './FolderSection';
@@ -841,6 +842,19 @@ export function CommandsContent({
     return keys;
   }, [foldersView.active, folderScopeData, renderResult]);
 
+  // Montagem preguiçosa dos cards (ver LazyCard.tsx): só acima do limiar, e só
+  // na visão normal de comandos — as pastas são curadas pelo usuário e têm
+  // arrastar-e-soltar que depende dos cards reais no DOM.
+  const lazyCards = useMemo(() => {
+    if (foldersView.active || !renderResult) return false;
+    let total = 0;
+    renderResult.comboBlocks.forEach(block => {
+      if (block.groupBy === 'creator' && block.creatorGroups) block.creatorGroups.forEach(g => g.sections.forEach(sec => (total += sec.cards.length)));
+      else if (block.sections) block.sections.forEach(sec => (total += sec.cards.length));
+    });
+    return total > LAZY_CARD_THRESHOLD;
+  }, [foldersView.active, renderResult]);
+
   function renderSection(sec: SectionData) {
     const collapsed = collapsedSections.isCollapsed(sec.key);
     const header = (
@@ -857,8 +871,10 @@ export function CommandsContent({
         collapsed={collapsed}
         onToggleChevron={() => collapsedSections.toggle(sec.key)}
         renderBody={() =>
-          sec.cards.map(c => (
-            <CommandCard
+          sec.cards.map(c => {
+            const Card = lazyCards ? LazyCard : CommandCard;
+            return (
+            <Card
               key={c.id}
               card={c}
               catalogs={catalogs}
@@ -866,7 +882,8 @@ export function CommandsContent({
               onEdit={id => setEditor({ mode: 'edit', id })}
               onDuplicate={id => setEditor({ mode: 'duplicate', id })}
             />
-          ))
+            );
+          })
         }
       />
     );
