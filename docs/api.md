@@ -60,9 +60,9 @@ o acesso de cada rota é `server-py/app/deps.py` (`require_user`, `require_admin
   e configuração OAuth (`/api/system/oauth*`).
 - **Somente `super_admin`:** administração de usuários (`/api/users*`), grupos
   (`/api/groups*`) e a aparência padrão da organização (`PUT /api/system/appearance`).
-  Nas seções abaixo, os endpoints de usuários vêm marcados **(super_admin)**. As rotas de
-  grupos, logo, aparência e OAuth (configuração) ainda não têm seção própria neste
-  documento — o contrato está nos módulos `app/routers/groups.py` e `app/routers/system.py`.
+  Nas seções abaixo, os endpoints de usuários, grupos e aparência vêm marcados
+  **(super_admin)**; logo e OAuth ficam na seção **Personalização e login (logo,
+  aparência, OAuth)**.
 
 **Exemplo (curl, API key):**
 ```bash
@@ -595,6 +595,32 @@ antes vivia só no `localStorage` do navegador).
 
 ---
 
+## Grupos (`/api/groups`) — **(super_admin)**
+Agrupamentos de usuários, simétricos e tudo-ou-nada (sem toggles separados de
+pastas/comandos como em `/api/shares`). Membership N:N pela tabela `group_members`
+(chave composta `group_id` + `username`). **Todas** as rotas exigem `super_admin`
+(diferente de links/shares, que são self-service). Toda escrita grava no audit log
+(`entity_type: "group"`).
+
+- `GET /api/groups` → lista ordenada por nome, com os membros (usernames em ordem
+  alfabética):
+  ```json
+  [{ "id": 1, "name": "Suporte N2", "created_at": "...", "created_by": "admin", "members": ["alice", "bob"] }]
+  ```
+- `POST /api/groups` — corpo `{ "name": "Suporte N2" }` → `201` com o grupo criado
+  (`members: []`). `400 validation_error` se `name` vier vazio; `409 conflict` se já
+  existir grupo com esse nome.
+- `PUT /api/groups/:id` — renomeia, corpo `{ "name": "Novo nome" }` → `200 { "id": 1, "name": "Novo nome" }`.
+  `400` nome vazio, `404 not_found`, `409 conflict` nome já usado por outro grupo.
+- `DELETE /api/groups/:id` → `204`; os membros somem junto (cascata). `404 not_found`.
+- `POST /api/groups/:id/members` — corpo `{ "username": "alice" }` → `201 { "members": [...] }`
+  (lista completa depois da inclusão; adicionar quem já é membro é idempotente).
+  `400` username vazio, `404` grupo ou usuário inexistente.
+- `DELETE /api/groups/:id/members/:username` → `204` (remover quem não é membro também
+  responde `204`). `404` se o grupo não existir.
+
+---
+
 ## API keys (`/api/api-keys`) — **(admin)**
 Ver também a seção Autenticação acima e `api_keys` em `server-py/app/schema.sql`.
 
@@ -704,6 +730,73 @@ Dumps do PostgreSQL via `pg_dump`/`pg_restore` (formato "custom"), guardados no 
   ```
   Checado a cada minuto pelo backend (`checkScheduledBackup`); `backupScheduleLastRunDate`
   evita rodar duas vezes no mesmo dia.
+
+---
+
+## Personalização e login (logo, aparência, OAuth)
+
+Três blocos da aba **System** das configurações. Todos gravam no audit log.
+
+### Logo (`/api/system/logo`)
+Logo customizado exibido no cabeçalho e na tela de login. Existem **duas variantes
+independentes**, tema claro e tema escuro, cada uma com seu próprio salvar/remover.
+
+- `GET /api/system/logo` — **público** (a tela de login precisa dele sem sessão):
+  ```json
+  { "imageData": "data:image/png;base64,...", "mimeType": "image/png", "updatedAt": "...", "updatedBy": "admin",
+    "imageDataDark": null, "mimeTypeDark": null, "updatedAtDark": null, "updatedByDark": null }
+  ```
+  Sem logo customizado, todos os campos vêm `null` (o front usa o logo padrão).
+- `PUT /api/system/logo` **(admin)** — corpo `{ "imageData": "data:image/png;base64,...", "theme": "light" }`
+  (`theme` é `"light"` ou `"dark"`; qualquer outro valor ou a ausência vale `"light"`).
+  Formatos aceitos: PNG, JPEG e WEBP; até **2 MB** (decodificado) e **4096×4096 px**.
+  `200 { "imageData": "...", "mimeType": "image/png", "theme": "light" }`.
+  `400` com `error`: `validation_error` (não é `data:image/...`), `invalid_format`
+  (formato não suportado ou base64 inválido) ou `too_large` (bytes ou dimensões).
+- `DELETE /api/system/logo?theme=light|dark` **(admin)** — remove só a variante indicada;
+  sem `theme` remove as duas (volta ao logo padrão do Toolbox45). `200 { "imageData": null, "theme": "light" | "dark" | null }`.
+
+### Aparência padrão (`/api/system/appearance`)
+Tema e cor de destaque **padrão da organização**, vistos por todos, inclusive antes do
+login. A tela de login sempre reflete este padrão; dentro do app, quem já salvou
+tema/cor próprios mantém os seus.
+
+- `GET /api/system/appearance` — **público**: `{ "theme": "light", "accentColor": "teal" }`
+  (defaults quando nunca configurado).
+- `PUT /api/system/appearance` **(super_admin)** — corpo `{ "theme": "dark", "accentColor": "blue" }`.
+  `theme`: `light` | `dark`. `accentColor`: `teal` | `pink` | `blue` | `green` | `purple` |
+  `orange` | `red` | `white`. `400 validation_error` para valor fora da lista e também
+  para `theme: "light"` com `accentColor: "white"` (a cor branca só tem contraste no
+  tema escuro). `200` com os dois valores gravados. Fica em `user_data`, sob o usuário
+  sentinela `__global_defaults__` (chaves `appearanceTheme` e `appearanceAccent`) — a
+  mesma área dos defaults de `/api/global-settings`.
+
+### Configuração do login Google/Microsoft (`/api/system/oauth`) — **(admin)**
+Permite configurar os provedores OAuth pela interface, sem editar variáveis de
+ambiente. **Prioridade: banco > ambiente** — ao salvar aqui, a configuração do banco
+passa a valer; ao remover, volta para as variáveis de ambiente (se existirem) ou o
+provedor fica desabilitado. As rotas de login em si (`/api/auth/google`,
+`/api/auth/microsoft`) estão nas seções **Login com Google/Microsoft** acima.
+
+- `GET /api/system/oauth` → estado dos dois provedores (o secret **nunca** é devolvido,
+  só `clientSecretSet`):
+  ```json
+  { "google":    { "configured": true, "source": "db", "clientId": "...apps.googleusercontent.com", "clientSecretSet": true,
+                   "redirectUri": "https://toolbox.seg45.com.br/api/auth/google/callback", "updatedAt": "...", "updatedBy": "admin" },
+    "microsoft": { "configured": false, "source": "none", "clientId": "", "clientSecretSet": false, "redirectUri": "",
+                   "updatedAt": null, "updatedBy": null, "tenantId": "common" } }
+  ```
+  `source` é `"db"` (salvo pela interface), `"env"` (variáveis de ambiente) ou `"none"`.
+  `tenantId` só aparece no Microsoft.
+- `PUT /api/system/oauth/:provider` (`google` | `microsoft`) — corpo
+  `{ "clientId": "...", "clientSecret": "...", "redirectUri": "https://...", "tenantId": "..." }`.
+  `clientId` e `redirectUri` obrigatórios; `redirectUri` precisa começar com `https://`.
+  `clientSecret` só é obrigatório na **primeira** vez; em branco numa edição posterior
+  mantém o secret já salvo. `tenantId` (só Microsoft) assume `"common"` se vazio.
+  Recarrega a configuração em memória antes de responder → `200 { "ok": true }`.
+  `400 validation_error`; `404 not_found` para provedor desconhecido.
+- `DELETE /api/system/oauth/:provider` — apaga a configuração do banco e recarrega →
+  `200 { "ok": true }`. `404 not_found` para provedor desconhecido.
 
 ---
 
