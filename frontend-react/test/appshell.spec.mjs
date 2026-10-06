@@ -118,7 +118,7 @@ await withPage(browser, async page => {
   await page.waitForSelector('.settings-modal-box');
   assert((await page.textContent('#settingsModalTitle')) === 'Settings', 'cenário 4: engrenagem abre o modal com título "Settings"');
   const sysNav = (await page.locator('.settings-nav-btn').allTextContents()).map(t => t.trim());
-  assert(sysNav.join(',') === 'Database,Groups,Register,System,Users', `cenário 4: nav do escopo system = Database,Groups,Register,System,Users (lido: ${sysNav.join(',')})`);
+  assert(sysNav.join(',') === 'Database,Register,Groups,Users,System', `cenário 4: nav do escopo system = Database,Register,Groups,Users,System (lido: ${sysNav.join(',')})`);
   assert(await page.locator('.settings-nav-btn.on', { hasText: 'Database' }).count() === 1, 'cenário 4: engrenagem abre na aba Database');
   assert((await page.locator('.settings-modal-box .modal-foot button').count()) === 0, 'cenário 4: rodapé sem botões fora de User preferences');
   await page.keyboard.press('Escape');

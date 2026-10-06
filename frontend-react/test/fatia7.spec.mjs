@@ -797,6 +797,10 @@ await withPage(browser, async page => {
 
   // 18b: trocar o SYSTEM (select) da versão v1/vsx (R81.20) para FortiOS — o PUT
   // deve usar o system ORIGINAL da linha (vsx) na URL, com o novo valor só no corpo.
+  // Espera o refresh dos catálogos (disparado pelo save anterior) assentar: se ele chegar DEPOIS do
+  // selectOption, o modal recarrega as linhas e o dirty-state some (Save fica desabilitado).
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(300);
   const vsxRow = await catRowByLabel(modal, 'R81.20');
   await vsxRow.locator('select').selectOption('fortios');
   await saveBtn(modal).click();

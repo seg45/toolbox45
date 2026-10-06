@@ -132,7 +132,7 @@ export function UsersPane() {
                   const isProtected = u.username === PROTECTED_ADMIN_USERNAME;
                   const isPending = u.disabled && !u.approved_at;
                   const isDisabled = u.disabled;
-                  const type = u.auth_provider === 'google' ? 'Google' : u.is_local ? 'Local' : 'Windows';
+                  const type = u.auth_provider === 'google' ? 'Google' : u.auth_provider === 'microsoft' ? 'Microsoft' : u.is_local ? 'Local' : 'Windows';
                   return (
                     <tr key={u.username} style={isDisabled && !isPending ? { opacity: 0.5 } : undefined}>
                       <td>{u.username}</td>
@@ -164,7 +164,7 @@ export function UsersPane() {
                               {isPending ? 'Approve' : isDisabled ? 'Enable' : 'Disable'}
                             </button>
                           )}
-                          {u.is_local && (
+                          {!!u.is_local && (
                             <button type="button" className="btn btn-sm" onClick={() => setResetPasswordUser(u.username)}>
                               Reset password
                             </button>

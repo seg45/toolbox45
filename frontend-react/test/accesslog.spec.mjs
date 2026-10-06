@@ -127,7 +127,7 @@ await withPage(browser, async page => {
   await assertEventually(async () => (await m.locator('#accessLogTbody tr').count()) === EVENTS.length, 'sem filtro: todas as linhas');
   await m.locator('#accessLogFilter').selectOption('login_failed');
   await assertEventually(async () => (await m.locator('#accessLogTbody tr').count()) === 1, 'filtro login_failed: 1 linha');
-  assert(calls.some(c => c.includes('event=login_failed')), `consulta enviou event=login_failed (lido: ${JSON.stringify(calls)})`);
+  await assertEventually(async () => calls.some(c => c.includes('event=login_failed')), 'consulta enviou event=login_failed');
   await m.locator('#accessLogFilter').selectOption('');
   await assertEventually(async () => (await m.locator('#accessLogTbody tr').count()) === EVENTS.length, 'voltar a "All events" lista tudo');
 });

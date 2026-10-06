@@ -1771,3 +1771,250 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
    (16x16, transparente, --surf3 no hover) em vez de um novo estilo. */
 .lk-row-actions { display: none; align-items: center; gap: 2px; flex-shrink: 0; margin-left: auto; }
 .lk-row:hover .lk-row-actions { display: flex; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CONFIGURAÇÕES — redesenho "painel de administração" (out/2026)
+   Moldura ampla, menu lateral agrupado por categoria, cabeçalho de página
+   (título + descrição) em cada aba e conteúdo em cartões. Tudo escopado em
+   #settingsOverlay: .set-group/.set-label/.btn etc. são compartilhados com
+   os demais modais e não podem mudar de aparência fora daqui. Vem por
+   último no arquivo para vencer as regras antigas acima com a mesma
+   especificidade; onde a regra antiga usa #id, repetimos o #id.
+   ═══════════════════════════════════════════════════════════════════════ */
+#settingsOverlay { padding: 24px; background: rgba(8,12,18,.62); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+#settingsOverlay .modal-box.settings-modal-box {
+  width: min(1120px, 96vw); height: min(780px, 92vh); border-radius: 14px;
+  box-shadow: 0 28px 90px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.02);
+}
+#settingsOverlay .modal-head { padding: 14px 18px 14px 22px; background: var(--surf); }
+#settingsOverlay .modal-title { font-size: 14px; font-weight: 700; letter-spacing: 0; }
+#settingsOverlay .modal-title svg { color: var(--muted); width: 15px; height: 15px; }
+#settingsOverlay .modal-close {
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  padding: 0; font-size: 15px; border-radius: 8px; color: var(--muted);
+}
+#settingsOverlay .modal-close:hover { background: var(--surf2); color: var(--text); }
+
+/* — Menu lateral — */
+#settingsOverlay .settings-nav {
+  width: 248px; padding: 10px 12px 12px; gap: 0; overflow: hidden;
+  background: var(--surf); border-right: 1px solid var(--bdr);
+  justify-content: space-between;
+}
+.settings-nav-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0; padding-bottom: 8px; }
+.settings-nav-item-wrap { display: flex; flex-direction: column; }
+.settings-nav-group {
+  padding: 18px 12px 6px; font-size: 11px; font-weight: 700; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--dim);
+}
+.settings-nav-item-wrap:first-child .settings-nav-group { padding-top: 8px; }
+#settingsOverlay .settings-nav-btn {
+  position: relative; height: 38px; padding: 0 12px; gap: 11px; margin-top: 2px;
+  border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--muted);
+  transition: background .12s, color .12s;
+}
+#settingsOverlay .settings-nav-btn svg { width: 17px; height: 17px; opacity: .8; }
+#settingsOverlay .settings-nav-btn:hover { background: var(--surf2); color: var(--text); }
+#settingsOverlay .settings-nav-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+#settingsOverlay .settings-nav-btn.on { background: var(--teal-bg); color: var(--teal); font-weight: 700; }
+#settingsOverlay .settings-nav-btn.on svg { opacity: 1; }
+#settingsOverlay .settings-nav-btn.on::before {
+  content: ''; position: absolute; left: -12px; top: 8px; bottom: 8px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--teal);
+}
+.settings-nav-user {
+  flex-shrink: 0; display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 12px 8px 4px; border-top: 1px solid var(--bdr);
+}
+.settings-nav-avatar {
+  flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--teal-bg); color: var(--teal); font-size: 13px; font-weight: 800;
+  border: 1px solid var(--teal);
+}
+.settings-nav-user-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.settings-nav-user-name { font-size: 12.5px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-nav-user-role { font-size: 11px; color: var(--muted); }
+
+/* — Área de conteúdo + cabeçalho de página — */
+#settingsOverlay .settings-content { background: var(--bg); padding: 28px 36px 36px; gap: 22px; }
+.settings-page-head { max-width: 860px; padding-bottom: 18px; border-bottom: 1px solid var(--bdr); }
+.settings-page-title { margin: 0; font-size: 21px; line-height: 1.25; font-weight: 700; letter-spacing: -.012em; color: var(--text); }
+.settings-page-desc { margin: 5px 0 0; font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 640px; }
+#settingsOverlay .settings-pane { max-width: 860px; gap: 18px; }
+#settingsOverlay .settings-pane[data-pane="prefs"] { gap: 18px; }
+#settingsOverlay .settings-pane > .set-group + .set-group { margin-top: 0; }
+
+/* — Cartões — */
+#settingsOverlay .settings-pane > .set-group,
+#settingsOverlay .set-card {
+  background: var(--surf); border: 1px solid var(--bdr); border-radius: 12px;
+  padding: 18px 20px; gap: 6px;
+}
+#settingsOverlay .set-card { display: flex; flex-direction: column; gap: 14px; }
+.set-card-head { display: flex; flex-direction: column; gap: 3px; }
+.set-card-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: -.005em; }
+.set-card-desc { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.set-card-body { display: flex; flex-direction: column; gap: 0; }
+
+/* Título do cartão = primeiro rótulo do .set-group (sem caixa alta) */
+#settingsOverlay .settings-pane > .set-group > .set-label:first-child {
+  font-size: 14px; font-weight: 700; text-transform: none; letter-spacing: -.005em; color: var(--text);
+}
+#settingsOverlay .settings-pane > .set-group > .set-label:first-child + .set-hint { margin-top: -2px; margin-bottom: 8px; }
+/* Rótulos de campo (dentro do cartão): sentence-case legível */
+#settingsOverlay .set-label { font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--muted); }
+#settingsOverlay .set-hint { font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+
+/* — Campos e botões — */
+#settingsOverlay .set-input {
+  background: var(--surf); border: 1px solid var(--bdr); border-radius: 8px;
+  padding: 8px 12px; font-family: var(--sans); font-size: 13px; color: var(--text);
+  transition: border-color .12s, box-shadow .12s;
+}
+#settingsOverlay .set-input:hover { border-color: var(--bdr2); }
+#settingsOverlay .set-input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px var(--teal-bg); outline: none; }
+#settingsOverlay .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+#settingsOverlay .btn.btn-sm { padding: 5px 11px; font-size: 12px; border-radius: 7px; }
+#settingsOverlay .btn:not(.btn-primary):not(.btn-danger):hover { background: var(--surf2); border-color: var(--bdr2); }
+#settingsOverlay .btn-primary { color: var(--teal-text, #fff); font-weight: 700; }
+#settingsOverlay .btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+/* — Listas de ações (Export/Import/Backup…): linhas dentro do cartão — */
+#settingsOverlay .settings-action-row {
+  gap: 0; border: 1px solid var(--bdr); border-radius: 10px; overflow: hidden; background: var(--surf);
+}
+#settingsOverlay .settings-action-row > .btn {
+  position: relative; width: 100%; min-height: 48px; padding: 0 16px 0 14px; gap: 12px;
+  border: none; border-radius: 0; background: transparent; color: var(--text);
+  font-size: 13px; font-weight: 600; justify-content: flex-start;
+}
+#settingsOverlay .settings-action-row > .btn + .btn { border-top: 1px solid var(--bdr); }
+#settingsOverlay .settings-action-row > .btn:hover { background: var(--surf2); }
+#settingsOverlay .settings-action-row > .btn svg {
+  box-sizing: content-box; width: 15px; height: 15px; padding: 7px; flex-shrink: 0;
+  border-radius: 8px; background: var(--teal-bg); color: var(--teal);
+}
+#settingsOverlay .settings-action-row > .btn::after {
+  content: ''; margin-left: auto; width: 7px; height: 7px; flex-shrink: 0;
+  border-right: 1.6px solid var(--dim); border-top: 1.6px solid var(--dim); transform: rotate(45deg);
+  transition: transform .12s, border-color .12s;
+}
+#settingsOverlay .settings-action-row > .btn:hover::after { border-color: var(--teal); transform: rotate(45deg) translate(1px, -1px); }
+/* Botões de "criar" (New user / New group / New API key): destaque primário discreto */
+#settingsOverlay #sysGroupLogo .settings-action-row,
+#settingsOverlay #sysGroupAppearance .settings-action-row,
+#settingsOverlay #sysGroupSslCertificate .settings-action-row { margin-top: 2px; }
+
+/* — Tabelas (usuários, grupos, chaves, compartilhamentos) — */
+#settingsOverlay .audit-log-wrap { border: 1px solid var(--bdr); border-radius: 10px; background: var(--surf); max-height: none; overflow-x: auto; }
+#settingsOverlay .audit-log-table { font-size: 13px; }
+#settingsOverlay .audit-log-table th {
+  position: static; background: var(--surf2); color: var(--muted); font-size: 11px; font-weight: 700;
+  letter-spacing: .05em; padding: 10px 14px; border-bottom: 1px solid var(--bdr);
+}
+#settingsOverlay .audit-log-table td { padding: 11px 14px; font-size: 13px; }
+#settingsOverlay .audit-log-table tbody tr:hover td { background: var(--surf2); }
+#settingsOverlay .audit-log-table select.set-input { padding: 5px 8px; font-size: 12.5px; border-radius: 7px; }
+#settingsOverlay .audit-log-empty, #settingsOverlay .audit-log-loading { font-size: 13px; padding: 26px 12px !important; }
+#settingsOverlay .sec-folder-btn { color: var(--muted); border-radius: 7px; }
+#settingsOverlay .sec-folder-btn:hover { color: var(--red); background: var(--red-bg); }
+
+/* — Login com Google/Microsoft (System) — */
+#settingsOverlay #oauthProviderListWrap { padding: 0 !important; }
+#settingsOverlay .oauth-provider-row { padding: 14px 16px; gap: 12px; font-size: 13px; }
+#settingsOverlay .oauth-provider-name { font-size: 13.5px; font-weight: 700; }
+#settingsOverlay .oauth-provider-status { font-size: 12.5px; }
+
+/* — Aba Register: grade de cartões clicáveis — */
+#settingsOverlay .settings-catalog-grid { gap: 22px; }
+#settingsOverlay .settings-catalog-group { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+#settingsOverlay .settings-tile {
+  position: relative; gap: 14px; padding: 16px 18px; min-height: 68px; border-radius: 12px;
+  background: var(--surf); border: 1px solid var(--bdr); color: var(--text);
+  font-size: 13.5px; font-weight: 700;
+  transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+#settingsOverlay .settings-tile svg {
+  box-sizing: content-box; width: 18px; height: 18px; padding: 9px; flex-shrink: 0;
+  border-radius: 10px; background: var(--teal-bg); color: var(--teal); opacity: 1;
+}
+#settingsOverlay .settings-tile:hover { border-color: var(--teal); color: var(--text); box-shadow: 0 2px 10px rgba(0,0,0,.08); transform: translateY(-1px); }
+#settingsOverlay .settings-tile::after {
+  content: ''; margin-left: auto; width: 7px; height: 7px; flex-shrink: 0;
+  border-right: 1.6px solid var(--dim); border-top: 1.6px solid var(--dim); transform: rotate(45deg);
+}
+#settingsOverlay .settings-tile:hover::after { border-color: var(--teal); }
+#settingsOverlay .settings-pane[data-pane="catalog"] > .set-hint { display: none; }
+
+/* — User preferences: linhas dentro dos cartões, sem "barras" — */
+#settingsOverlay .set-card-body .set-group { gap: 0; }
+#settingsOverlay .set-card-body .set-group-row,
+#settingsOverlay .set-card-body .sb-toggle {
+  background: transparent; border: none; border-radius: 0; padding: 11px 0; margin: 0;
+  min-height: 48px; box-shadow: none;
+}
+#settingsOverlay .set-card-body .set-group-row + .set-group-row,
+#settingsOverlay .set-card-body .sb-toggle + .sb-toggle,
+#settingsOverlay .set-card-body .set-group-row:not(:first-child) { border-top: 1px solid var(--bdr); }
+#settingsOverlay .set-card-body .sb-toggle:hover { background: transparent; color: var(--text); }
+#settingsOverlay .set-card-body .sb-toggle.on { background: transparent; color: var(--text); }
+#settingsOverlay .set-card-body .sb-toggle > span,
+#settingsOverlay .set-card-body .set-row-half > span:not(.set-label) { font-size: 13px; font-weight: 600; color: var(--text); }
+#settingsOverlay .set-card-body .set-group-row > .set-label { width: 96px; font-size: 13px; font-weight: 600; color: var(--text); }
+#settingsOverlay .set-card-body .set-row-half .set-label { font-size: 13px; font-weight: 600; color: var(--text); min-width: 78px; }
+#settingsOverlay .set-card-body .set-row-half + .set-row-half { border-left: none; padding-left: 28px; margin-left: 0; }
+#settingsOverlay .set-card-body .set-group-row > .set-row-half + .set-row-half { margin-left: 0; }
+#settingsOverlay .tog-track { width: 34px; height: 20px; }
+#settingsOverlay .tog-knob { width: 14px; height: 14px; }
+#settingsOverlay .sb-toggle.on .tog-knob { left: 17px; }
+#settingsOverlay .accent-swatch { width: 22px; height: 22px; }
+#settingsOverlay .set-group-row .dd > .dd-btn { padding: 7px 12px; border-radius: 8px; font-size: 13px; background: var(--surf); }
+
+/* — Aba User account: campos empilhados com respiro — */
+#settingsOverlay .settings-pane[data-pane="account"] .set-group { gap: 6px; }
+#settingsOverlay .settings-pane[data-pane="account"] > .set-group .set-group { margin-top: 10px; }
+#settingsOverlay .settings-pane[data-pane="account"] .set-input { width: 100%; max-width: 380px; }
+#settingsOverlay .settings-pane[data-pane="account"] .acct-inline-row .set-input { width: auto; max-width: 260px; }
+#settingsOverlay #acctGroupSharing { margin-top: 0; padding-top: 18px; border-top: 1px solid var(--bdr); }
+#settingsOverlay .acct-inline-row code { font-size: 13px; padding: 8px 12px; border-radius: 8px; }
+#settingsOverlay .acct-btn-row { margin-top: 8px; }
+
+/* — Rodapé (só em User preferences) — */
+#settingsOverlay .modal-foot { padding: 14px 22px; background: var(--surf); }
+
+/* — Telas estreitas: menu vira faixa horizontal no topo — */
+@media (max-width: 760px) {
+  #settingsOverlay { padding: 0; }
+  #settingsOverlay .modal-box.settings-modal-box { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
+  .settings-layout { flex-direction: column; }
+  #settingsOverlay .settings-nav { width: auto; flex-direction: row; padding: 8px 10px; border-right: none; border-bottom: 1px solid var(--bdr); overflow-x: auto; }
+  .settings-nav-list { flex-direction: row; overflow: visible; padding: 0; gap: 4px; }
+  .settings-nav-item-wrap { flex-direction: row; }
+  .settings-nav-group, .settings-nav-user { display: none; }
+  #settingsOverlay .settings-nav-btn { white-space: nowrap; margin-top: 0; }
+  #settingsOverlay .settings-nav-btn.on::before { display: none; }
+  #settingsOverlay .settings-content { padding: 18px 16px 28px; }
+}
+
+/* — Ajustes finos (revisão visual) — */
+#settingsOverlay .settings-pane > .set-group > .set-label:first-child,
+.set-card-title, .settings-page-title { letter-spacing: 0; }
+/* Users/Groups: o título do cartão repetiria o da página e a tabela já é um cartão */
+#settingsOverlay .settings-pane[data-pane="users"] > .set-group,
+#settingsOverlay .settings-pane[data-pane="groups"] > .set-group {
+  background: none; border: none; padding: 0; border-radius: 0; gap: 12px;
+}
+#settingsOverlay .settings-pane[data-pane="users"] > .set-group > .set-label:first-child,
+#settingsOverlay .settings-pane[data-pane="groups"] > .set-group > .set-label:first-child { display: none; }
+/* As larguras fixas em % do audit log não servem às tabelas de Users/Groups/API keys */
+#settingsOverlay .settings-pane .audit-log-table { table-layout: auto; }
+#settingsOverlay .settings-pane .audit-log-table th,
+#settingsOverlay .settings-pane .audit-log-table td { width: auto; }
+#settingsOverlay .settings-pane .audit-log-table td { overflow: visible; text-overflow: clip; }
+#settingsOverlay .settings-pane .audit-log-table select.set-input { min-width: 124px; max-width: none !important; }
+#settingsOverlay .settings-pane .audit-log-table td { padding: 10px 12px; }
+#settingsOverlay .settings-pane .audit-log-table th { padding: 10px 12px; }
+#settingsOverlay .settings-pane .audit-log-table td:last-child > div { flex-wrap: wrap; }
+#settingsOverlay .settings-pane .audit-log-table td:nth-child(4) { white-space: normal; }

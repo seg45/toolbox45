@@ -133,6 +133,22 @@ const SYSTEM_NAV_ITEM: NavItem = {
   ),
 };
 
+// Agrupamento do menu lateral (estilo "painel de administração": categorias com
+// título + itens) e cabeçalho de página de cada aba (título + descrição curta).
+// A ordem dentro de cada escopo é a de PANE_ORDER; os títulos de grupo só
+// aparecem quando o grupo tem ao menos um item visível para o usuário.
+const PANE_ORDER: SettingsPane[] = ['account', 'prefs', 'database', 'catalog', 'groups', 'users', 'system'];
+
+const PANE_META: Record<SettingsPane, { group: string; title: string; desc: string }> = {
+  account: { group: 'Account', title: 'User account', desc: 'Your sign-in details, password and who you share commands with.' },
+  prefs: { group: 'Account', title: 'User preferences', desc: 'How Toolbox45 looks and which filters and view open by default for you.' },
+  database: { group: 'Content', title: 'Database', desc: 'Import and export commands and folders, back up and restore the database, and review activity logs.' },
+  catalog: { group: 'Content', title: 'Register', desc: 'Shared catalogs used across the app. Changes apply to every user immediately.' },
+  groups: { group: 'Access control', title: 'Groups', desc: 'Let teams see each other\'s commands and folders without sharing one by one.' },
+  users: { group: 'Access control', title: 'Users', desc: 'Create accounts, approve sign-ups and manage roles.' },
+  system: { group: 'Platform', title: 'System', desc: 'Branding, appearance, certificates, sign-in providers and API access.' },
+};
+
 export function SettingsModal({
   pane,
   onChangePane,
@@ -238,6 +254,9 @@ export function SettingsModal({
   navItems = [...navItems, SYSTEM_NAV_ITEM];
   if (auth.isSuperAdmin) navItems = [...navItems, USERS_NAV_ITEM];
   navItems = navItems.filter(item => USER_SCOPE_PANES.includes(item.pane) === isUserScope);
+  navItems = [...navItems].sort((a, b) => PANE_ORDER.indexOf(a.pane) - PANE_ORDER.indexOf(b.pane));
+  const paneMeta = PANE_META[pane];
+  const userName = auth.me?.username || '';
 
   useEffect(() => {
     function onKeyDown(ev: KeyboardEvent) {
@@ -264,32 +283,42 @@ export function SettingsModal({
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="settings-layout">
-          <nav className="settings-nav">
-            {navItems.map(item => (
-              <button
-                key={item.pane}
-                type="button"
-                className={`settings-nav-btn${pane === item.pane ? ' on' : ''}`}
-                onClick={() => onChangePane(item.pane)}
-              >
-                {item.icon}
-                <span>{item.label}</span>
-              </button>
-            ))}
-            {/* "Database" (fatia 5c), "Groups"/"Users" (fatia 6/7),
-                "Register" (fatia 7) e "System" (fatia 8) já estão prontas —
-                "Groups"/"Users" gated por auth.isSuperAdmin, "Register" por
-                auth.isAdmin (admin OU super_admin — pedido do usuário: "o
-                perfil User não poderá acessar cadastro de registros"),
-                ambos fail-closed (nada é montado enquanto /api/me não
-                confirmar); "Database" sem gate de admin (mesmo critério do
-                original pro grupo "Folders"); "System" sem gate no item de
-                nav em si (ver SYSTEM_NAV_ITEM acima) — só os widgets
-                internos de SystemPane.tsx são gated. "Audit log",
-                "backup/restore" e "import/export de comandos" moram na aba
-                "Database" (DatabasePane.tsx, fatia 9) — não nesta. */}
+          <nav className="settings-nav" aria-label="Settings sections">
+            <div className="settings-nav-list">
+              {navItems.map((item, i) => {
+                const group = PANE_META[item.pane].group;
+                const showGroup = i === 0 || PANE_META[navItems[i - 1].pane].group !== group;
+                return (
+                  <div key={item.pane} className="settings-nav-item-wrap">
+                    {showGroup && <div className="settings-nav-group">{group}</div>}
+                    <button
+                      type="button"
+                      className={`settings-nav-btn${pane === item.pane ? ' on' : ''}`}
+                      aria-current={pane === item.pane ? 'page' : undefined}
+                      onClick={() => onChangePane(item.pane)}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {userName && (
+              <div className="settings-nav-user" title={userName}>
+                <span className="settings-nav-avatar" aria-hidden="true">{userName.charAt(0).toUpperCase()}</span>
+                <span className="settings-nav-user-text">
+                  <span className="settings-nav-user-name">{userName}</span>
+                  <span className="settings-nav-user-role">{auth.roleLabel}</span>
+                </span>
+              </div>
+            )}
           </nav>
           <div className="settings-content">
+            <header className="settings-page-head">
+              <h2 className="settings-page-title">{paneMeta.title}</h2>
+              <p className="settings-page-desc">{paneMeta.desc}</p>
+            </header>
             {pane === 'account' && <AccountPane />}
             {pane === 'prefs' && (
               <PreferencesPane
@@ -317,6 +346,7 @@ export function SettingsModal({
         </div>
         {/* Rodapé sempre presente (como no original); só a aba "User
             preferences" tem botões — nas demais fica vazio. */}
+        {pane === 'prefs' && (
         <div className="modal-foot">
           <div style={{ display: 'flex', gap: 8 }} id="settingsFootLeft">
             {pane === 'prefs' && (
@@ -338,6 +368,7 @@ export function SettingsModal({
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

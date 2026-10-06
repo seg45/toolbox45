@@ -15,6 +15,20 @@ import type { PrefsDraft } from '../SettingsModal';
 import type { Catalogs } from '../../lib/catalogs';
 import { SegSingle, SegMulti, Toggle } from '../SegControls';
 
+// Cartão com título + descrição (cabeçalho do bloco) — só estrutura; o visual
+// vive em components.css (#settingsOverlay .set-card).
+function Card({ title, desc, children }: { title: string; desc: string; children: React.ReactNode }) {
+  return (
+    <section className="set-card">
+      <div className="set-card-head">
+        <h3 className="set-card-title">{title}</h3>
+        <p className="set-card-desc">{desc}</p>
+      </div>
+      <div className="set-card-body">{children}</div>
+    </section>
+  );
+}
+
 const GROUP_BY_OPTIONS = [
   { val: 'creator', label: 'Created by' },
   { val: 'topic', label: 'Topic' },
@@ -68,8 +82,8 @@ export function PreferencesPane({
 
   return (
     <div className="settings-pane" data-pane="prefs">
+      <Card title="Appearance" desc="Theme and accent color. Applied right away and remembered for your account.">
       <div className="set-group" id="settingsToggleGroup">
-        <span className="set-label">Default settings</span>
         <div className={`sb-toggle${theme === 'dark' ? ' on' : ''}`} onClick={toggleTheme}>
           <div className="set-row-half">
             <div className="tog-track">
@@ -97,7 +111,9 @@ export function PreferencesPane({
           </div>
         </div>
       </div>
+      </Card>
 
+      <Card title="Startup" desc="What opens first and how commands are grouped. Home page applies when you press Save.">
       <div className="set-group set-group-row">
         <div className="set-row-half">
           <span className="set-label">Home page</span>
@@ -108,7 +124,9 @@ export function PreferencesPane({
           <SegSingle label="Group by" options={GROUP_BY_OPTIONS} value={settings.groupBy} onChange={v => update({ groupBy: v as Settings['groupBy'] })} />
         </div>
       </div>
+      </Card>
 
+      <Card title="Default filters" desc="Filters pre-selected in the sidebar. Leave a row empty to show everything. Applied when you press Save.">
       <div className="set-group set-group-row">
         <span className="set-label">Vendor</span>
         <SegMulti options={vendorOptions} selected={draft.vendor} onChange={v => onDraftChange({ vendor: v })} />
@@ -129,13 +147,16 @@ export function PreferencesPane({
         <span className="set-label">Topic</span>
         <SegMulti options={topicOptions} selected={draft.type} onChange={v => onDraftChange({ type: v })} />
       </div>
+      </Card>
 
+      <Card title="Command cards" desc="What each command card shows. Applied right away.">
       <div className="set-group" id="settingsToggleGroup2">
         <Toggle label="Details" on={settings.showCardDetails} onClick={() => update({ showCardDetails: !settings.showCardDetails })} />
         <Toggle label="Export" on={settings.exportEnabled} onClick={() => update({ exportEnabled: !settings.exportEnabled })} />
         <Toggle label="Images" on={settings.showImages} onClick={() => update({ showImages: !settings.showImages })} />
         <Toggle label="System commands" on={settings.showSystemCommands} onClick={() => update({ showSystemCommands: !settings.showSystemCommands })} />
       </div>
+      </Card>
     </div>
   );
 }

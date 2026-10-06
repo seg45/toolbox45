@@ -129,6 +129,7 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
       {auth.isAdmin && (
         <div className="set-group" id="sysGroupLogo">
           <span className="set-label">Logo</span>
+          <span className="set-hint">Replace the logo shown in the header and on the sign-in page.</span>
           <div className="settings-action-row">
             <button type="button" className="btn btn-ghost" id="logoSettingsBtn" onClick={() => setLogoOpen(true)}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="1.3" stroke="currentColor" strokeWidth="1.3" /><circle cx="5.6" cy="6" r="1.2" stroke="currentColor" strokeWidth="1.1" /><path d="M2.8 12l3.6-4 2.4 2.6 1.7-2 2.7 3.4" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round" /></svg>
@@ -144,6 +145,7 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
       {auth.isSuperAdmin && (
         <div className="set-group" id="sysGroupAppearance">
           <span className="set-label">Default theme &amp; colors</span>
+          <span className="set-hint">Theme and accent color new users get before they choose their own.</span>
           <div className="settings-action-row">
             <button type="button" className="btn btn-ghost" id="appearanceSettingsBtn" onClick={() => setAppearanceOpen(true)}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" /><circle cx="6" cy="6.3" r=".9" fill="currentColor" /><circle cx="9.5" cy="5.6" r=".7" fill="currentColor" /><circle cx="10.3" cy="9" r=".8" fill="currentColor" /><circle cx="6.5" cy="9.7" r=".7" fill="currentColor" /></svg>
@@ -156,6 +158,7 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
       {auth.isSuperAdmin && (
         <div className="set-group" id="sysGroupSslCertificate">
           <span className="set-label">SSL Certificate</span>
+          <span className="set-hint">Upload or reset the HTTPS certificate served by this installation.</span>
           <div className="settings-action-row">
             <button type="button" className="btn btn-ghost" id="sslCertificateBtn" onClick={() => setSslOpen(true)}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3.5" y="7" width="9" height="6.5" rx="1" stroke="currentColor" strokeWidth="1.3" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /><circle cx="8" cy="10.2" r=".9" fill="currentColor" /></svg>
@@ -194,6 +197,7 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
       {auth.isAdmin && (
         <div className="set-group">
           <span className="set-label">API access</span>
+          <span className="set-hint">Keys for scripts and integrations that call the Toolbox45 API.</span>
           <div className="settings-action-row">
             <button type="button" className="btn btn-ghost" onClick={() => setNewApiKeyOpen(true)}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">

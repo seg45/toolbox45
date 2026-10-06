@@ -37,6 +37,7 @@ export function DatabasePane({ onCatalogsChanged }: { onCatalogsChanged: () => v
     <div className="settings-pane" data-pane="database">
       <div className="set-group">
         <span className="set-label">Commands</span>
+        <span className="set-hint">Export the command catalog to CSV (you pick the columns) or create commands in bulk from a CSV file.</span>
         <div className="settings-action-row">
           <button
             type="button"
@@ -62,6 +63,7 @@ export function DatabasePane({ onCatalogsChanged }: { onCatalogsChanged: () => v
 
       <div className="set-group">
         <span className="set-label">Folders</span>
+        <span className="set-hint">Move a folder with its subfolders, commands and notes between installations as a .json file.</span>
         <div className="settings-action-row">
           <button
             type="button"
@@ -93,6 +95,7 @@ export function DatabasePane({ onCatalogsChanged }: { onCatalogsChanged: () => v
       {auth.isAdmin && (
         <div className="set-group" id="sysGroupDatabase">
           <span className="set-label">Database</span>
+          <span className="set-hint">Back up and restore the database, and review who changed or accessed what.</span>
           <div className="settings-action-row">
             <button type="button" className="btn btn-ghost" id="backupManagerBtn" onClick={() => setModal('backup')}>
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
