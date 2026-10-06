@@ -3,18 +3,15 @@
 // (.settings-pane[data-pane="prefs"]) + js/theme.js (tema/accent) +
 // js/settings.js (demais preferências).
 //
-// Dark mode + Accent color funcionam de verdade (mesma lógica pessoal do
-// original). Home page/Group by e os espelhos de Vendor/System/Version/
-// Environment/Topic + os 4 toggles (Details/Export/Images/System
-// commands) já são persistidos de verdade (useSettings(), compartilhado
-// com a sidebar) — mas ainda sem nenhum efeito visível sobre uma lista de
-// comandos, porque o motor que os consome (render.js/ccRefreshCascade())
-// só existe a partir da fatia 3. Isto replica o próprio padrão do
-// original, que já guarda essas chamadas atrás de `typeof x ===
-// 'function'` — aqui elas simplesmente ainda não existem.
+// Dark mode, Accent color, Group by e os 4 toggles (Details/Export/Images/
+// System commands) são aplicados e persistidos NA HORA (useSettings(),
+// compartilhado com a sidebar). Home page e os espelhos de Vendor/System/
+// Version/Environment/Topic (os filtros PADRÃO) ficam num rascunho e só
+// valem no Save do rodapé do modal — mesmo comportamento do original.
 // ════════════════════════════════════════════════
 import { ACCENT_PRESETS } from '../../lib/theme';
 import { Settings } from '../../lib/settingsStore';
+import type { PrefsDraft } from '../SettingsModal';
 import type { Catalogs } from '../../lib/catalogs';
 import { SegSingle, SegMulti, Toggle } from '../SegControls';
 
@@ -32,6 +29,8 @@ export function PreferencesPane({
   catalogs,
   settings,
   update,
+  draft,
+  onDraftChange,
   theme,
   accent,
   toggleTheme,
@@ -40,6 +39,13 @@ export function PreferencesPane({
   catalogs: Catalogs | null;
   settings: Settings;
   update: (patch: Partial<Settings>) => void;
+  // Home page + os 5 filtros padrão (Vendor/System/Version/Environment/
+  // Topic) NÃO são aplicados na hora — ficam num rascunho (`draft`, mantido
+  // por SettingsModal) e só valem no botão Save do rodapé, como no original
+  // (saveSettingsModal() em js/settings-modal.js). Tema, cor, Group by e os
+  // 4 toggles continuam sendo aplicados e gravados na hora.
+  draft: PrefsDraft;
+  onDraftChange: (patch: Partial<PrefsDraft>) => void;
   // Fatia 8 — usePersonalTheme() foi elevado pra AppShell.tsx (mesmo motivo
   // de useLogo() nesta mesma fatia): o listener de 'storage' que reage ao
   // user-data sync (ver lib/theme.ts/lib/userDataSync.ts) só tem efeito
@@ -95,7 +101,7 @@ export function PreferencesPane({
       <div className="set-group set-group-row">
         <div className="set-row-half">
           <span className="set-label">Home page</span>
-          <SegSingle label="Home page" options={HOME_OPTIONS} value={settings.home} onChange={v => update({ home: v as Settings['home'] })} />
+          <SegSingle label="Home page" options={HOME_OPTIONS} value={draft.home} onChange={v => onDraftChange({ home: v as Settings['home'] })} />
         </div>
         <div className="set-row-half">
           <span className="set-label">Group by</span>
@@ -105,23 +111,23 @@ export function PreferencesPane({
 
       <div className="set-group set-group-row">
         <span className="set-label">Vendor</span>
-        <SegMulti options={vendorOptions} selected={settings.vendor} onChange={v => update({ vendor: v })} />
+        <SegMulti options={vendorOptions} selected={draft.vendor} onChange={v => onDraftChange({ vendor: v })} />
       </div>
       <div className="set-group set-group-row">
         <span className="set-label">System</span>
-        <SegMulti options={sysOptions} selected={settings.sys} onChange={v => update({ sys: v })} />
+        <SegMulti options={sysOptions} selected={draft.sys} onChange={v => onDraftChange({ sys: v })} />
       </div>
       <div className="set-group set-group-row">
         <span className="set-label">Version</span>
-        <SegMulti options={versionOptions} selected={settings.version} onChange={v => update({ version: v })} />
+        <SegMulti options={versionOptions} selected={draft.version} onChange={v => onDraftChange({ version: v })} />
       </div>
       <div className="set-group set-group-row">
         <span className="set-label">Environment</span>
-        <SegMulti options={envOptions} selected={settings.env} onChange={v => update({ env: v })} />
+        <SegMulti options={envOptions} selected={draft.env} onChange={v => onDraftChange({ env: v })} />
       </div>
       <div className="set-group set-group-row">
         <span className="set-label">Topic</span>
-        <SegMulti options={topicOptions} selected={settings.type} onChange={v => update({ type: v })} />
+        <SegMulti options={topicOptions} selected={draft.type} onChange={v => onDraftChange({ type: v })} />
       </div>
 
       <div className="set-group" id="settingsToggleGroup2">

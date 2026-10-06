@@ -805,8 +805,9 @@ await withPage(browser, async page => {
   await mockSystemPane(page, state);
   await goToApp(page);
 
-  await openSettings(page);
-  await page.locator('.settings-nav-btn', { hasText: 'User preferences' }).click();
+  // User preferences vive no escopo "user" do modal — abre pelo menu da conta.
+  await page.click('.hdr-user');
+  await page.locator('#hdrUserPanel .sb-row', { hasText: 'User preferences' }).click();
   await page.waitForSelector('.settings-pane[data-pane="prefs"]');
 
   const putsBefore = state.calls.userDataPut.length;

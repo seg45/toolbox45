@@ -52,5 +52,14 @@ export function useFoldersView(settings: Settings) {
     });
   }, []);
 
-  return { active, toggle };
+  // Escolha explícita da visão (ex.: salvar "Home page" nas preferências —
+  // persistLastView() no original, ver saveSettingsModal() em
+  // js/settings-modal.js: salvar a preferência é uma ação tão deliberada
+  // quanto clicar em "Folders", então também atualiza a visão memorizada).
+  const setView = useCallback((isFolders: boolean) => {
+    persistLastView(isFolders);
+    setActive(isFolders);
+  }, []);
+
+  return { active, toggle, setView };
 }

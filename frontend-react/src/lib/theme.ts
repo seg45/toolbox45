@@ -162,5 +162,5 @@ export function usePersonalTheme() {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  return { theme, accent, toggleTheme, setAccent };
+  return { theme, accent, toggleTheme, setTheme, setAccent };
 }

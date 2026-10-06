@@ -146,7 +146,10 @@ export function AppShell() {
             theme={personalTheme.theme}
             accent={personalTheme.accent}
             toggleTheme={personalTheme.toggleTheme}
+            setTheme={personalTheme.setTheme}
             setAccent={personalTheme.setAccent}
+            updateLiveFilters={liveFilters.update}
+            setFoldersView={foldersView.setView}
           />
         )}
       </FolderPromptProvider>

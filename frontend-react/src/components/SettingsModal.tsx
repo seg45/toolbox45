@@ -6,10 +6,16 @@
 // Fatia 5c acrescentou a aba "Database" (inicialmente só o grupo "Folders" —
 // Export/Import de pasta); a fatia 9 completou a aba com os grupos "Commands"
 // (Export/Import CSV do catálogo) e "Database" (Backup & Restore + audit log,
-// admin-only) — ver DatabasePane.tsx. Por isso o conceito de
-// "escopo" do original (título/nav mudam conforme abriu pelo menu de conta
-// ou pela engrenagem) ainda não se aplica de verdade: o título fica sempre
-// "Account settings" por ora.
+// admin-only) — ver DatabasePane.tsx.
+//
+// ESCOPO (auditoria visual pós-corte — igual ao original, _settingsApplyScope()
+// em js/settings-modal.js): o modal é um só, mas o que aparece depende de
+// como foi aberto. Menu da conta (nome do usuário no header) => escopo
+// "user": título "Account settings", nav só com User account/User
+// preferences. Engrenagem => escopo "system": título "Settings", nav com
+// Database/Groups/Register/System/Users (sujeitos aos gates de admin).
+// O rodapé (Restore defaults / Cancel / Save) só tem botões na aba "User
+// preferences"; nas demais fica vazio, como no original.
 //
 // Fatia 6 acrescentou "Groups" (CRUD de grupos, ver GroupsPane.tsx) —
 // super_admin-only, fail-closed: o item só é incluído em NAV_ITEMS quando
@@ -29,9 +35,11 @@
 // E gate de novo na renderização do pane, ver `pane === 'catalog' &&
 // auth.isAdmin` abaixo).
 // ════════════════════════════════════════════════
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
-import { useSettings } from '../lib/settingsStore';
+import { DEFAULT_SETTINGS, useSettings, type Settings } from '../lib/settingsStore';
+import { DEFAULT_ACCENT } from '../lib/theme';
+import type { LiveFilters } from '../lib/liveFilters';
 import type { Catalogs } from '../lib/catalogs';
 import { AccountPane } from './panes/AccountPane';
 import { CatalogPane } from './panes/CatalogPane';
@@ -40,6 +48,12 @@ import { GroupsPane } from './panes/GroupsPane';
 import { PreferencesPane } from './panes/PreferencesPane';
 import { SystemPane } from './panes/SystemPane';
 import { UsersPane } from './panes/UsersPane';
+
+// Rascunho de Home page + filtros PADRÃO da aba User preferences — só viram
+// valor de verdade no Save (ver SettingsModal abaixo e PreferencesPane.tsx).
+export type PrefsDraft = Pick<Settings, 'home' | 'vendor' | 'sys' | 'version' | 'env' | 'type'>;
+
+const USER_SCOPE_PANES: SettingsPane[] = ['account', 'prefs'];
 
 export type SettingsPane = 'account' | 'prefs' | 'database' | 'groups' | 'users' | 'catalog' | 'system';
 
@@ -131,7 +145,10 @@ export function SettingsModal({
   theme,
   accent,
   toggleTheme,
+  setTheme,
   setAccent,
+  updateLiveFilters,
+  setFoldersView,
 }: {
   pane: SettingsPane;
   onChangePane: (pane: SettingsPane) => void;
@@ -152,16 +169,75 @@ export function SettingsModal({
   theme: 'light' | 'dark';
   accent: string;
   toggleTheme: () => void;
+  setTheme: (theme: 'light' | 'dark') => void;
   setAccent: (key: string) => void;
+  // Save aplica os filtros padrão também aos filtros AO VIVO da sidebar e a
+  // "Home page" à visão atual (ST.vd... / VIEW_FOLDERS_HOME em
+  // saveSettingsModal() no original).
+  updateLiveFilters: (patch: Partial<LiveFilters>) => void;
+  setFoldersView: (isFolders: boolean) => void;
 }) {
   const auth = useAuth();
+  const isUserScope = USER_SCOPE_PANES.includes(pane);
+
+  // Rascunho montado quando o modal abre (o modal só existe enquanto está
+  // aberto); sobrevive à troca de aba dentro do modal, como os controles
+  // escondidos do original.
+  const [draft, setDraft] = useState<PrefsDraft>(() => ({
+    home: settings.home,
+    vendor: settings.vendor,
+    sys: settings.sys,
+    version: settings.version,
+    env: settings.env,
+    type: settings.type,
+  }));
+  function onDraftChange(patch: Partial<PrefsDraft>) {
+    setDraft(prev => ({ ...prev, ...patch }));
+  }
+  function save() {
+    updateSettings({ ...draft });
+    updateLiveFilters({
+      vendor: draft.vendor,
+      system: draft.sys,
+      version: draft.version,
+      environment: draft.env,
+      topic: draft.type,
+    });
+    setFoldersView(draft.home === 'folders');
+    onClose();
+  }
+  // Rascunho volta ao padrão (só vale se o usuário salvar); o que é
+  // aplicado na hora (toggles, Group by, tema, cor) volta ao padrão agora —
+  // restoreDefaultsModal() no original.
+  function restoreDefaults() {
+    setDraft({
+      home: DEFAULT_SETTINGS.home,
+      vendor: DEFAULT_SETTINGS.vendor,
+      sys: DEFAULT_SETTINGS.sys,
+      version: DEFAULT_SETTINGS.version,
+      env: DEFAULT_SETTINGS.env,
+      type: DEFAULT_SETTINGS.type,
+    });
+    updateSettings({
+      showCardDetails: DEFAULT_SETTINGS.showCardDetails,
+      exportEnabled: DEFAULT_SETTINGS.exportEnabled,
+      showImages: DEFAULT_SETTINGS.showImages,
+      showSidebar: DEFAULT_SETTINGS.showSidebar,
+      showSystemCommands: DEFAULT_SETTINGS.showSystemCommands,
+      groupBy: DEFAULT_SETTINGS.groupBy,
+    });
+    setTheme('light');
+    setAccent(DEFAULT_ACCENT);
+  }
   // Mesma ordem do original (index.html): account, prefs, database, groups,
-  // register(catalog), system, users.
+  // register(catalog), system, users — filtrada pelo escopo do modal (ver
+  // comentário no topo do arquivo).
   let navItems = NAV_ITEMS;
   if (auth.isSuperAdmin) navItems = [...navItems, GROUPS_NAV_ITEM];
   if (auth.isAdmin) navItems = [...navItems, CATALOG_NAV_ITEM];
   navItems = [...navItems, SYSTEM_NAV_ITEM];
   if (auth.isSuperAdmin) navItems = [...navItems, USERS_NAV_ITEM];
+  navItems = navItems.filter(item => USER_SCOPE_PANES.includes(item.pane) === isUserScope);
 
   useEffect(() => {
     function onKeyDown(ev: KeyboardEvent) {
@@ -183,7 +259,7 @@ export function SettingsModal({
         <div className="modal-head">
           <span className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8a4 4 0 100 8 4 4 0 000-8z" /><path d="M19.4 13a7.97 7.97 0 000-2l2.1-1.6-2-3.4-2.5 1a8.1 8.1 0 00-1.7-1L14.9 3h-4l-.4 2.9a8.1 8.1 0 00-1.7 1l-2.5-1-2 3.4L6.6 11a7.97 7.97 0 000 2l-2.1 1.6 2 3.4 2.5-1c.5.4 1.1.8 1.7 1l.4 2.9h4l.4-2.9c.6-.2 1.2-.6 1.7-1l2.5 1 2-3.4L19.4 13z" /></svg>
-            <span>Account settings</span>
+            <span id="settingsModalTitle">{isUserScope ? 'Account settings' : 'Settings'}</span>
           </span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
@@ -220,6 +296,8 @@ export function SettingsModal({
                 catalogs={catalogs}
                 settings={settings}
                 update={updateSettings}
+                draft={draft}
+                onDraftChange={onDraftChange}
                 theme={theme}
                 accent={accent}
                 toggleTheme={toggleTheme}
@@ -235,6 +313,29 @@ export function SettingsModal({
                 SystemPane decide por si (auth.isAdmin/auth.isSuperAdmin)
                 se renderiza ou não. */}
             {pane === 'system' && <SystemPane onLogoChanged={onLogoChanged} />}
+          </div>
+        </div>
+        {/* Rodapé sempre presente (como no original); só a aba "User
+            preferences" tem botões — nas demais fica vazio. */}
+        <div className="modal-foot">
+          <div style={{ display: 'flex', gap: 8 }} id="settingsFootLeft">
+            {pane === 'prefs' && (
+              <button type="button" className="btn btn-ghost" onClick={restoreDefaults}>
+                Restore defaults
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {pane === 'prefs' && (
+              <>
+                <button type="button" className="btn" id="settingsCancelBtn" onClick={onClose}>
+                  Cancel
+                </button>
+                <button type="button" className="btn btn-primary" id="settingsSaveBtn" onClick={save}>
+                  Save
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -27,6 +27,7 @@ import { ApiError } from '../lib/api';
 import { deleteLink, listLinks, type Link } from '../lib/links';
 import { LinkEditorModal } from './LinkEditorModal';
 import { IpCalcModal } from './IpCalcModal';
+import type { SettingsPane } from './SettingsModal';
 
 type LinkEditorState = { mode: 'create' } | { mode: 'edit'; link: Link } | null;
 
@@ -36,7 +37,7 @@ type LinkEditorState = { mode: 'create' } | { mode: 'edit'; link: Link } | null;
 // que fica numa ramificação irmã da árvore (dentro de SettingsModal) e
 // precisa disparar `refresh` depois de salvar/resetar — mesmo caminho já
 // usado por catalogs/onCatalogsChanged (ver AppShell.tsx).
-export function Header({ onOpenSettings, logo }: { onOpenSettings: (pane: 'account' | 'prefs') => void; logo: LogoSrcs }) {
+export function Header({ onOpenSettings, logo }: { onOpenSettings: (pane: SettingsPane) => void; logo: LogoSrcs }) {
   const auth = useAuth();
   const confirm = useConfirm();
   const [open, setOpen] = useState(false);
@@ -268,12 +269,13 @@ export function Header({ onOpenSettings, logo }: { onOpenSettings: (pane: 'accou
           </div>
         )}
       </div>
-      {/* Escopo "system" (abas Register/System/Database/Users) ainda não
-          existe nesta fatia — abre em 'prefs' como estado provisório,
-          até a aba Database (fatia 9) dar um destino melhor a este botão. */}
+      {/* Engrenagem = escopo "system" (Database/Groups/Register/System/Users),
+          abre em 'database' — a única aba com conteúdo visível pra QUALQUER
+          usuário (openSettingsModal() sem argumento no original). User
+          account/User preferences só abrem pelo menu da conta, acima. */}
       <button
         className="theme-toggle"
-        onClick={() => onOpenSettings('prefs')}
+        onClick={() => onOpenSettings('database')}
         title="Settings"
         style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
       >

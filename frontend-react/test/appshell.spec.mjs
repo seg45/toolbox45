@@ -100,26 +100,45 @@ await withPage(browser, async page => {
   await page.screenshot({ path: `${SHOTS}/3-sidebar-vendor-filter.png` });
 });
 
-// ── Cenário 4: modal de Configurações abre pela engrenagem, fecha com Escape ──
+// Abre "Account settings" (escopo user) pelo menu da conta, direto na aba pedida.
+async function openAccountSettings(page, itemText) {
+  await page.waitForSelector('.hdr-user');
+  await page.click('.hdr-user');
+  await page.locator('#hdrUserPanel .sb-row', { hasText: itemText }).click();
+  await page.waitForSelector('.settings-modal-box');
+}
+
+// ── Cenário 4: dois escopos do modal (igual ao original) — engrenagem = "Settings", menu da conta = "Account settings" ──
 await withPage(browser, async page => {
   await mockLoggedInAdmin(page);
   await page.goto(`${BASE}/index.html`);
   await page.waitForSelector('.theme-toggle');
+  // Engrenagem: título "Settings", nav só com as abas de sistema, rodapé vazio, abre em Database
   await page.click('.theme-toggle');
   await page.waitForSelector('.settings-modal-box');
-  assert(await page.isVisible('text=User preferences'), 'cenário 4: modal abre com a aba Preferences');
+  assert((await page.textContent('#settingsModalTitle')) === 'Settings', 'cenário 4: engrenagem abre o modal com título "Settings"');
+  const sysNav = (await page.locator('.settings-nav-btn').allTextContents()).map(t => t.trim());
+  assert(sysNav.join(',') === 'Database,Groups,Register,System,Users', `cenário 4: nav do escopo system = Database,Groups,Register,System,Users (lido: ${sysNav.join(',')})`);
+  assert(await page.locator('.settings-nav-btn.on', { hasText: 'Database' }).count() === 1, 'cenário 4: engrenagem abre na aba Database');
+  assert((await page.locator('.settings-modal-box .modal-foot button').count()) === 0, 'cenário 4: rodapé sem botões fora de User preferences');
   await page.keyboard.press('Escape');
   await page.waitForSelector('.settings-modal-box', { state: 'detached', timeout: 3000 });
   assert(true, 'cenário 4: Escape fecha o modal');
+  // Menu da conta: "User preferences" => título "Account settings", nav só com User account/User preferences
+  await openAccountSettings(page, 'User preferences');
+  assert((await page.textContent('#settingsModalTitle')) === 'Account settings', 'cenário 4: menu da conta abre o modal com título "Account settings"');
+  const userNav = (await page.locator('.settings-nav-btn').allTextContents()).map(t => t.trim());
+  assert(userNav.join(',') === 'User account,User preferences', `cenário 4: nav do escopo user = User account,User preferences (lido: ${userNav.join(',')})`);
+  assert(await page.isVisible('.settings-pane[data-pane="prefs"]'), 'cenário 4: abre na aba User preferences');
+  const foot = (await page.locator('.settings-modal-box .modal-foot button').allTextContents()).map(t => t.trim());
+  assert(foot.join(',') === 'Restore defaults,Cancel,Save', `cenário 4: rodapé de User preferences = Restore defaults,Cancel,Save (lido: ${foot.join(',')})`);
 });
 
 // ── Cenário 5: modal — Dark mode toggle muda data-theme + persiste ──
 await withPage(browser, async page => {
   await mockLoggedInAdmin(page);
   await page.goto(`${BASE}/index.html`);
-  await page.waitForSelector('.theme-toggle');
-  await page.click('.theme-toggle');
-  await page.waitForSelector('.settings-modal-box');
+  await openAccountSettings(page, 'User preferences');
   await page.click('text=Dark mode');
   await assertEventually(async () => (await page.getAttribute('html', 'data-theme')) === 'dark', 'cenário 5: Dark mode aplica data-theme=dark');
   const persisted = await page.evaluate(() => localStorage.getItem('cpa-theme'));
@@ -131,8 +150,7 @@ await withPage(browser, async page => {
 await withPage(browser, async page => {
   await mockLoggedInAdmin(page);
   await page.goto(`${BASE}/index.html`);
-  await page.click('.theme-toggle');
-  await page.waitForSelector('.settings-modal-box');
+  await openAccountSettings(page, 'User preferences');
   await page.click('[title="Check Point pink"]');
   const teal = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--teal').trim());
   assert(teal.toLowerCase() === '#da1572', `cenário 6: accent pink aplicado (--teal=${teal})`);
@@ -198,6 +216,86 @@ await withPage(browser, async page => {
   await assertEventually(async () => (await page.getAttribute('.app', 'class'))?.includes('sidebar-collapsed'), 'cenário 10: toggle da sidebar aplica .sidebar-collapsed em .app');
   const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem('cpa-settings') || '{}').showSidebar);
   assert(persisted === false, 'cenário 10: showSidebar=false persistido');
+});
+
+// Helpers dos cenários 11-14 (rascunho + Save/Cancel/Restore defaults)
+// `.set-row-half` (Home page / Group by dividem uma linha) ou `.set-group-row`
+// (Vendor/System/...) — .last() pega o mais interno quando os dois casam.
+const prefsGroup = (page, label) =>
+  page.locator('.settings-pane[data-pane="prefs"] .set-row-half, .settings-pane[data-pane="prefs"] .set-group-row').filter({ has: page.locator('.set-label', { hasText: new RegExp(`^${label}$`) }) }).last();
+async function pickInGroup(page, label, optionText) {
+  const g = prefsGroup(page, label);
+  await g.locator('.dd-btn').click();
+  await g.locator('.seg-btn', { hasText: optionText }).click();
+}
+const readSettings = page => page.evaluate(() => JSON.parse(localStorage.getItem('cpa-settings') || '{}'));
+
+// ── Cenário 11: filtros padrão e Home page ficam em RASCUNHO até o Save ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  await page.goto(`${BASE}/index.html`);
+  await openAccountSettings(page, 'User preferences');
+  await pickInGroup(page, 'Vendor', 'Check Point');
+  await pickInGroup(page, 'Home page', 'Folders');
+  let s = await readSettings(page);
+  assert(!(s.vendor || []).includes('check-point') && s.home !== 'folders', 'cenário 11: antes do Save, Vendor e Home page NÃO foram gravados em cpa-settings');
+  assert((await page.evaluate(() => localStorage.getItem('cpa-last-view'))) !== 'folders', 'cenário 11: antes do Save, a visão atual não muda');
+  // trocar de aba e voltar mantém o rascunho
+  await page.locator('.settings-nav-btn', { hasText: 'User account' }).click();
+  await page.locator('.settings-nav-btn', { hasText: 'User preferences' }).click();
+  assert((await prefsGroup(page, 'Vendor').locator('.dd-label').textContent())?.trim() === 'Check Point', 'cenário 11: o rascunho sobrevive à troca de aba dentro do modal');
+  await page.click('#settingsSaveBtn');
+  await page.waitForSelector('.settings-modal-box', { state: 'detached', timeout: 3000 });
+  s = await readSettings(page);
+  assert((s.vendor || []).includes('check-point') && s.home === 'folders', 'cenário 11: Save grava Vendor e Home page em cpa-settings');
+  const live = await page.evaluate(() => JSON.parse(localStorage.getItem('cpa-sidebar-filters') || '{}'));
+  assert((live.vd || []).includes('check-point'), 'cenário 11: Save também aplica o Vendor aos filtros ao vivo da sidebar');
+  assert((await page.locator('.sb-block-filter', { hasText: 'Vendor' }).locator('.dd-label').first().textContent())?.trim() === 'Check Point', 'cenário 11: sidebar mostra o Vendor salvo');
+  assert((await page.evaluate(() => localStorage.getItem('cpa-last-view'))) === 'folders', 'cenário 11: Save de Home page = Folders atualiza a visão memorizada');
+});
+
+// ── Cenário 12: Cancel descarta o rascunho (e o que já foi aplicado na hora continua) ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  await page.goto(`${BASE}/index.html`);
+  await openAccountSettings(page, 'User preferences');
+  await pickInGroup(page, 'Vendor', 'Check Point');
+  await page.click('text=Dark mode'); // aplicado na hora
+  await page.click('#settingsCancelBtn');
+  await page.waitForSelector('.settings-modal-box', { state: 'detached', timeout: 3000 });
+  const s = await readSettings(page);
+  assert(!(s.vendor || []).includes('check-point'), 'cenário 12: Cancel descarta o Vendor do rascunho');
+  assert((await page.getAttribute('html', 'data-theme')) === 'dark', 'cenário 12: tema aplicado na hora continua depois do Cancel (como no original)');
+  await openAccountSettings(page, 'User preferences');
+  assert((await prefsGroup(page, 'Vendor').locator('.dd-label').textContent())?.trim() === 'All', 'cenário 12: reabrir o modal começa de novo do valor salvo (All)');
+});
+
+// ── Cenário 13: Group by e toggles são aplicados NA HORA (sem Save) ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  await page.goto(`${BASE}/index.html`);
+  await openAccountSettings(page, 'User preferences');
+  await page.locator('#settingsToggleGroup2 .sb-toggle', { hasText: 'Details' }).click();
+  await pickInGroup(page, 'Group by', 'Created by');
+  const s = await readSettings(page);
+  assert(s.showCardDetails === true && s.groupBy === 'creator', 'cenário 13: Details e Group by gravados na hora, sem clicar em Save');
+});
+
+// ── Cenário 14: Restore defaults — rascunho volta ao padrão, o que é imediato volta agora ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  await page.goto(`${BASE}/index.html`);
+  await openAccountSettings(page, 'User preferences');
+  await pickInGroup(page, 'Vendor', 'Check Point');
+  await page.click('text=Dark mode');
+  await page.locator('#settingsToggleGroup2 .sb-toggle', { hasText: 'Images' }).click();
+  assert((await readSettings(page)).showImages === true, 'cenário 14: pré-condição — Images ligado');
+  await page.getByRole('button', { name: 'Restore defaults' }).click();
+  await assertEventually(async () => (await page.getAttribute('html', 'data-theme')) === 'light', 'cenário 14: Restore defaults volta o tema pra claro na hora');
+  const s = await readSettings(page);
+  assert(s.showImages === false && s.showCardDetails === false && s.groupBy === 'topic', 'cenário 14: toggles e Group by voltam ao padrão na hora');
+  assert((await prefsGroup(page, 'Vendor').locator('.dd-label').textContent())?.trim() === 'All', 'cenário 14: Vendor do rascunho volta pra All');
+  assert(!(s.vendor || []).includes('check-point'), 'cenário 14: nada de filtro foi gravado sem Save');
 });
 
 await browser.close();
