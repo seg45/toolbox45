@@ -271,9 +271,9 @@ async def run_migrations(pool) -> None:
         END IF;
       END $$;
     """)
-        # A conta local 'admin' semeada por seed_default_admin() e SEMPRE Super
-        # Admin, reforcado aqui a cada boot (idempotente) alem do INSERT em si
-        # -- cobre instalacoes que ja tinham essa conta ANTES deste recurso.
+        # A conta local 'admin' de instalacoes antigas (a conta padrao agora so
+        # existe ate a configuracao inicial -- ver app/setup.py) e SEMPRE Super
+        # Admin, reforcado aqui a cada boot (idempotente).
         await pool.execute("UPDATE users SET role = 'super_admin' WHERE username = 'admin' AND role != 'super_admin'")
         await pool.execute("""
       UPDATE folder_commands fc SET sort_order = ranked.rn

@@ -15,6 +15,11 @@ export interface LoginResponse {
   role: string;
 }
 
+export interface SetupStatus {
+  required: boolean;
+  mode: 'fresh' | 'migrate' | null;
+}
+
 export interface MeResponse {
   username?: string;
   upn?: string;
@@ -79,6 +84,35 @@ export async function fetchAuthProviders(): Promise<AuthProviders | null> {
   } catch {
     return null;
   }
+}
+
+// Primeiro acesso: null quando a consulta FALHA (rede/HTTP/corpo inválido) — a
+// tela de login então segue normal, sem formulário de configuração inicial.
+export async function fetchSetupStatus(): Promise<SetupStatus | null> {
+  try {
+    const res = await fetch('/api/auth/setup-status');
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (typeof data?.required !== 'boolean') return null;
+    return { required: data.required, mode: data.mode === 'fresh' || data.mode === 'migrate' ? data.mode : null };
+  } catch {
+    return null;
+  }
+}
+
+// Cria o primeiro super_admin (ou converte o `admin` padrão de uma instalação
+// antiga) e já abre a sessão — ver POST /api/auth/setup em server-py.
+export async function initialSetup(email: string, password: string): Promise<LoginResponse> {
+  const res = await fetch('/api/auth/setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const body = await parseErrorBody(res);
+    throw new ApiError(res.status, body.message || 'Could not complete the setup.', body.error);
+  }
+  return res.json();
 }
 
 export async function login(username: string, password: string): Promise<LoginResponse> {

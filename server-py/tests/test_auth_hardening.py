@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_boot import banco, sql  # noqa: E402,F401
-from test_security import app_env, client, _admin, _as, _back_to_admin, _criar_usuario, _token  # noqa: E402,F401
+from test_security import ADMIN_EMAIL, ADMIN_PASS, app_env, client, _admin, _as, _back_to_admin, _criar_usuario, _token  # noqa: E402,F401
 
 from app import login_guard, security  # noqa: E402
 from app.login_guard import FailureLimiter  # noqa: E402
@@ -134,7 +134,7 @@ def test_login_bloqueia_apos_5_erros_com_429_e_retry_after(client):
     # a senha CERTA tambem fica bloqueada enquanto durar o bloqueio
     assert _tentar(client, "alvo@x.com", "senha-forte-1").status_code == 429
     # outra conta, do mesmo IP, continua livre; e a mesma conta de outro IP tambem
-    assert _tentar(client, "admin", "admin").status_code == 200
+    assert _tentar(client, ADMIN_EMAIL, ADMIN_PASS).status_code == 200
     assert _tentar(client, "alvo@x.com", "senha-forte-1", ip="203.0.113.9").status_code == 200
 
 
@@ -161,10 +161,10 @@ def test_login_bloqueado_nao_calcula_scrypt_e_inexistente_calcula(client, monkey
 def test_login_sucesso_zera_contador_do_ip_usuario(client):
     _as(client, None)
     for _ in range(4):
-        assert _tentar(client, "admin", "errada").status_code == 401
-    assert _tentar(client, "admin", "admin").status_code == 200
+        assert _tentar(client, ADMIN_EMAIL, "errada").status_code == 401
+    assert _tentar(client, ADMIN_EMAIL, ADMIN_PASS).status_code == 200
     for _ in range(4):
-        assert _tentar(client, "admin", "errada").status_code == 401  # nao bloqueou: zerou no sucesso
+        assert _tentar(client, ADMIN_EMAIL, "errada").status_code == 401  # nao bloqueou: zerou no sucesso
 
 
 def test_scrypt_roda_fora_da_thread_do_event_loop_e_com_concorrencia_limitada(monkeypatch):
@@ -218,7 +218,7 @@ def test_event_loop_continua_respondendo_durante_hash_real():
 def test_fila_de_hash_cheia_responde_503(client, monkeypatch):
     _as(client, None)
     monkeypatch.setattr(security, "MAX_PENDING", 0)
-    r = _tentar(client, "admin", "admin")
+    r = _tentar(client, ADMIN_EMAIL, ADMIN_PASS)
     assert r.status_code == 503
     assert r.json()["error"] == "server_busy"
     assert r.headers["retry-after"] == "5"
@@ -338,6 +338,6 @@ def test_sessoes_vencidas_saem_da_tabela_no_proximo_login(client, app_env):
     _criar_usuario(admin, "velha@x.com", "senha-forte-1")
     sql(banco, "INSERT INTO sessions (token, username, expires_at) VALUES ('expirada1', 'velha@x.com', NOW() - INTERVAL '1 day')", fetch="exec")
     _as(client, None)
-    _login = _tentar(client, "admin", "admin")
+    _login = _tentar(client, ADMIN_EMAIL, ADMIN_PASS)
     assert _login.status_code == 200
     assert sql(banco, "SELECT COUNT(*) FROM sessions WHERE token = 'expirada1'", fetch="val") == 0

@@ -134,15 +134,24 @@ def app_env(banco, monkeypatch, tmp_path):
     return banco, backup_dir
 
 
+ADMIN_EMAIL = "root@test.local"
+ADMIN_PASS = "senha-admin-1"
+
+
 @pytest.fixture
 def client(app_env):
     from fastapi.testclient import TestClient
     from app.main import app
     with TestClient(app, follow_redirects=False) as c:
+        # Nao existe conta padrao: o primeiro super_admin nasce na configuracao inicial.
+        r = c.post("/api/auth/setup", json={"email": ADMIN_EMAIL, "password": ADMIN_PASS})
+        assert r.status_code == 200, r.text
+        c.post("/api/auth/logout")  # descarta a sessao aberta pelo setup (os testes logam por conta propria)
+        c.cookies.clear()
         yield c
 
 
-def _login(client, user="admin", password="admin", headers=None):
+def _login(client, user=ADMIN_EMAIL, password=ADMIN_PASS, headers=None):
     r = client.post("/api/auth/login", json={"username": user, "password": password}, headers=headers or {})
     assert r.status_code == 200, r.text
     return r
@@ -169,7 +178,7 @@ ADMIN_TOKENS = {}
 def _admin(client):
     """Loga como admin; o token fica guardado para voltar a ele depois de
     alternar de usuario (ver _as)."""
-    ADMIN_TOKENS[id(client)] = _token(client, "admin", "admin")
+    ADMIN_TOKENS[id(client)] = _token(client, ADMIN_EMAIL, ADMIN_PASS)
     return client
 
 
@@ -228,17 +237,17 @@ def test_details_de_comando_e_notas_sao_sanitizados_pela_api(client, app_env):
 # 3) Cookie de sessao: Secure so quando a requisicao veio por HTTPS
 # ════════════════════════════════════════════════
 def test_cookie_de_sessao_secure_atras_do_proxy_https(client):
-    r = client.post("/api/auth/login", json={"username": "admin", "password": "admin"},
+    r = client.post("/api/auth/login", json={"username": ADMIN_EMAIL, "password": ADMIN_PASS},
                     headers={"X-Forwarded-Proto": "https"})
     cookie = r.headers["set-cookie"]
     assert "tb45_session=" in cookie and "Secure" in cookie and "HttpOnly" in cookie and "SameSite=lax" in cookie
 
-    r = client.post("/api/auth/login", json={"username": "admin", "password": "admin"},
+    r = client.post("/api/auth/login", json={"username": ADMIN_EMAIL, "password": ADMIN_PASS},
                     headers={"X-Forwarded-Proto": "http"})
     assert "Secure" not in r.headers["set-cookie"]
 
     # sem proxy (acesso direto, testes): nao marca Secure (senao o navegador descartaria o cookie em HTTP)
-    r = client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    r = client.post("/api/auth/login", json={"username": ADMIN_EMAIL, "password": ADMIN_PASS})
     assert "Secure" not in r.headers["set-cookie"]
 
     # logout por HTTPS limpa o cookie com os mesmos atributos
@@ -378,7 +387,7 @@ def test_logo_publico_nao_vaza_updated_by(client):
     assert client.get("/api/system/logo", headers={"X-API-Key": "tb45_invalida"}).status_code == 200
     _back_to_admin(client)
     adm = admin.get("/api/system/logo").json()
-    assert adm["updatedBy"] == "admin"
+    assert adm["updatedBy"] == ADMIN_EMAIL
 
 
 # ════════════════════════════════════════════════

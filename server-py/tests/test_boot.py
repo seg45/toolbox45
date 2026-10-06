@@ -237,23 +237,13 @@ def ddl_legado_comandos(tipo_id: str, com_details: bool = False) -> str:
 # ════════════════════════════════════════════════
 # 1) Banco novo
 # ════════════════════════════════════════════════
-def test_banco_novo_semeia_admin_e_catalogos(banco):
+def test_banco_novo_semeia_catalogos_e_nao_cria_nenhum_usuario(banco):
     boot()
 
-    admin = sql(banco, "SELECT * FROM users WHERE username = 'admin'", fetch="row")
-    assert admin is not None
-    assert admin["role"] == "super_admin"
-    assert admin["is_local"] == 1
-    assert admin["handle"] == "admin"
-    assert admin["auth_provider"] == "local"
-    assert admin["disabled"] == 0
-    assert admin["approved_at"] is not None  # a conta semente nunca passa por "pendente"
-    # Senha padrao 'admin' verifica com o verify_password() de app/security.py
-    assert verify_password("admin", admin["password_hash"])
-    assert not verify_password("outra-senha", admin["password_hash"])
-
-    # Pasta Favorites do admin
-    assert sql(banco, "SELECT COUNT(*) FROM folders WHERE username = 'admin' AND name = 'Favorites'", fetch="val") == 1
+    # Nao existe mais conta padrao (admin/admin): o primeiro super_admin nasce na
+    # configuracao inicial (POST /api/auth/setup), nunca no boot.
+    assert sql(banco, "SELECT COUNT(*) FROM users", fetch="val") == 0
+    assert sql(banco, "SELECT COUNT(*) FROM folders", fetch="val") == 0
 
     # Contagens do catalogo padrao
     assert contagens(banco, "vendors", "systems", "versions", "environments", "parameters", "prompts", "exports") == {
@@ -288,24 +278,24 @@ def test_banco_novo_semeia_admin_e_catalogos(banco):
 def test_init_db_duas_vezes_e_idempotente(banco):
     boot()
     cont1, idx1 = todas_contagens(banco), indices(banco)
-    hash1 = sql(banco, "SELECT password_hash FROM users WHERE username = 'admin'", fetch="val")
     cat1 = {t: [tuple(r) for r in sql(banco, f"SELECT * FROM {t} ORDER BY 1, 2")] for t in ("parameters", "vendors", "prompts")}
 
     boot()
     assert todas_contagens(banco) == cont1
     assert indices(banco) == idx1
-    # ON CONFLICT DO NOTHING: a senha do admin NAO e regravada (salt novo mudaria o hash)
-    assert sql(banco, "SELECT password_hash FROM users WHERE username = 'admin'", fetch="val") == hash1
+    assert sql(banco, "SELECT COUNT(*) FROM users", fetch="val") == 0  # boot nunca cria usuario
     assert {t: [tuple(r) for r in sql(banco, f"SELECT * FROM {t} ORDER BY 1, 2")] for t in ("parameters", "vendors", "prompts")} == cat1
     assert contagens(banco, *CATALOGOS)["versions"] == 8
 
 
-def test_admin_com_senha_trocada_nao_e_sobrescrito(banco):
+def test_boot_nao_recria_nem_altera_usuarios_existentes(banco):
     boot()
     novo = hash_password("nova-senha-forte")
-    sql(banco, "UPDATE users SET password_hash = $1 WHERE username = 'admin'", novo, fetch="exec")
+    sql(banco, """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at)
+                  VALUES ('dono@x.com', $1, 'super_admin', 1, 'setup', 'local', 'dono', NOW())""", novo, fetch="exec")
     boot()
-    assert sql(banco, "SELECT password_hash FROM users WHERE username = 'admin'", fetch="val") == novo
+    assert sql(banco, "SELECT password_hash FROM users WHERE username = 'dono@x.com'", fetch="val") == novo
+    assert sql(banco, "SELECT COUNT(*) FROM users WHERE username = 'admin'", fetch="val") == 0  # 'admin' nunca volta
 
 
 # ════════════════════════════════════════════════
@@ -371,7 +361,7 @@ def test_banco_legado_sem_approved_at_aprova_existentes_uma_vez(banco):
                          ('antigo2@x.com', NULL, 'user', 1, 1, 'admin')""", fetch="exec")  # inclusive um desabilitado
 
     boot()
-    for u in ("antigo1@x.com", "antigo2@x.com", "admin"):
+    for u in ("antigo1@x.com", "antigo2@x.com"):
         assert sql(banco, "SELECT approved_at FROM users WHERE username = $1", u, fetch="val") is not None, u
     # o backfill de approved_at usa created_at da conta (COALESCE(created_at, NOW()))
     assert sql(banco, "SELECT approved_at = created_at FROM users WHERE username = 'antigo1@x.com'", fetch="val") is True
@@ -392,7 +382,6 @@ def test_auth_provider_backfill_em_banco_legado(banco):
     got = {r["username"]: r["auth_provider"] for r in sql(banco, "SELECT username, auth_provider FROM users")}
     assert got["local@x.com"] == "local"   # is_local=1 -> 'local'
     assert got["CORP\\bob"] == "ntlm"      # DEFAULT preserva contas NTLM
-    assert got["admin"] == "local"
 
 
 # ════════════════════════════════════════════════
@@ -414,7 +403,6 @@ def test_backfill_de_handle_com_colisao_e_indice_unico(banco):
     assert handles["ana@b.com"] == "ana-2"           # colisao -> sufixo -2
     assert handles["Joao.Silva+tag@x.com"] == "joao.silva-tag"  # slugify: caracteres invalidos viram '-'
     assert handles["a@x.com"] == "user-a"            # menos de 2 caracteres -> prefixo user-
-    assert handles["admin"] == "admin"               # conta semente tem handle explicito
     assert len(set(handles.values())) == len(handles)  # todos distintos
 
     # indice UNICO existe de verdade (duplicar handle e rejeitado)
@@ -680,12 +668,13 @@ def test_erro_num_bloco_e_logado_e_blocos_seguintes_rodam(banco, monkeypatch, ca
     assert len(erros) == 1, msgs
     # blocos POSTERIORES ainda rodaram: parametro fixo garantido (Bloco 4) e seeds
     assert sql(banco, "SELECT COUNT(*) FROM parameters WHERE key = 'host'", fetch="val") == 1
-    assert sql(banco, "SELECT COUNT(*) FROM users WHERE username = 'admin'", fetch="val") == 1
 
 
 def test_erro_aborta_so_o_resto_do_mesmo_bloco(banco, monkeypatch, caplog):
     boot()
-    sql(banco, "UPDATE users SET role = 'admin' WHERE username = 'admin'", fetch="exec")
+    # conta 'admin' LEGADA (instalacao antiga) rebaixada: o boot normal a reforca como super_admin
+    sql(banco, """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at)
+                  VALUES ('admin', $1, 'admin', 1, 'system', 'local', 'admin', NOW())""", hash_password("admin"), fetch="exec")
     sql(banco, "DELETE FROM parameters WHERE key = 'host'", fetch="exec")
 
     # 1a instrucao do Bloco 1: o RESTO do bloco (incluindo o reforco de super_admin) nao roda...
@@ -765,9 +754,18 @@ def test_ponta_a_ponta_lifespan_login_e_catalogos(banco, monkeypatch, tmp_path):
         r = client.post("/api/auth/login", json={})
         assert r.status_code == 400 and r.json()["error"] == "validation_error"
 
-        r = client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+        # instalacao nova: a conta admin/admin NAO existe (login recusado) e a
+        # tela de primeiro acesso esta pendente
+        assert client.post("/api/auth/login", json={"username": "admin", "password": "admin"}).status_code == 401
+        assert client.get("/api/auth/setup-status").json() == {"required": True, "mode": "fresh"}
+        r = client.post("/api/auth/setup", json={"email": "dono@empresa.com", "password": "senha-do-dono-1"})
+        assert r.status_code == 200, r.text
+        assert r.json() == {"username": "dono@empresa.com", "role": "super_admin", "mode": "fresh"}
+        assert client.get("/api/auth/setup-status").json() == {"required": False, "mode": None}
+        client.cookies.clear()
+        r = client.post("/api/auth/login", json={"username": "dono@empresa.com", "password": "senha-do-dono-1"})
         assert r.status_code == 200
-        assert r.json() == {"username": "admin", "role": "super_admin"}
+        assert r.json() == {"username": "dono@empresa.com", "role": "super_admin"}
         assert "tb45_session" in client.cookies
         assert len(client.cookies.get("tb45_session")) == 64  # token_hex(32)
 
@@ -782,4 +780,4 @@ def test_ponta_a_ponta_lifespan_login_e_catalogos(banco, monkeypatch, tmp_path):
     # bootstrap TLS gerou cert/key nos diretorios temporarios (openssl real)
     assert (tls_dir / "cert.pem").exists() and (tls_dir / "key.pem").exists()
     # a sessao ficou registrada no banco do teste
-    assert sql(banco, "SELECT COUNT(*) FROM sessions WHERE username = 'admin'", fetch="val") == 1
+    assert sql(banco, "SELECT COUNT(*) FROM sessions WHERE username = 'dono@empresa.com'", fetch="val") >= 1

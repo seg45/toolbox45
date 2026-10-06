@@ -96,6 +96,8 @@ protegido), `structural_dependency` (409 — parâmetro estrutural, ver Parâmet
 endpoint exige `role: admin`), `too_large` (400 — valor/imagem grande demais),
 `too_many_keys` (400 — teto de chaves em `/api/user-data`), `too_many_requests` (429 — limite
 de taxa do nginx, ver abaixo), `payload_too_large` (413 — corpo acima do limite da rota),
+`setup_required` (403 — login com o `admin` padrão enquanto a configuração inicial está pendente),
+`setup_not_required` (409 — `POST /api/auth/setup` quando já foi configurado),
 `too_many_attempts` (429 — bloqueio por senhas erradas, ver **Login local**; traz o
 cabeçalho `Retry-After`), `server_busy` (503 — fila de cálculo de hash de senha cheia;
 `Retry-After: 5`), `internal_error` (500 — a mensagem é sempre genérica; o detalhe só vai
@@ -462,8 +464,8 @@ ou pertencer a outro usuário (não distinguimos os dois casos).
 ## Login local e usuários
 
 ### `POST /api/auth/login`
-Loga com uma conta local (usuário/senha). Corpo: `{ "username": "admin", "password":
-"admin" }`. Sucesso: `200` `{ "username": "admin", "role": "super_admin" }` + `Set-Cookie:
+Loga com uma conta local (e-mail/senha). Corpo: `{ "username": "dono@empresa.com", "password":
+"..." }`. Sucesso: `200` `{ "username": "dono@empresa.com", "role": "super_admin" }` + `Set-Cookie:
 tb45_session=...` (`HttpOnly`, 12h). Falha: `401 invalid_credentials` (usuário local
 inexistente, senha errada, ou conta desabilitada). Rota pública (não exige sessão
 prévia — senão ninguém conseguiria logar). Limitada a ~6 tentativas/min por IP (`429
@@ -493,11 +495,35 @@ cadastros/min por IP (`429`).
 Encerra a sessão ativa, local ou Google (limpa a linha em `sessions` e o cookie).
 `204`, idempotente (funciona mesmo sem sessão ativa). Rota pública.
 
-### Usuário local padrão
-Toda instalação nova já vem com uma conta local `admin` / senha `admin`, role
-`super_admin` (semeada automaticamente no boot, depois que o schema é aplicado — ver
-`seed_default_admin()` em `server-py/app/seeds.py`). **Troque essa senha assim que
-possível** (`PUT /api/users/admin`, veja abaixo, ou pela tela Settings → Users).
+### Configuração inicial (primeiro acesso) — não existe mais conta `admin`/`admin`
+Nenhuma conta é criada no boot. Enquanto a instalação não tem um `super_admin`, a tela de
+login mostra um formulário pedindo **e-mail e senha do administrador**
+(`frontend-react/src/pages/LoginPage.tsx`, view `setup`); isso cria o primeiro
+`super_admin` e já abre a sessão dele.
+
+- `GET /api/auth/setup-status` — **público**. `{ "required": bool, "mode": "fresh" | "migrate" | null }`.
+  `fresh`: não existe nenhum `super_admin`. `migrate`: instalação **antiga** em que a conta
+  `admin` ainda tem a senha padrão `admin`. `required: false` quando a configuração já foi
+  feita (o resultado do teste da senha padrão fica em cache, calculado no boot e quando a
+  senha do `admin` muda — a rota não gasta CPU).
+- `POST /api/auth/setup` — **público**, só funciona enquanto `required` for `true`. Corpo
+  `{ "email", "password" }` (e-mail válido; senha de 8 a 256 caracteres, diferente do e-mail).
+  `200` `{ "username": "<e-mail em minúsculas>", "role": "super_admin", "mode": "fresh" | "migrate" }`
+  + cookie de sessão. `400 validation_error`; `409 setup_not_required` (já configurado — só a
+  primeira chamada vence, mesmo com requisições simultâneas); `409 conflict` (o e-mail já
+  pertence a outra conta). Limitado a ~3 req/min por IP no nginx.
+- **Migração (`migrate`)**: a conta `admin` é **substituída** pelo e-mail informado numa única
+  transação — comandos, pastas, notas, preferências, chaves de API, grupos, compartilhamentos,
+  auditoria e configurações de OAuth/logo passam para a conta nova, as sessões do `admin` são
+  encerradas e o usuário `admin` deixa de existir. A lista de colunas migradas está em
+  `server-py/app/setup.py` (`USERNAME_REFERENCES`; um teste confere que ela cobre o schema inteiro).
+- Enquanto o `admin` ainda tem a senha padrão, **`POST /api/auth/login` com `admin` responde
+  `403 setup_required`** (qualquer senha, sem calcular hash) — a tela de login então abre o
+  formulário de configuração. Se o `admin` legado já teve a senha trocada, nada disso se aplica
+  e ele continua funcionando normalmente.
+- **Primeiro a chegar vence**: quem abrir a tela antes do dono vira o administrador. Faça a
+  configuração logo depois de subir uma instalação nova (o `scripts/healthcheck.sh` marca
+  FALHA enquanto ela estiver pendente).
 
 ---
 
@@ -610,8 +636,8 @@ Cria uma conta **local** — corpo `{ "username", "password" (8 a 256 caracteres
 (`role` é `"user"` por padrão) → `201`. `400 validation_error` se `username` não for um
 e-mail válido (pedido do usuário: "remova o nome de usuário e trate tudo pelo email" —
 mesmo `EMAIL_RE`/normalização `.toLowerCase()` do auto-cadastro em `POST
-/api/auth/register`; contas locais já existentes sem formato de e-mail, como a `admin`
-semeada, não são migradas). `409 conflict` se o e-mail já existir.
+/api/auth/register`; contas locais já existentes sem formato de e-mail, como um `admin`
+legado, não são migradas). `409 conflict` se o e-mail já existir.
 
 ### `PUT /api/users/:username` — **(super_admin)**
 Corpo parcial — qualquer combinação de `{ "role": "admin"|"user", "disabled": bool,

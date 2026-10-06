@@ -3,8 +3,8 @@ seedDefault*() de server/db.js, na MESMA ordem em que initDb() as chama.
 
 Regra geral: cada seed de catalogo so semeia se a PROPRIA tabela estiver
 totalmente vazia (nunca sobrescreve nem "reafirma" o que o administrador ja
-cadastrou, editou ou excluiu pelo Register). Excecoes: o admin padrao e a
-pasta "Favorites" usam ON CONFLICT DO NOTHING e sao reafirmados a cada boot.
+cadastrou, editou ou excluiu pelo Register). Excecao: a pasta "Favorites"
+usa ON CONFLICT DO NOTHING e e reafirmada a cada boot.
 
 Cada seed tem seu proprio try/except: um erro numa seed e logado e as
 seguintes continuam rodando (igual ao Node). Este modulo recebe o pool por
@@ -17,31 +17,12 @@ from .security import hash_password
 logger = logging.getLogger("toolbox45")
 
 
-# Garante que sempre existe pelo menos uma conta local com role='super_admin'
-# -- sem isso, uma instalacao nova ficaria sem ninguem que pudesse acessar
-# Manage users/Backup/Audit log/API keys/Register. ON CONFLICT DO NOTHING: so
-# roda na primeira vez (se alguem ja trocou a senha, isto nao mexe em nada
-# depois -- o role, porem, e sempre reforcado como super_admin, ver o UPDATE
-# em run_migrations()).
-async def seed_default_admin(pool) -> None:
-    try:
-        # handle='admin' explicito (run_migrations(), que faz o backfill de
-        # handle para linhas ja existentes, roda ANTES desta funcao, entao esta
-        # conta ainda nao existia quando o backfill rodou). approved_at ja
-        # nasce preenchido -- a conta semente nunca passa por "pendente".
-        await pool.execute(
-            """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at)
-       VALUES ('admin', $1, 'super_admin', 1, 'system', 'local', 'admin', NOW())
-       ON CONFLICT (username) DO NOTHING""",
-            hash_password("admin"),
-        )
-    except Exception as err:  # noqa: BLE001 -- mesmo padrao amplo do try/catch em db.js
-        logger.error("[db] Falha ao semear usuário admin padrão: %s", err)
-
-
+# NAO existe mais conta padrao (antes: admin/admin). O primeiro super_admin e
+# criado pela tela de configuracao inicial (POST /api/auth/setup, ver
+# app/setup.py), com o e-mail e a senha que a pessoa escolher; uma instalacao
+# antiga que ainda tem admin/admin e convertida na primeira visita.
 # Garante que TODO usuario ja cadastrado tenha uma pasta "Favorites". Roda
-# depois de seed_default_admin() de proposito, pra tambem cobrir o admin
-# padrao numa instalacao nova, no mesmo boot. Um unico INSERT ... SELECT,
+# a cada boot, para cobrir as contas criadas desde o ultimo. Um unico INSERT ... SELECT,
 # idempotente (ON CONFLICT (username, name) DO NOTHING) -- nunca duplica nem
 # sobrescreve uma pasta "Favorites" que o usuario ja tenha.
 async def seed_default_folders(pool) -> None:
@@ -226,7 +207,6 @@ async def run_seeds(pool) -> None:
     """Executa todas as seeds na ordem exata do initDb() do Node. Ordem
     importa: vendors -> systems (FK vendor) -> versions/environments (FK
     system) -> parameters/prompts (independentes)."""
-    await seed_default_admin(pool)
     await seed_default_folders(pool)
     await seed_default_vendors(pool)
     await seed_default_systems(pool)

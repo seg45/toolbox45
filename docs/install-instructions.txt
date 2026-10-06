@@ -59,8 +59,13 @@ com este nginx, remova o redirect da porta 80 em frontend-react/nginx.conf
 Numa instalação NOVA: não precisa fazer mais nada. No primeiro boot o
 backend aplica o schema e semeia sozinho (só onde a tabela está vazia):
 
-  - o usuário local admin / admin (role super_admin) — TROQUE A SENHA assim
-    que entrar (Configurações → Account, ou Settings → Users);
+  - NENHUMA conta é criada: ao abrir https://<ip-do-servidor> pela primeira
+    vez, a tela de login pede o e-mail e a senha do administrador (8+
+    caracteres) e cria o primeiro super_admin — FAÇA ISSO LOGO após subir,
+    porque quem abrir a tela primeiro vira o administrador. (Numa instalação
+    ANTIGA que ainda tem o usuário admin / admin, a mesma tela aparece na
+    próxima visita e substitui essa conta pelo e-mail informado, mantendo
+    todos os dados dela.)
   - a pasta "Favorites" de cada usuário;
   - o catálogo base: fornecedores (Check Point, Fortinet), sistemas,
     versões, ambientes, parâmetros de busca, prompts e templates de export.

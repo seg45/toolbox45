@@ -40,7 +40,8 @@ Postgres — retrying for about a minute while the database comes up — and the
 2. runs the idempotent migrations (`app/migrations.py`), safe to repeat on every boot and
    on a database that was created by the old Node backend;
 3. seeds first-install defaults (`app/seeds.py`), each one only when its table is empty:
-   the local `admin`/`admin` account (role `super_admin`), the `Favorites` folder per user,
+   the `Favorites` folder per user (no default account is created — the first `super_admin`
+   comes from the first-access setup screen, see `docs/api.md`),
    vendors, systems, versions, environments, search parameters, prompts and export
    templates. The 8 fixed search parameters (`src_ip`, `dst_ip`, `src_port`, `dst_port`,
    `user`, `host`, `license`, `signature`) are re-created on every boot if missing.
@@ -79,8 +80,8 @@ chamada à API exige sessão (local ou Google) ou API key — sem uma das duas, 
 unauthorized` (ver o gate de autenticação em `server-py/app/deps.py`). Isso possibilita
 favoritos, tema, idioma e históricos por usuário, sem depender de domínio Windows.
 
-A conta local `admin`/`admin` já vem semeada em toda instalação nova (troque a senha
-assim que possível — ver `docs/api.md`, seção **Usuário local padrão**); um admin cria
+Não existe conta padrão: no primeiro acesso a tela de login pede o e-mail e a senha do
+administrador (ver `docs/api.md`, seção **Configuração inicial**); um admin cria
 outras contas locais em **Settings → Users**, e contas Google se
 auto-provisionam no primeiro login (ver abaixo).
 

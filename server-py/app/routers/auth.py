@@ -14,7 +14,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
-from .. import oauth
+from .. import oauth, setup
 from ..db import get_pool
 from ..handles import generate_unique_handle
 from ..login_guard import client_ip, login_limiter
@@ -46,6 +46,11 @@ class LoginRequest(BaseModel):
     password: Optional[str] = None
 
 
+class SetupRequest(BaseModel):
+    email: Optional[str] = None
+    password: Optional[str] = None
+
+
 class RegisterRequest(BaseModel):
     email: Optional[str] = None
     password: Optional[str] = None
@@ -57,6 +62,52 @@ async def get_providers() -> dict:
     # mesmo GOOGLE_ENABLED/MICROSOFT_ENABLED que o Node calcula depois de
     # reloadOAuthConfig().
     return {"google": oauth.google_config.enabled, "microsoft": oauth.microsoft_config.enabled}
+
+
+@router.get("/setup-status")
+async def setup_status() -> dict:
+    """Publica: o login usa isto para decidir se mostra a tela de primeiro
+    acesso (ver app/setup.py)."""
+    mode = await setup.get_mode()
+    return {"required": mode is not None, "mode": mode}
+
+
+@router.post("/setup")
+async def initial_setup(payload: SetupRequest, request: Request, response: Response) -> dict:
+    """Primeiro acesso: cria o super_admin com o e-mail/senha informados (ou
+    converte o `admin` padrao de uma instalacao antiga) e ja abre a sessao dele.
+    So funciona enquanto a configuracao inicial esta pendente (senao 409)."""
+    email = (payload.email or "").strip().lower()
+    if not email or not EMAIL_RE.match(email):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": "A valid e-mail address is required"},
+        )
+    problem = password_problem(payload.password, email)
+    if problem:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": problem})
+    if await setup.get_mode() is None:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "setup_not_required", "message": "The initial setup has already been completed."},
+        )
+
+    password_hash = await hash_password_async(payload.password)
+    try:
+        mode = await setup.complete_setup(email, password_hash)
+    except ValueError:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "conflict", "message": "An account with this e-mail already exists."},
+        )
+    if mode is None:  # outra requisicao concluiu a configuracao antes desta
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "setup_not_required", "message": "The initial setup has already been completed."},
+        )
+    token = await create_session(email)
+    set_session_cookie(response, token, secure=request_is_https(request))
+    return {"username": email, "role": "super_admin", "mode": mode}
 
 
 @router.post("/login")
@@ -80,6 +131,17 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
                 "message": f"Too many failed login attempts. Try again in {max(1, -(-wait // 60))} minute(s).",
             },
             headers={"Retry-After": str(wait)},
+        )
+
+    if username == setup.DEFAULT_ADMIN_USERNAME and setup.default_admin_pending():
+        # A conta padrao (admin/admin) so existe ate a configuracao inicial: o
+        # login com ela e recusado e a tela de login mostra o formulario de setup.
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "setup_required",
+                "message": "The default admin account is disabled. Open the login page to finish the initial setup.",
+            },
         )
 
     pool = get_pool()

@@ -20,6 +20,7 @@ from ..handles import generate_unique_handle
 from ..password_policy import password_problem
 from ..security import hash_password_async
 from ..session import delete_user_sessions
+from .. import setup as setup_mod
 from .auth import EMAIL_RE
 
 logger = logging.getLogger("toolbox45")
@@ -151,6 +152,8 @@ async def update_user(username: str, body: dict = Body(default_factory=dict), us
     sessions_revoked = 0
     if password or (new_disabled and not was_disabled):
         sessions_revoked = await delete_user_sessions(username)
+    if username == setup_mod.DEFAULT_ADMIN_USERNAME and (password or new_disabled != was_disabled):
+        await setup_mod.refresh_default_admin_state()
 
     # Nunca grava senha/hash no audit_log -- so sinaliza QUE ela mudou (sem o
     # valor), junto de role/disabled reais.

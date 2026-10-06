@@ -15,6 +15,7 @@ from ..login_guard import client_ip, password_change_limiter
 from ..password_policy import password_problem
 from ..security import hash_password_async, verify_password_async
 from ..session import SESSION_COOKIE_NAME, delete_user_sessions
+from .. import setup as setup_mod
 
 router = APIRouter(prefix="/api/me", tags=["me"])
 
@@ -135,6 +136,8 @@ async def update_password(request: Request, body: dict = Body(default_factory=di
     # Trocou a senha: todas as OUTRAS sessoes dessa conta caem (um cookie roubado
     # ou esquecido em outro aparelho deixa de valer); a atual continua.
     await delete_user_sessions(username, except_token=request.cookies.get(SESSION_COOKIE_NAME))
+    if username == setup_mod.DEFAULT_ADMIN_USERNAME:
+        await setup_mod.refresh_default_admin_state()
 
     # Nunca grava a senha (nem o hash) no audit_log.
     await log_audit(username, "update", "user", username, username, "Changed: password (self-service)")

@@ -12,10 +12,11 @@
 # alterado. Cada linha sai como [ OK ], [AVISO] ou [FALHA]; o código de saída
 # é 1 se houver alguma FALHA (0 caso contrário), então serve também em cron.
 #
-# --check-default-admin: tenta UM login com admin/admin (a credencial padrão
-# da primeira instalação) em /api/auth/login e avisa se funcionar. Fica
-# desligado por padrão porque é uma tentativa de login de verdade (aparece no
-# log de acesso); rode só no seu próprio servidor.
+# --check-default-admin: tenta UM login com admin/admin (a credencial padrão de
+# versões antigas) em /api/auth/login e avisa se funcionar. Hoje essa conta não
+# existe mais (a configuração inicial pede e-mail/senha do admin, e o login
+# admin/admin é recusado até lá), mas a checagem confirma. Fica desligado por
+# padrão porque é uma tentativa de login de verdade (aparece no log de acesso).
 #
 # Variáveis opcionais: DC="docker compose", BASE_URL=https://localhost, HTTP_URL=http://localhost,
 # PSQL="psql ... -At" (substitui o acesso ao banco via container; usado nos
@@ -152,6 +153,18 @@ if command -v ss >/dev/null 2>&1; then
   exposed=$(ss -ltnH 2>/dev/null | awk '{print $4}' | grep -E '(^|:)(5432|8000)$' | grep -v -E '^(127\.0\.0\.1|\[::1\]):' | head -2)
   [ -z "$exposed" ] && ok "banco (5432) e backend (8000) não estão expostos no host" || bad "porta interna exposta no host: $exposed"
 fi
+# Configuração inicial (primeiro acesso): enquanto estiver pendente, QUEM abrir o login
+# primeiro vira o super_admin (ou, numa instalação antiga, o admin/admin padrão ainda existe).
+setup_json=$(curl -sk -m 10 "$BASE_URL/api/auth/setup-status" 2>/dev/null || true)
+case "$setup_json" in
+  *'"required":true'*)
+    case "$setup_json" in
+      *'"mode":"migrate"'*) bad "configuração inicial PENDENTE: a conta 'admin' ainda usa a senha padrão — abra $BASE_URL/login.html e informe o e-mail/senha do administrador" ;;
+      *) bad "configuração inicial PENDENTE: não há nenhum super_admin — abra $BASE_URL/login.html e crie o administrador (quem abrir primeiro vira admin)" ;;
+    esac ;;
+  *'"required":false'*) ok "configuração inicial concluída (há super_admin e não existe admin/admin)" ;;
+  *) warn "não consegui consultar /api/auth/setup-status" ;;
+esac
 if [ "$CHECK_DEFAULT_ADMIN" = 1 ]; then
   code=$(http_code -X POST -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin"}' "$BASE_URL/api/auth/login")
   case "$code" in 401|403|400|422) ok "login admin/admin (padrão) rejeitado ($code)" ;; 200) bad "login admin/admin FUNCIONA — troque a senha do admin agora (Settings → Users)" ;; *) warn "teste de login padrão inconclusivo (HTTP $code)" ;; esac

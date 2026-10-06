@@ -102,6 +102,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from . import backup, db, oauth, tls
+from . import setup as setup_mod
 from .security import HashingBusy
 from .routers import api_keys as api_keys_router
 from .routers import auth as auth_router
@@ -132,6 +133,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # app/oauth.py) DEPOIS do pool existir, mesma ordem do
     # reloadOAuthConfig() no startup IIFE do Node.
     await oauth.reload_oauth_config()
+    # A conta 'admin' ainda tem a senha padrao? (ver app/setup.py)
+    await setup_mod.refresh_default_admin_state()
     # Bootstrap TLS (gera cert/key autoassinados se ainda nao existirem) --
     # MESMA posicao no boot do ensureTlsBootstrap() do Node (depois do
     # reload de OAuth, antes do healthcheck responder).

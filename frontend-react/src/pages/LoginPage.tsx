@@ -5,7 +5,8 @@
 // em js/login.js (histórico de pedidos do usuário).
 // ════════════════════════════════════════════════
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, fetchAuthProviders, fetchMe, login, register } from '../lib/api';
+import { ApiError, fetchAuthProviders, fetchMe, fetchSetupStatus, initialSetup, login, register } from '../lib/api';
+import type { SetupStatus } from '../lib/api';
 import { bootLoginAppearance } from '../lib/appearanceBoot';
 import { useLogo } from '../lib/useLogo';
 
@@ -31,7 +32,7 @@ function readProvidersCache(): ProviderState {
   }
 }
 
-type View = 'login' | 'register' | 'pending';
+type View = 'login' | 'register' | 'pending' | 'setup';
 
 const GOOGLE_REASONS: Record<string, string> = {
   access_denied: 'Google sign-in was cancelled.',
@@ -98,6 +99,15 @@ export default function LoginPage() {
 
   const [pendingMessage, setPendingMessage] = useState('');
 
+  // Primeiro acesso (sem nenhum administrador — ou instalação antiga que ainda
+  // tem o admin/admin padrão): em vez do login, pede e-mail e senha do admin.
+  const [setupMode, setSetupMode] = useState<SetupStatus['mode']>(null);
+  const [setupEmail, setSetupEmail] = useState('');
+  const [setupPassword, setSetupPassword] = useState('');
+  const [setupConfirm, setSetupConfirm] = useState('');
+  const [setupError, setSetupError] = useState('');
+  const [setupSubmitting, setSetupSubmitting] = useState(false);
+
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const logo = useLogo();
 
@@ -113,6 +123,13 @@ export default function LoginPage() {
         localStorage.setItem(PROVIDERS_CACHE_KEY, JSON.stringify(next));
       } catch {
         /* sem cache — só volta a "desconhecido" na próxima visita */
+      }
+    });
+
+    fetchSetupStatus().then(status => {
+      if (status?.required) {
+        setSetupMode(status.mode);
+        setView('setup');
       }
     });
 
@@ -145,6 +162,7 @@ export default function LoginPage() {
     setView(next);
     setLoginError('');
     setRegisterError('');
+    setSetupError('');
   }
 
   function startGoogleLogin() {
@@ -166,9 +184,55 @@ export default function LoginPage() {
       await waitForSessionConfirmed();
       markAuthenticatedAndEnter();
     } catch (err) {
+      if (err instanceof ApiError && err.code === 'setup_required') {
+        // O admin padrão não existe mais: leva ao formulário de configuração inicial.
+        const status = await fetchSetupStatus();
+        if (status?.required) {
+          setSetupMode(status.mode);
+          setView('setup');
+          return;
+        }
+      }
       setLoginError(err instanceof ApiError ? err.message : 'Login failed. Please try again.');
     } finally {
       setLoginSubmitting(false);
+    }
+  }
+
+  async function submitSetup() {
+    setSetupError('');
+    if (!setupEmail.trim() || !setupPassword) {
+      setSetupError('Enter both e-mail and password.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(setupEmail.trim())) {
+      setSetupError('Enter a valid e-mail address.');
+      return;
+    }
+    if (setupPassword.length < 8) {
+      setSetupError('Password must be at least 8 characters.');
+      return;
+    }
+    if (setupPassword !== setupConfirm) {
+      setSetupError('The passwords do not match.');
+      return;
+    }
+    setSetupSubmitting(true);
+    try {
+      await initialSetup(setupEmail.trim(), setupPassword);
+      await waitForSessionConfirmed();
+      markAuthenticatedAndEnter();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'setup_not_required') {
+        // Alguém concluiu a configuração antes: volta ao login normal.
+        setSetupMode(null);
+        setView('login');
+        setLoginError('The initial setup was already completed. Log in with the administrator account.');
+      } else {
+        setSetupError(err instanceof ApiError ? err.message : 'Could not complete the setup. Please try again.');
+      }
+    } finally {
+      setSetupSubmitting(false);
     }
   }
 
@@ -202,7 +266,7 @@ export default function LoginPage() {
     }
   }
 
-  const notPending = view !== 'pending';
+  const notPending = view === 'login' || view === 'register';
   // Botões e divisor ficam SEMPRE na página (fora da view "pending"). Só
   // clicáveis se o provedor está configurado; se o servidor disse que não está,
   // aparece o aviso logo abaixo do botão. Estado ainda desconhecido (primeira
@@ -318,6 +382,64 @@ export default function LoginPage() {
               Log in
             </a>
           </div>
+        </div>
+      )}
+
+      {view === 'setup' && (
+        <div>
+          <div className="set-hint" style={{ marginTop: 14 }}>
+            {setupMode === 'migrate'
+              ? 'This installation still uses the default admin account. Enter the e-mail and password of the real administrator — the default account will be replaced by this one.'
+              : 'Welcome to Toolbox45! Create the administrator account to get started.'}
+          </div>
+          {setupError && (
+            <div className="set-hint login-error" style={{ color: 'var(--red)', marginTop: 14 }}>
+              {setupError}
+            </div>
+          )}
+          <div className="set-group" style={{ marginTop: 14 }}>
+            <span className="set-label">Administrator e-mail</span>
+            <input
+              className="set-input"
+              type="email"
+              autoComplete="email"
+              autoFocus
+              value={setupEmail}
+              onChange={e => setSetupEmail(e.target.value)}
+            />
+          </div>
+          <div className="set-group">
+            <span className="set-label">Password</span>
+            <input
+              className="set-input"
+              type="password"
+              autoComplete="new-password"
+              value={setupPassword}
+              onChange={e => setSetupPassword(e.target.value)}
+            />
+            <span className="set-hint">At least 8 characters.</span>
+          </div>
+          <div className="set-group">
+            <span className="set-label">Confirm password</span>
+            <input
+              className="set-input"
+              type="password"
+              autoComplete="new-password"
+              value={setupConfirm}
+              onChange={e => setSetupConfirm(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitSetup();
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary login-submit-btn"
+            disabled={setupSubmitting}
+            onClick={submitSetup}
+          >
+            Create administrator
+          </button>
         </div>
       )}
 

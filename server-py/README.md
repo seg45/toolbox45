@@ -16,7 +16,8 @@ migração (inventário de rotas, decisões, validações por fatia) está no do
   `audit.py`, `sanitize.py`, `tls.py`, `backup.py`…). Referência da API em `docs/api.md`.
 - No boot (`app/db.py`): aplica `app/schema.sql`, roda as migrações idempotentes
   (`app/migrations.py`) e semeia os padrões de primeira instalação (`app/seeds.py`:
-  usuário `admin`/`admin` com role `super_admin`, pasta Favorites, catálogo base). Veja
+  pasta Favorites, catálogo base — não há mais usuário padrão: o primeiro `super_admin` é criado
+  pela configuração inicial, `app/setup.py`). Veja
   `docs/server-overview.md`.
 - Também no boot/em segundo plano: recarrega a config de OAuth (banco > variáveis de
   ambiente), gera o certificado TLS autoassinado se não houver um (`openssl`), e roda o
@@ -54,7 +55,8 @@ python -m pytest tests
 ```
 
 A suíte (`tests/test_boot.py`) cobre o boot completo: instalação do zero, idempotência,
-migrações de bancos legados e o ciclo de vida do FastAPI (login `admin`/`admin`, catálogo).
+migrações de bancos legados e o ciclo de vida do FastAPI (configuração inicial, login, catálogo);
+`tests/test_setup.py` cobre o primeiro acesso (instalação nova e migração do `admin` legado).
 
 ## Código Node antigo
 
