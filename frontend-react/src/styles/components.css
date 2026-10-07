@@ -1793,14 +1793,14 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
   background: var(--surf); border-bottom: 1px solid var(--bdr);
 }
 .settings-modal-box > .modal-head .settings-back {
-  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 8px; margin: 0;
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 8px; margin: 0;
   background: transparent; border: 1px solid var(--bdr); border-radius: 8px; color: var(--text);
-  font-family: var(--sans); font-size: 13.5px; font-weight: 500; cursor: pointer;
+  font-family: var(--sans); font-size: 12px; font-weight: 600; cursor: pointer;
 }
 .settings-modal-box > .modal-head .settings-back:hover { background: var(--surf2); border-color: var(--bdr2); }
 .settings-modal-box > .modal-head .settings-back:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .settings-modal-box > .modal-head .settings-topbar-title {
-  display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; letter-spacing: 0; color: var(--text);
+  display: flex; align-items: center; gap: 9px; font-size: 12px; font-weight: 800; letter-spacing: 0; color: var(--text);
   padding-left: 16px; border-left: 1px solid var(--bdr); height: 24px;
 }
 .settings-modal-box > .modal-head .settings-topbar-title svg { color: var(--muted); }
@@ -1814,13 +1814,13 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
 .settings-nav-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
 .settings-nav-item-wrap { display: flex; flex-direction: column; }
 .settings-nav-group {
-  padding: 22px 12px 8px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em;
+  padding: 22px 12px 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em;
   text-transform: uppercase; color: var(--dim);
 }
 .settings-nav-item-wrap:first-child .settings-nav-group { padding-top: 0; }
 #settingsOverlay .settings-nav-btn {
   position: relative; height: 38px; padding: 0 12px; gap: 11px; margin-top: 2px; border-radius: 8px;
-  font-size: 14px; font-weight: 500; color: var(--muted);
+  font-size: 12px; font-weight: 500; color: var(--muted);
 }
 #settingsOverlay .settings-nav-btn svg { width: 17px; height: 17px; opacity: .85; }
 #settingsOverlay .settings-nav-btn:hover { background: var(--surf3); color: var(--text); }
@@ -1835,19 +1835,19 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
   padding: 14px 8px 2px; margin-top: 8px; border-top: 1px solid var(--bdr);
 }
 .settings-nav-avatar {
-  flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  background: var(--teal); color: #fff; font-size: 13px; font-weight: 700;
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--teal); color: #fff; font-size: 12px; font-weight: 700;
 }
 .settings-nav-user-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
-.settings-nav-user-name { font-size: 13px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-nav-user-name { font-size: 12px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-nav-user-role { font-size: 12px; color: var(--muted); }
 
 /* — Conteúdo — */
 #settingsOverlay .settings-content { background: var(--surf); padding: 40px 56px 64px; gap: 0; overflow-y: auto; }
 .settings-content-inner { width: 100%; max-width: 880px; margin: 0 auto; }
 .settings-page-head { padding-bottom: 28px; }
-.settings-page-title { margin: 0; font-size: 26px; line-height: 1.25; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
-.settings-page-desc { margin: 6px 0 0; font-size: 14px; line-height: 1.55; color: var(--muted); max-width: 640px; }
+.settings-page-title { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 800; letter-spacing: 0; color: var(--text); }
+.settings-page-desc { margin: 6px 0 0; font-size: 12px; line-height: 1.55; color: var(--muted); max-width: 640px; }
 #settingsOverlay .settings-pane { max-width: none; gap: 0; border-top: 1px solid var(--bdr); }
 
 /* — Linhas de seção: título/descrição à esquerda, controles à direita — */
@@ -1857,10 +1857,10 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
   display: grid; grid-template-columns: 250px minmax(0, 1fr); grid-template-rows: auto 1fr; column-gap: 40px; row-gap: 4px; align-items: start;
 }
 #settingsOverlay .settings-pane > .set-group > .set-label:first-child {
-  grid-column: 1; grid-row: 1; font-size: 14px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text); line-height: 1.4;
+  grid-column: 1; grid-row: 1; font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text); line-height: 1.4;
 }
 #settingsOverlay .settings-pane > .set-group > .set-hint {
-  grid-column: 1; grid-row: 2; font-size: 13px; line-height: 1.55; color: var(--muted);
+  grid-column: 1; grid-row: 2; font-size: 12px; line-height: 1.55; color: var(--muted);
 }
 #settingsOverlay .settings-pane > .set-group > :nth-child(n+3) { grid-column: 2; grid-row: auto; min-width: 0; }
 #settingsOverlay .settings-pane > .set-group > .settings-action-row,
@@ -1871,16 +1871,16 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
 #settingsOverlay .settings-pane > .set-group:has(table) > .settings-action-row { margin: 8px 0 6px; }
 
 #settingsOverlay .set-card-head { display: flex; flex-direction: column; gap: 6px; grid-column: 1; }
-#settingsOverlay .set-card-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: 0; }
-#settingsOverlay .set-card-desc { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+#settingsOverlay .set-card-title { margin: 0; font-size: 12px; font-weight: 600; color: var(--text); letter-spacing: 0; }
+#settingsOverlay .set-card-desc { margin: 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
 #settingsOverlay .set-card-body { display: flex; flex-direction: column; grid-column: 2; min-width: 0; }
-#settingsOverlay .set-label { font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text); }
-#settingsOverlay .set-hint { font-size: 13px; line-height: 1.55; color: var(--muted); }
+#settingsOverlay .set-label { font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--text); }
+#settingsOverlay .set-hint { font-size: 12px; line-height: 1.55; color: var(--muted); }
 
 /* — Campos — */
 #settingsOverlay .set-input {
-  height: 38px; padding: 0 12px; background: var(--surf); border: 1px solid var(--bdr); border-radius: 8px;
-  font-family: var(--sans); font-size: 14px; color: var(--text); box-sizing: border-box;
+  height: 32px; padding: 0 10px; background: var(--surf); border: 1px solid var(--bdr); border-radius: 6px;
+  font-family: var(--sans); font-size: 12px; color: var(--text); box-sizing: border-box;
   transition: border-color .12s, box-shadow .12s;
 }
 #settingsOverlay textarea.set-input { height: auto; padding: 9px 12px; }
@@ -1890,10 +1890,10 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
 /* — Botões — */
 #settingsOverlay .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  height: 38px; padding: 0 16px; border-radius: 8px; font-size: 14px; font-weight: 500;
+  height: 32px; padding: 0 14px; border-radius: 6px; font-size: 12px; font-weight: 700;
   background: var(--surf); color: var(--text); border: 1px solid var(--bdr2); box-shadow: 0 1px 0 rgba(0,0,0,.04);
 }
-#settingsOverlay .btn.btn-sm { height: 30px; padding: 0 12px; font-size: 13px; }
+#settingsOverlay .btn.btn-sm { height: 30px; padding: 0 12px; font-size: 12px; }
 #settingsOverlay .btn:not(.btn-primary):not(.btn-danger):hover { background: var(--surf2); }
 #settingsOverlay .btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 #settingsOverlay .btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -1909,15 +1909,15 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
 
 /* — Tabelas — */
 #settingsOverlay .audit-log-wrap { border: 1px solid var(--bdr); border-radius: 10px; background: var(--surf); max-height: none; overflow-x: auto; }
-#settingsOverlay .audit-log-table { font-size: 14px; }
+#settingsOverlay .audit-log-table { font-size: 12px; }
 #settingsOverlay .audit-log-table th {
   position: static; background: var(--surf2); color: var(--muted); font-size: 12px; font-weight: 600;
   letter-spacing: .04em; padding: 12px 16px; border-bottom: 1px solid var(--bdr);
 }
-#settingsOverlay .audit-log-table td { padding: 12px 16px; font-size: 14px; }
+#settingsOverlay .audit-log-table td { padding: 12px 16px; font-size: 12px; }
 #settingsOverlay .audit-log-table tbody tr:hover td { background: var(--surf2); }
-#settingsOverlay .audit-log-table select.set-input { height: 32px; padding: 0 8px; font-size: 13.5px; }
-#settingsOverlay .audit-log-empty, #settingsOverlay .audit-log-loading { font-size: 14px; padding: 28px 16px !important; }
+#settingsOverlay .audit-log-table select.set-input { height: 32px; padding: 0 8px; font-size: 12px; }
+#settingsOverlay .audit-log-empty, #settingsOverlay .audit-log-loading { font-size: 12px; padding: 28px 16px !important; }
 #settingsOverlay .sec-folder-btn { color: var(--muted); border-radius: 6px; }
 #settingsOverlay .sec-folder-btn:hover { color: var(--red); background: var(--red-bg); }
 #settingsOverlay .settings-pane .audit-log-table { table-layout: auto; }
@@ -1955,25 +1955,39 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
 
 /* — System: provedores OAuth — */
 #settingsOverlay #oauthProviderListWrap { padding: 0 !important; }
-#settingsOverlay .oauth-provider-row { padding: 14px 16px; gap: 12px; font-size: 14px; }
+#settingsOverlay .oauth-provider-row { padding: 14px 16px; gap: 12px; font-size: 12px; }
 #settingsOverlay .oauth-provider-row + .oauth-provider-row { border-top: 1px solid var(--bdr); }
-#settingsOverlay .oauth-provider-name { font-size: 14px; font-weight: 600; }
-#settingsOverlay .oauth-provider-status { font-size: 13px; }
+#settingsOverlay .oauth-provider-name { font-size: 12px; font-weight: 600; }
+#settingsOverlay .oauth-provider-status { font-size: 12px; }
 
-/* — Register: botões em grade — */
+/* — Register: duas seções (título à esquerda, lista de catálogos à direita) — */
 #settingsOverlay .settings-pane[data-pane="catalog"] { border-top: none; }
 #settingsOverlay .settings-pane[data-pane="catalog"] > .set-hint { display: none; }
-#settingsOverlay .settings-catalog-grid { gap: 0; border-top: 1px solid var(--bdr); }
+#settingsOverlay .settings-catalog-grid { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--bdr); }
 #settingsOverlay .settings-catalog-group {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding: 28px 0; border-bottom: 1px solid var(--bdr);
+  display: grid; grid-template-columns: 250px minmax(0, 1fr); column-gap: 40px; align-items: start;
+  padding: 28px 0; border-bottom: 1px solid var(--bdr);
 }
+.settings-catalog-title { margin: 0; font-size: 12px; font-weight: 700; color: var(--text); line-height: 1.4; }
+.settings-catalog-hint { margin: 4px 0 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
+.settings-catalog-list { border: 1px solid var(--bdr); border-radius: 10px; background: var(--surf); overflow: hidden; }
 #settingsOverlay .settings-tile {
-  height: 44px; padding: 0 16px; gap: 12px; border-radius: 8px; font-size: 14px; font-weight: 500; width: auto; justify-content: flex-start;
-  background: var(--surf); border: 1px solid var(--bdr2); color: var(--text); box-shadow: 0 1px 0 rgba(0,0,0,.04);
+  display: flex; align-items: center; gap: 14px; width: 100%; height: auto; min-height: 56px; padding: 12px 16px; text-align: left;
+  background: transparent; border: none; border-radius: 0; box-shadow: none; color: var(--text); cursor: pointer; font-family: var(--sans);
 }
-#settingsOverlay .settings-tile svg { width: 18px; height: 18px; padding: 0; background: none; color: var(--muted); opacity: 1; }
+#settingsOverlay .settings-tile + .settings-tile { border-top: 1px solid var(--bdr); }
 #settingsOverlay .settings-tile:hover { background: var(--surf2); color: var(--text); }
-#settingsOverlay .settings-tile:hover svg { color: var(--teal); }
+#settingsOverlay .settings-tile:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+.settings-tile-icon { flex-shrink: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: var(--surf2); color: var(--muted); }
+#settingsOverlay .settings-tile:hover .settings-tile-icon { background: var(--teal-bg); color: var(--teal); }
+#settingsOverlay .settings-tile svg { width: 18px; height: 18px; padding: 0; background: none; color: inherit; opacity: 1; }
+.settings-tile-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.settings-tile-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.settings-tile-desc { font-weight: 400; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.settings-tile-count {
+  flex-shrink: 0; min-width: 28px; padding: 2px 9px; border-radius: 999px; background: var(--surf2); color: var(--muted);
+  font-size: 12px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums;
+}
 
 /* — User preferences: linhas rótulo + controle dentro do corpo da seção — */
 #settingsOverlay .set-card-body .set-group { gap: 0; }
@@ -1989,30 +2003,30 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
 #settingsOverlay .set-card-body .sb-toggle:hover,
 #settingsOverlay .set-card-body .sb-toggle.on { background: transparent; color: var(--text); }
 #settingsOverlay .set-card-body .sb-toggle > span,
-#settingsOverlay .set-card-body .set-row-half > span:not(.set-label) { font-size: 14px; font-weight: 500; color: var(--text); order: 1; }
+#settingsOverlay .set-card-body .set-row-half > span:not(.set-label) { font-size: 12px; font-weight: 500; color: var(--text); order: 1; }
 #settingsOverlay .set-card-body .sb-toggle > .tog-track,
 #settingsOverlay .set-card-body .set-row-half > .tog-track { order: 2; margin-left: auto; }
 #settingsOverlay .set-card-body .set-row-half { flex: 1 1 50%; justify-content: space-between; }
-#settingsOverlay .set-card-body .set-group-row > .set-label { width: 130px; font-size: 14px; font-weight: 500; color: var(--text); }
-#settingsOverlay .set-card-body .set-row-half .set-label { font-size: 14px; font-weight: 500; color: var(--text); min-width: 0; }
+#settingsOverlay .set-card-body .set-group-row > .set-label { width: 130px; font-size: 12px; font-weight: 500; color: var(--text); }
+#settingsOverlay .set-card-body .set-row-half .set-label { font-size: 12px; font-weight: 500; color: var(--text); min-width: 0; }
 #settingsOverlay .set-card-body .set-row-half + .set-row-half { border-left: none; padding-left: 32px; margin-left: 0; }
 #settingsOverlay .tog-track { width: 38px; height: 22px; border-radius: 11px; }
 #settingsOverlay .tog-knob { width: 16px; height: 16px; top: 3px; left: 3px; }
 #settingsOverlay .sb-toggle.on .tog-knob { left: 19px; }
 #settingsOverlay .accent-swatch { width: 24px; height: 24px; }
-#settingsOverlay .set-group-row .dd > .dd-btn { height: 38px; padding: 0 12px; border-radius: 8px; font-size: 14px; background: var(--surf); }
+#settingsOverlay .set-group-row .dd > .dd-btn { height: 32px; padding: 0 10px; border-radius: 6px; font-size: 12px; background: var(--surf); }
 
 /* — User account (título em cima, campos empilhados, largura confortável) — */
 #settingsOverlay .settings-pane[data-pane="account"] > .set-group { display: flex; flex-direction: column; gap: 6px; }
-#settingsOverlay .settings-pane[data-pane="account"] > .set-group > .set-label:first-child { font-size: 15px; margin-bottom: 6px; }
+#settingsOverlay .settings-pane[data-pane="account"] > .set-group > .set-label:first-child { font-size: 13px; margin-bottom: 6px; }
 #settingsOverlay .settings-pane[data-pane="account"] .set-group { display: flex; flex-direction: column; gap: 6px; }
 #settingsOverlay .settings-pane[data-pane="account"] .set-group .set-group { margin-top: 14px; }
 #settingsOverlay .settings-pane[data-pane="account"] .set-input { width: 100%; max-width: 380px; }
 #settingsOverlay .settings-pane[data-pane="account"] .acct-inline-row .set-input { width: auto; max-width: 260px; }
 #settingsOverlay #acctGroupSharing { padding-top: 28px; }
-#settingsOverlay .acct-inline-row code { font-size: 13.5px; height: 38px; padding: 0 12px; display: inline-flex; align-items: center; border-radius: 8px; }
+#settingsOverlay .acct-inline-row code { font-size: 12px; height: 38px; padding: 0 12px; display: inline-flex; align-items: center; border-radius: 8px; }
 #settingsOverlay .acct-btn-row { margin-top: 10px; }
-#settingsOverlay .set-check-row { font-size: 13.5px; }
+#settingsOverlay .set-check-row { font-size: 12px; }
 
 /* — Rodapé de User preferences: barra fixa embaixo — */
 #settingsOverlay .modal-foot { padding: 14px 24px; background: var(--surf); border-top: 1px solid var(--bdr); flex-shrink: 0; }
@@ -2021,7 +2035,8 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
 @media (max-width: 900px) {
   #settingsOverlay .settings-content { padding: 28px 24px 48px; }
   #settingsOverlay .settings-pane > .set-group,
-  #settingsOverlay .set-card { grid-template-columns: minmax(0, 1fr); row-gap: 14px; }
+  #settingsOverlay .set-card,
+  #settingsOverlay .settings-catalog-group { grid-template-columns: minmax(0, 1fr); row-gap: 14px; }
   #settingsOverlay .settings-pane > .set-group > *,
   #settingsOverlay .set-card-head, #settingsOverlay .set-card-body { grid-column: 1 !important; grid-row: auto !important; }
 }
@@ -2034,5 +2049,9 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
   #settingsOverlay .settings-nav-btn { white-space: nowrap; margin-top: 0; }
   #settingsOverlay .settings-nav-btn.on::before { display: none; }
   #settingsOverlay .settings-content { padding: 20px 16px 40px; }
-  .settings-page-title { font-size: 22px; }
+  .settings-page-title { font-size: 18px; }
 }
+
+/* Mesma fonte/escala da aplicação em toda a tela de Configurações (controles nativos não herdam a família) */
+#settingsOverlay, #settingsOverlay button, #settingsOverlay input, #settingsOverlay select, #settingsOverlay textarea { font-family: var(--sans); }
+#settingsOverlay code, #settingsOverlay .mono { font-family: var(--mono); }

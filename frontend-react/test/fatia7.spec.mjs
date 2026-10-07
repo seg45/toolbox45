@@ -643,8 +643,8 @@ await withPage(browser, async page => {
 
   const groups = page.locator('.settings-catalog-group');
   assert((await groups.count()) === 2, 'cenário 12: existem 2 grupos de tiles');
-  const group1Labels = await groups.nth(0).locator('.settings-tile span').allInnerTexts();
-  const group2Labels = await groups.nth(1).locator('.settings-tile span').allInnerTexts();
+  const group1Labels = await groups.nth(0).locator('.settings-tile-name').allInnerTexts();
+  const group2Labels = await groups.nth(1).locator('.settings-tile-name').allInnerTexts();
   assert(JSON.stringify(group1Labels) === JSON.stringify(['Vendors', 'Systems', 'Versions', 'Environments', 'Topics']), `cenário 12: grupo 1 (lido: ${JSON.stringify(group1Labels)})`);
   assert(JSON.stringify(group2Labels) === JSON.stringify(['Exports', 'Parameters', 'Prompts']), `cenário 12: grupo 2 (lido: ${JSON.stringify(group2Labels)})`);
 });
