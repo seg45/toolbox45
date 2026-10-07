@@ -84,7 +84,15 @@ await withRole(browser, 'super', async page => {
   assert(joao[1] === 'Microsoft', `conta Microsoft rotulada "Microsoft" (lido: ${joao[1]})`);
   const ana = await txt('ana@x.com');
   assert(ana[1] === 'Google', 'conta Google rotulada "Google"');
-  const actions = async name => (await (await row(name)).locator('td').last().innerText()).replace(/\s+/g, ' ').trim();
+  const actions = async name => {
+    const r = await row(name);
+    const cell = (await r.locator('td').last().innerText()).replace(/\s+/g, ' ').trim();
+    await r.locator('.row-menu-btn').click();
+    const items = (await page.locator('.row-menu .row-menu-item').allInnerTexts()).join(' ');
+    await page.keyboard.press('Escape');
+    await page.locator('.row-menu').waitFor({ state: 'detached' });
+    return `${cell} ${items}`.trim();
+  };
   assert(!/(^|\s)0(\s|$)/.test(await actions('ana@x.com')), `conta Google sem "0" solto nas ações (lido: "${await actions('ana@x.com')}")`);
   assert(!/(^|\s)0(\s|$)/.test(await actions('joao@x.com')), 'conta Microsoft sem "0" solto nas ações');
   assert(!(await actions('ana@x.com')).includes('Reset password'), 'conta OAuth não tem Reset password');

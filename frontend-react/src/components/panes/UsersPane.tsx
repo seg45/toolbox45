@@ -15,10 +15,25 @@ import { useEffect, useState } from 'react';
 import { useConfirm } from '../../lib/useConfirm';
 import { ApiError } from '../../lib/api';
 import { deleteUser, listUsers, updateUserDisabled, updateUserRole, type User } from '../../lib/users';
+import { Avatar } from '../Avatar';
+import { RowMenu, type RowMenuItem } from '../RowMenu';
 import { NewUserModal } from './NewUserModal';
 import { ResetPasswordModal } from './ResetPasswordModal';
 
 const PROTECTED_ADMIN_USERNAME = 'admin';
+type StatusFilter = 'all' | 'active' | 'pending' | 'disabled';
+
+function statusOf(u: User): 'active' | 'pending' | 'disabled' {
+  if (u.disabled && !u.approved_at) return 'pending';
+  return u.disabled ? 'disabled' : 'active';
+}
+
+function typeOf(u: User): string {
+  return u.auth_provider === 'google' ? 'Google' : u.auth_provider === 'microsoft' ? 'Microsoft' : u.is_local ? 'Local' : 'Windows';
+}
+
+const STATUS_LABELS = { active: 'Active', pending: 'Pending approval', disabled: 'Disabled' } as const;
+
 const USER_ROLE_LABELS: Record<string, string> = { user: 'User', admin: 'Admin', super_admin: 'Super Admin' };
 
 export function UsersPane() {
@@ -26,6 +41,7 @@ export function UsersPane() {
   const [allUsers, setAllUsers] = useState<User[] | null>(null);
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [newUserOpen, setNewUserOpen] = useState(false);
   const [resetPasswordUser, setResetPasswordUser] = useState<string | null>(null);
 
@@ -79,35 +95,52 @@ export function UsersPane() {
   }
 
   const term = search.trim().toLowerCase();
-  const filtered = allUsers ? (term ? allUsers.filter(u => u.username.toLowerCase().includes(term)) : allUsers) : null;
+  const counts = { all: allUsers?.length ?? 0, active: 0, pending: 0, disabled: 0 };
+  for (const u of allUsers || []) counts[statusOf(u)] += 1;
+  const filtered = allUsers
+    ? allUsers.filter(u => (statusFilter === 'all' || statusOf(u) === statusFilter) && (!term || u.username.toLowerCase().includes(term)))
+    : null;
+  const FILTERS: { key: StatusFilter; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'active', label: 'Active' },
+    { key: 'pending', label: 'Pending approval' },
+    { key: 'disabled', label: 'Disabled' },
+  ];
 
   return (
     <div className="settings-pane" data-pane="users">
       <div className="set-group">
         <span className="set-label">Users</span>
         <div className="settings-action-row">
-          <button type="button" className="btn btn-ghost" onClick={() => setNewUserOpen(true)}>
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <circle cx="6" cy="5.5" r="2.8" stroke="currentColor" strokeWidth="1.3" />
-              <path d="M1.5 14c0-2.6 2-4.2 4.5-4.2s4.5 1.6 4.5 4.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-              <path d="M12 5.5v4M10 7.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <button type="button" className="btn btn-primary" onClick={() => setNewUserOpen(true)}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <circle cx="6" cy="5.5" r="2.8" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M1.5 14c0-2.6 2-4.2 4.5-4.2s4.5 1.6 4.5 4.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              <path d="M12 5.5v4M10 7.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
             <span>New local user</span>
           </button>
         </div>
-        <input
-          type="text"
-          className="set-input"
-          placeholder="Search by username…"
-          style={{ marginBottom: 2 }}
-          value={search}
-          onChange={ev => setSearch(ev.target.value)}
-        />
-        <div className="audit-log-wrap" style={{ maxHeight: '58vh' }}>
+        <input type="text" className="set-input" placeholder="Search by username…" value={search} onChange={ev => setSearch(ev.target.value)} />
+        <div className="people-filters" role="group" aria-label="Filter by status">
+          {FILTERS.map(f => (
+            <button
+              key={f.key}
+              type="button"
+              className={`people-chip${statusFilter === f.key ? ' on' : ''}${f.key === 'pending' && counts.pending > 0 ? ' attention' : ''}`}
+              aria-pressed={statusFilter === f.key}
+              onClick={() => setStatusFilter(f.key)}
+            >
+              {f.label}
+              <span className="people-chip-n">{counts[f.key]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="audit-log-wrap people-table">
           <table className="audit-log-table">
             <thead>
               <tr>
-                <th>Email</th>
+                <th>User</th>
                 <th>Type</th>
                 <th>Role</th>
                 <th>Status</th>
@@ -130,18 +163,33 @@ export function UsersPane() {
               ) : (
                 filtered.map(u => {
                   const isProtected = u.username === PROTECTED_ADMIN_USERNAME;
-                  const isPending = u.disabled && !u.approved_at;
-                  const isDisabled = u.disabled;
-                  const type = u.auth_provider === 'google' ? 'Google' : u.auth_provider === 'microsoft' ? 'Microsoft' : u.is_local ? 'Local' : 'Windows';
+                  const status = statusOf(u);
+                  const isPending = status === 'pending';
+                  const isDisabled = !!u.disabled;
+                  const type = typeOf(u);
+                  const menu: RowMenuItem[] = [];
+                  if (!isProtected && !isPending) menu.push({ label: isDisabled ? 'Enable' : 'Disable', onClick: () => toggleUserDisabled(u.username, isDisabled) });
+                  if (u.is_local) menu.push({ label: 'Reset password', onClick: () => setResetPasswordUser(u.username) });
+                  if (!isProtected) menu.push({ label: 'Delete', danger: true, onClick: () => deleteUserConfirm(u.username) });
                   return (
-                    <tr key={u.username} style={isDisabled && !isPending ? { opacity: 0.5 } : undefined}>
-                      <td>{u.username}</td>
-                      <td>{type}</td>
+                    <tr key={u.username} className={status === 'disabled' ? 'is-disabled' : undefined}>
+                      <td>
+                        <div className="person">
+                          <Avatar name={u.username} />
+                          <div className="person-text">
+                            <span className="person-name">{u.username}</span>
+                            {u.handle && u.handle !== u.username && <span className="person-sub">@{u.handle}</span>}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`chip chip-type chip-${type.toLowerCase()}`}>{type}</span>
+                      </td>
                       <td>
                         {isProtected ? (
                           USER_ROLE_LABELS[u.role] || u.role
                         ) : (
-                          <select className="set-input" style={{ maxWidth: 140 }} value={u.role} onChange={ev => changeUserRole(u.username, ev.target.value)}>
+                          <select className="set-input" value={u.role} onChange={ev => changeUserRole(u.username, ev.target.value)}>
                             <option value="user">User</option>
                             <option value="admin">Admin</option>
                             <option value="super_admin">Super Admin</option>
@@ -149,31 +197,19 @@ export function UsersPane() {
                         )}
                       </td>
                       <td>
-                        {isPending ? (
-                          <span style={{ color: 'var(--yel, #E8A33D)' }}>Pending approval</span>
-                        ) : isDisabled ? (
-                          'Disabled'
-                        ) : (
-                          'Active'
-                        )}
+                        <span className={`status status-${status}`}>
+                          <i aria-hidden="true" />
+                          {STATUS_LABELS[status]}
+                        </span>
                       </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                          {!isProtected && (
-                            <button type="button" className="btn btn-sm" onClick={() => toggleUserDisabled(u.username, isDisabled)}>
-                              {isPending ? 'Approve' : isDisabled ? 'Enable' : 'Disable'}
+                      <td>
+                        <div className="row-actions">
+                          {isPending && !isProtected && (
+                            <button type="button" className="btn btn-sm btn-primary" onClick={() => toggleUserDisabled(u.username, isDisabled)}>
+                              Approve
                             </button>
                           )}
-                          {!!u.is_local && (
-                            <button type="button" className="btn btn-sm" onClick={() => setResetPasswordUser(u.username)}>
-                              Reset password
-                            </button>
-                          )}
-                          {!isProtected && (
-                            <button type="button" className="btn btn-sm" onClick={() => deleteUserConfirm(u.username)}>
-                              Delete
-                            </button>
-                          )}
+                          <RowMenu items={menu} label={`Actions for ${u.username}`} />
                         </div>
                       </td>
                     </tr>
@@ -183,7 +219,7 @@ export function UsersPane() {
             </tbody>
           </table>
           {filtered !== null && !loadError && filtered.length === 0 && (
-            <div className="audit-log-empty">{term ? 'No users match your search.' : 'No users yet.'}</div>
+            <div className="audit-log-empty">{term || statusFilter !== 'all' ? 'No users match your filters.' : 'No users yet.'}</div>
           )}
         </div>
       </div>

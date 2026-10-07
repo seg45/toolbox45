@@ -12,12 +12,13 @@
 // com ", " — a elipse (.audit-log-table td já tem text-overflow:ellipsis)
 // é quem corta visualmente, não um slice() em JS.
 // ════════════════════════════════════════════════
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useConfirm } from '../../lib/useConfirm';
 import { ApiError } from '../../lib/api';
 import { deleteGroup, listGroups, type Group } from '../../lib/groups';
 import { NewGroupModal } from './NewGroupModal';
-import { ManageGroupModal } from './ManageGroupModal';
+import { Avatar, AvatarStack } from '../Avatar';
+import { ManageGroupPanel } from './ManageGroupPanel';
 
 export function GroupsPane() {
   const confirm = useConfirm();
@@ -60,7 +61,6 @@ export function GroupsPane() {
 
   const term = search.trim().toLowerCase();
   const filtered = allGroups ? (term ? allGroups.filter(g => g.name.toLowerCase().includes(term)) : allGroups) : null;
-  const manageGroup = manageGroupId != null ? allGroups?.find(g => g.id === manageGroupId) || null : null;
 
   return (
     <div className="settings-pane" data-pane="groups">
@@ -71,8 +71,8 @@ export function GroupsPane() {
           sharing in "User account". A user can belong to more than one group.
         </span>
         <div className="settings-action-row">
-          <button type="button" className="btn btn-ghost" onClick={() => setNewGroupOpen(true)}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <button type="button" className="btn btn-primary" onClick={() => setNewGroupOpen(true)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="8" cy="8" r="3" />
               <circle cx="16" cy="8" r="3" />
               <path d="M2 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
@@ -81,19 +81,12 @@ export function GroupsPane() {
             <span>New group</span>
           </button>
         </div>
-        <input
-          type="text"
-          className="set-input"
-          placeholder="Search by group name…"
-          style={{ marginBottom: 2 }}
-          value={search}
-          onChange={ev => setSearch(ev.target.value)}
-        />
-        <div className="audit-log-wrap" style={{ maxHeight: '58vh' }}>
+        <input type="text" className="set-input" placeholder="Search by group name…" value={search} onChange={ev => setSearch(ev.target.value)} />
+        <div className="audit-log-wrap people-table">
           <table className="audit-log-table">
             <thead>
               <tr>
-                <th>Name</th>
+                <th>Group</th>
                 <th>Members</th>
                 <th></th>
               </tr>
@@ -112,30 +105,61 @@ export function GroupsPane() {
                   </td>
                 </tr>
               ) : (
-                filtered.map(g => (
-                  <tr key={g.id} onClick={() => setManageGroupId(g.id)} style={{ cursor: 'pointer' }}>
-                    <td>{g.name}</td>
-                    <td>{g.members.length ? g.members.join(', ') : <span style={{ color: 'var(--muted)' }}>No members</span>}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button
-                        type="button"
-                        className="sec-folder-btn"
-                        title="Delete group"
-                        onClick={ev => {
-                          ev.stopPropagation();
-                          deleteGroupConfirm(g);
-                        }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M4 7h16" />
-                          <path d="M10 11v6M14 11v6" />
-                          <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
-                          <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                filtered.map(g => {
+                  const expanded = manageGroupId === g.id;
+                  return (
+                    <Fragment key={g.id}>
+                      <tr className={`group-row${expanded ? ' is-open' : ''}`} onClick={() => setManageGroupId(expanded ? null : g.id)} aria-expanded={expanded}>
+                        <td>
+                          <div className="person">
+                            <svg className="row-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M9 6l6 6-6 6" />
+                            </svg>
+                            <Avatar name={g.name} size={28} />
+                            <span className="person-name">{g.name}</span>
+                          </div>
+                        </td>
+                        <td>
+                          {g.members.length ? (
+                            <div className="group-members">
+                              <AvatarStack names={g.members} />
+                              <span className="person-sub">{g.members.length === 1 ? '1 member' : `${g.members.length} members`}</span>
+                            </div>
+                          ) : (
+                            <span className="person-sub">No members</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="row-actions">
+                            <button
+                              type="button"
+                              className="sec-folder-btn"
+                              title="Delete group"
+                              onClick={ev => {
+                                ev.stopPropagation();
+                                deleteGroupConfirm(g);
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M4 7h16" />
+                                <path d="M10 11v6M14 11v6" />
+                                <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" />
+                                <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3" />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr className="group-detail-row">
+                          <td colSpan={3}>
+                            <ManageGroupPanel group={g} onClose={() => setManageGroupId(null)} onChanged={handleGroupChanged} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -150,7 +174,6 @@ export function GroupsPane() {
           onCreated={group => setAllGroups(curr => (curr ? [...curr, group].sort((a, b) => a.name.localeCompare(b.name)) : [group]))}
         />
       )}
-      {manageGroup && <ManageGroupModal group={manageGroup} onClose={() => setManageGroupId(null)} onChanged={handleGroupChanged} />}
     </div>
   );
 }

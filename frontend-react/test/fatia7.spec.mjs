@@ -382,8 +382,21 @@ function escapeRegex(s) {
 }
 function userRow(page, username) {
   return page.locator('.settings-pane[data-pane="users"] .audit-log-table tbody tr').filter({
-    has: page.locator('td:first-child', { hasText: new RegExp(`^${escapeRegex(username)}$`) }),
+    has: page.locator('.person-name', { hasText: new RegExp(`^${escapeRegex(username)}$`) }),
   });
+}
+
+// Ações da linha ficam no menu "⋯" (popover num portal no <body>).
+async function rowMenuLabels(page, row) {
+  await row.locator('.row-menu-btn').click();
+  const labels = (await page.locator('.row-menu .row-menu-item').allInnerTexts()).map(t => t.trim());
+  await page.keyboard.press('Escape');
+  await page.locator('.row-menu').waitFor({ state: 'detached' });
+  return labels;
+}
+async function rowMenuClick(page, row, label) {
+  await row.locator('.row-menu-btn').click();
+  await page.locator('.row-menu .row-menu-item', { hasText: label }).click();
 }
 
 const browser = await chromium.launch();
@@ -422,7 +435,7 @@ await withPage(browser, async page => {
   const rows = page.locator('.settings-pane[data-pane="users"] tbody tr');
   await assertEventually(async () => (await rows.count()) === 5, 'cenário 3: os 5 usuários do mock aparecem na tabela');
   const bobRow = userRow(page, 'bob@example.com');
-  assert((await bobRow.locator('td').nth(0).innerText()) === 'bob@example.com', 'cenário 3: Email de bob correto');
+  assert((await bobRow.locator('.person-name').innerText()) === 'bob@example.com', 'cenário 3: Email de bob correto');
   assert((await bobRow.locator('td').nth(1).innerText()) === 'Local', 'cenário 3: Type de bob (Local)');
   await page.screenshot({ path: `${SHOTS}/3-users-table.png` });
 });
@@ -439,9 +452,11 @@ await withPage(browser, async page => {
   await assertEventually(async () => (await adminRow.count()) === 1, 'cenário 4: linha do usuário "admin" aparece');
   assert((await adminRow.locator('select').count()) === 0, 'cenário 4: "admin" não tem <select> de role (texto puro)');
   assert((await adminRow.locator('td').nth(2).innerText()) === 'Super Admin', 'cenário 4: role de "admin" mostrado como texto "Super Admin"');
-  assert((await adminRow.locator('button', { hasText: 'Disable' }).count()) === 0, 'cenário 4: "admin" não tem botão Disable/Enable/Approve');
-  assert((await adminRow.locator('button', { hasText: 'Delete' }).count()) === 0, 'cenário 4: "admin" não tem botão Delete');
-  assert((await adminRow.locator('button', { hasText: 'Reset password' }).count()) === 1, 'cenário 4: "admin" tem botão "Reset password" (is_local)');
+  assert((await adminRow.locator('button', { hasText: 'Approve' }).count()) === 0, 'cenário 4: "admin" não tem botão Approve');
+  const adminMenu = await rowMenuLabels(page, adminRow);
+  assert(!adminMenu.includes('Disable') && !adminMenu.includes('Enable'), `cenário 4: "admin" não tem Disable/Enable no menu (lido: ${adminMenu})`);
+  assert(!adminMenu.includes('Delete'), 'cenário 4: "admin" não tem Delete no menu');
+  assert(adminMenu.includes('Reset password'), 'cenário 4: "admin" tem "Reset password" no menu (is_local)');
 });
 
 // ── Cenário 6 (+7 combinado): status Pending/Disabled/Active e labels Approve/Disable/Enable ──
@@ -461,17 +476,17 @@ await withPage(browser, async page => {
   assert((await carolRow.locator('td').nth(3).innerText()) === 'Pending approval', 'cenário 6: carol (disabled:true, approved_at:null) mostra "Pending approval"');
   assert((await daveRow.locator('td').nth(3).innerText()) === 'Disabled', 'cenário 6: dave (disabled:true, approved_at preenchido) mostra "Disabled"');
 
-  assert((await bobRow.locator('button', { hasText: 'Disable' }).count()) === 1, 'cenário 7: botão de bob (Active) é "Disable"');
+  assert((await rowMenuLabels(page, bobRow)).includes('Disable'), 'cenário 7: ação de bob (Active) é "Disable"');
   assert((await carolRow.locator('button', { hasText: 'Approve' }).count()) === 1, 'cenário 7: botão de carol (Pending) é "Approve"');
-  assert((await daveRow.locator('button', { hasText: 'Enable' }).count()) === 1, 'cenário 7: botão de dave (Disabled não-pending) é "Enable"');
+  assert((await rowMenuLabels(page, daveRow)).includes('Enable'), 'cenário 7: ação de dave (Disabled não-pending) é "Enable"');
 
   // Clicar em "Disable" (bob) → PUT {disabled:true} + reload.
-  await bobRow.locator('button', { hasText: 'Disable' }).click();
+  await rowMenuClick(page, bobRow, 'Disable');
   await assertEventually(() => state.calls.update.some(c => c.username === 'bob@example.com' && c.body.disabled === true), 'cenário 7: clicar "Disable" chama PUT /api/users/bob@example.com {disabled:true}');
-  await assertEventually(async () => (await userRow(page, 'bob@example.com').locator('button', { hasText: 'Enable' }).count()) === 1, 'cenário 7: botão de bob vira "Enable" após desabilitar e recarregar');
+  await assertEventually(async () => (await rowMenuLabels(page, userRow(page, 'bob@example.com'))).includes('Enable'), 'cenário 7: ação de bob vira "Enable" após desabilitar e recarregar');
 
   // Clicar em "Enable" (dave) → PUT {disabled:false}.
-  await daveRow.locator('button', { hasText: 'Enable' }).click();
+  await rowMenuClick(page, daveRow, 'Enable');
   await assertEventually(() => state.calls.update.some(c => c.username === 'dave@example.com' && c.body.disabled === false), 'cenário 7: clicar "Enable" chama PUT /api/users/dave@example.com {disabled:false}');
 
   // Clicar em "Approve" (carol) → PUT {disabled:false} (aprovar = habilitar).
@@ -572,11 +587,12 @@ await withPage(browser, async page => {
   await openUsersPane(page);
 
   const bobRow = userRow(page, 'bob@example.com');
-  await assertEventually(async () => (await bobRow.locator('button', { hasText: 'Reset password' }).count()) === 1, 'cenário 10: bob (is_local) tem botão "Reset password"');
+  await assertEventually(async () => (await bobRow.count()) === 1, 'cenário 10: linha de bob carregada');
+  assert((await rowMenuLabels(page, bobRow)).includes('Reset password'), 'cenário 10: bob (is_local) tem "Reset password"');
   const erinRow = userRow(page, 'erin@example.com');
-  assert((await erinRow.locator('button', { hasText: 'Reset password' }).count()) === 0, 'cenário 10: erin (Google, não local) NÃO tem botão "Reset password"');
+  assert(!(await rowMenuLabels(page, erinRow)).includes('Reset password'), 'cenário 10: erin (Google, não local) NÃO tem "Reset password"');
 
-  await bobRow.locator('button', { hasText: 'Reset password' }).click();
+  await rowMenuClick(page, bobRow, 'Reset password');
   const modal = page.locator('.modal-box', { has: page.locator('.modal-title', { hasText: 'Reset password' }) });
   await modal.waitFor();
 
@@ -607,7 +623,7 @@ await withPage(browser, async page => {
 
   const erinRow = userRow(page, 'erin@example.com');
   await assertEventually(async () => (await erinRow.count()) === 1, 'cenário 11: linha de erin carregada');
-  await erinRow.locator('button', { hasText: 'Delete' }).click();
+  await rowMenuClick(page, erinRow, 'Delete');
 
   await page.waitForSelector('#confirmOverlay.show');
   const msg = await page.locator('#confirmMessage').innerText();
@@ -622,7 +638,7 @@ await withPage(browser, async page => {
 
   // Confirmar chama DELETE e recarrega a lista.
   const listCallsBefore = state.calls.list;
-  await erinRow.locator('button', { hasText: 'Delete' }).click();
+  await rowMenuClick(page, erinRow, 'Delete');
   await page.waitForSelector('#confirmOverlay.show');
   await page.locator('#confirmOkBtn').click();
 

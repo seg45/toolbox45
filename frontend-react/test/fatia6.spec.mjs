@@ -903,7 +903,7 @@ await withPage(browser, async page => {
   await openGroupsPane(page);
   await page.locator('.settings-pane[data-pane="groups"] tr', { hasText: 'NGFW Support' }).click();
 
-  const modal = page.locator('.modal-box', { has: page.locator('.modal-title', { hasText: 'Manage group' }) });
+  const modal = page.locator('.group-panel');
   await modal.waitFor();
   assert((await modal.locator('.modal-title').innerText()) === 'Manage group — NGFW Support', 'cenário 25: título "Manage group — NGFW Support"');
   await assertEventually(async () => (await modal.locator('table tbody tr').count()) === 2, 'cenário 25: lista de membros mostra os 2 membros do grupo');
@@ -919,7 +919,7 @@ await withPage(browser, async page => {
 
   await openGroupsPane(page);
   await page.locator('.settings-pane[data-pane="groups"] tr', { hasText: 'NGFW Support' }).click();
-  const modal = page.locator('.modal-box', { has: page.locator('.modal-title', { hasText: 'Manage group' }) });
+  const modal = page.locator('.group-panel');
   await modal.waitFor();
 
   await assertEventually(() => usersState.calls.list === 1, 'cenário 26: GET /api/users foi chamado ao abrir "Manage group"');
@@ -932,7 +932,7 @@ await withPage(browser, async page => {
   );
 
   await select.selectOption('dave@example.com');
-  await modal.locator('button', { hasText: 'Add member' }).click();
+  await modal.locator('.group-panel-row button', { hasText: 'Add member' }).click();
 
   await assertEventually(() => groupsState.calls.addMember.some(c => c.id === 1 && c.username === 'dave@example.com'), 'cenário 26: POST /api/groups/1/members foi chamado com {username: "dave@example.com"}');
   await assertEventually(async () => (await modal.locator('table tbody tr', { hasText: 'dave@example.com' }).count()) === 1, 'cenário 26: "dave@example.com" aparece na tabela de membros');
@@ -949,7 +949,7 @@ await withPage(browser, async page => {
 
   await openGroupsPane(page);
   await page.locator('.settings-pane[data-pane="groups"] tr', { hasText: 'NGFW Support' }).click();
-  const modal = page.locator('.modal-box', { has: page.locator('.modal-title', { hasText: 'Manage group' }) });
+  const modal = page.locator('.group-panel');
   await modal.waitFor();
 
   await modal.locator('table tbody tr', { hasText: 'bob@example.com' }).locator('button', { hasText: 'Remove' }).click();
@@ -972,7 +972,7 @@ await withPage(browser, async page => {
 
   await openGroupsPane(page);
   await page.locator('.settings-pane[data-pane="groups"] tr', { hasText: 'NGFW Support' }).click();
-  const modal = page.locator('.modal-box', { has: page.locator('.modal-title', { hasText: 'Manage group' }) });
+  const modal = page.locator('.group-panel');
   await modal.waitFor();
 
   await modal.locator('input.set-input').first().fill('NGFW Support (EMEA)');
