@@ -276,11 +276,14 @@ export function SettingsModal({
     >
       <div className="modal-box settings-modal-box">
         <div className="modal-head">
-          <span className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8a4 4 0 100 8 4 4 0 000-8z" /><path d="M19.4 13a7.97 7.97 0 000-2l2.1-1.6-2-3.4-2.5 1a8.1 8.1 0 00-1.7-1L14.9 3h-4l-.4 2.9a8.1 8.1 0 00-1.7 1l-2.5-1-2 3.4L6.6 11a7.97 7.97 0 000 2l-2.1 1.6 2 3.4 2.5-1c.5.4 1.1.8 1.7 1l.4 2.9h4l.4-2.9c.6-.2 1.2-.6 1.7-1l2.5 1 2-3.4L19.4 13z" /></svg>
+          <button type="button" className="modal-close settings-back" onClick={onClose} title="Back to the app (Esc)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+            <span>Back</span>
+          </button>
+          <span className="modal-title settings-topbar-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8a4 4 0 100 8 4 4 0 000-8z" /><path d="M19.4 13a7.97 7.97 0 000-2l2.1-1.6-2-3.4-2.5 1a8.1 8.1 0 00-1.7-1L14.9 3h-4l-.4 2.9a8.1 8.1 0 00-1.7 1l-2.5-1-2 3.4L6.6 11a7.97 7.97 0 000 2l-2.1 1.6 2 3.4 2.5-1c.5.4 1.1.8 1.7 1l.4 2.9h4l.4-2.9c.6-.2 1.2-.6 1.7-1l2.5 1 2-3.4L19.4 13z" /></svg>
             <span id="settingsModalTitle">{isUserScope ? 'Account settings' : 'Settings'}</span>
           </span>
-          <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="settings-layout">
           <nav className="settings-nav" aria-label="Settings sections">
@@ -315,6 +318,7 @@ export function SettingsModal({
             )}
           </nav>
           <div className="settings-content">
+            <div className="settings-content-inner">
             <header className="settings-page-head">
               <h2 className="settings-page-title">{paneMeta.title}</h2>
               <p className="settings-page-desc">{paneMeta.desc}</p>
@@ -342,6 +346,7 @@ export function SettingsModal({
                 SystemPane decide por si (auth.isAdmin/auth.isSuperAdmin)
                 se renderiza ou não. */}
             {pane === 'system' && <SystemPane onLogoChanged={onLogoChanged} />}
+            </div>
           </div>
         </div>
         {/* Rodapé sempre presente (como no original); só a aba "User
