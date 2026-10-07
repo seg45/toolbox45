@@ -143,6 +143,7 @@ export function AppShell() {
             settings={settings}
             updateSettings={update}
             onLogoChanged={logo.refresh}
+            logo={logo}
             theme={personalTheme.theme}
             accent={personalTheme.accent}
             toggleTheme={personalTheme.toggleTheme}

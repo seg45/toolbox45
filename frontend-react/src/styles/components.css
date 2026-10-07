@@ -1789,9 +1789,10 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
 
 /* — Barra superior — */
 .settings-modal-box > .modal-head {
-  height: 56px; padding: 0 20px; gap: 16px; justify-content: flex-start; flex-shrink: 0;
+  height: 48px; padding: 0 16px; gap: 14px; justify-content: flex-start; flex-shrink: 0;
   background: var(--surf); border-bottom: 1px solid var(--bdr);
 }
+.settings-modal-box > .modal-head .settings-topbar-logo { flex-shrink: 0; margin-right: 6px; }
 .settings-modal-box > .modal-head .settings-back {
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 8px; margin: 0;
   background: transparent; border: 1px solid var(--bdr); border-radius: 8px; color: var(--text);
@@ -1843,8 +1844,8 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
 .settings-nav-user-role { font-size: 12px; color: var(--muted); }
 
 /* — Conteúdo — */
-#settingsOverlay .settings-content { background: var(--surf); padding: 40px 56px 64px; gap: 0; overflow-y: auto; }
-.settings-content-inner { width: 100%; max-width: 880px; margin: 0 auto; }
+#settingsOverlay .settings-content { background: var(--surf); padding: 32px 48px 64px; gap: 0; overflow-y: auto; }
+.settings-content-inner { width: 100%; max-width: 960px; margin: 0; }
 .settings-page-head { padding-bottom: 28px; }
 .settings-page-title { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 800; letter-spacing: 0; color: var(--text); }
 .settings-page-desc { margin: 6px 0 0; font-size: 12px; line-height: 1.55; color: var(--muted); max-width: 640px; }

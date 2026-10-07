@@ -386,7 +386,7 @@ await withPage(browser, async page => {
   await mockSystemPane(page, state);
   await goToApp(page);
 
-  const headerImg = page.locator('img.hdr-logo-img.for-light');
+  const headerImg = page.locator('.hdr img.hdr-logo-img.for-light');
   const srcBefore = await headerImg.getAttribute('src');
   assert(!srcBefore || !srcBefore.startsWith('data:'), 'cenário 5: antes do save, o header mostra o logo default (não um data: URL customizado)');
 

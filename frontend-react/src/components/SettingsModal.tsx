@@ -41,6 +41,7 @@ import { DEFAULT_SETTINGS, useSettings, type Settings } from '../lib/settingsSto
 import { DEFAULT_ACCENT } from '../lib/theme';
 import type { LiveFilters } from '../lib/liveFilters';
 import type { Catalogs } from '../lib/catalogs';
+import type { LogoSrcs } from '../lib/useLogo';
 import { AccountPane } from './panes/AccountPane';
 import { CatalogPane } from './panes/CatalogPane';
 import { DatabasePane } from './panes/DatabasePane';
@@ -158,6 +159,7 @@ export function SettingsModal({
   settings,
   updateSettings,
   onLogoChanged,
+  logo,
   theme,
   accent,
   toggleTheme,
@@ -177,6 +179,9 @@ export function SettingsModal({
   // AppShell.tsx/Header.tsx (mesmo `logo` useLogo() elevado, compartilhado
   // entre os dois).
   onLogoChanged: () => Promise<void>;
+  // Mesmo logo do cabeçalho do app (inclusive o personalizado) — a tela cheia
+  // cobre o Header, então o logo é repetido na barra superior, na mesma posição.
+  logo: LogoSrcs;
   // Fatia 8 — usePersonalTheme() elevado pra AppShell.tsx e repassado até
   // PreferencesPane (ver comentário completo lá) — pelo mesmo motivo de
   // `logo`/`onLogoChanged` acima: o listener de 'storage' do user-data sync
@@ -276,6 +281,10 @@ export function SettingsModal({
     >
       <div className="modal-box settings-modal-box">
         <div className="modal-head">
+          <div className="hdr-logo settings-topbar-logo" title="Back to the app" onClick={onClose}>
+            <img className="hdr-logo-img for-dark" src={logo.dark || '/img/logo-toolbox45-white.png?v=2'} alt="Toolbox45" />
+            <img className="hdr-logo-img for-light" src={logo.light || '/img/logo-toolbox45.png?v=2'} alt="Toolbox45" />
+          </div>
           <button type="button" className="modal-close settings-back" onClick={onClose} title="Back to the app (Esc)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
             <span>Back</span>
