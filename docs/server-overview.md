@@ -162,22 +162,22 @@ MICROSOFT_REDIRECT_URI=https://toolbox.seg45.com.br/api/auth/microsoft/callback
    Microsoft" aparece automaticamente em `login.html` assim que as variáveis
    obrigatórias estiverem presentes (`GET /api/auth/providers`).
 
-## Compartilhamento entre usuários (handles + shares)
+## Compartilhamento entre usuários (shares)
 
 Pastas e comandos de cada usuário são **privados por padrão** — ninguém mais vê o que
-você criou, a menos que você compartilhe explicitamente. Todo usuário tem um **handle**
-(apelido único, gerado automaticamente na criação da conta — ver `generate_unique_handle()`
-em `server-py/app/handles.py` — e trocável livremente depois em **Settings → Account**)
-usado para esse compartilhamento **sem nunca expor o username real** (que é o e-mail,
-no caso de contas Google). Para outro usuário, você digita o handle dele e escolhe o
-que compartilhar — pastas e/ou comandos, "tudo ou nada" (não dá para escolher uma
+você criou, a menos que você compartilhe explicitamente. Não existe apelido/nome de
+usuário: todo mundo é identificado pelo **e-mail** (o `username` da conta). Para outro
+usuário, você digita o e-mail dele em **Settings → User account** e escolhe o que
+compartilhar — pastas e/ou comandos, "tudo ou nada" (não dá para escolher uma
 pasta/comando específico) — e vale imediatamente, sem a outra pessoa precisar aceitar
 nada. Você também pode revogar a qualquer momento. Admins continuam vendo as pastas/
 comandos de todo mundo sempre, sem depender de nenhuma concessão aqui — este mecanismo
-só regula a visibilidade entre usuários comuns. Ver `users.handle`/tabela `shares` em
-`server-py/app/schema.sql`, `PUT /api/me/handle` (`app/routers/me.py`)/`/api/shares`
-(`app/routers/shares.py`) e a seção
+só regula a visibilidade entre usuários comuns. Ver a tabela `shares` em
+`server-py/app/schema.sql`, `/api/shares` (`app/routers/shares.py`) e a seção
 **Compartilhamento entre usuários** em `docs/api.md`.
+
+> O antigo "handle" (apelido) foi removido. Instalações antigas podem manter a coluna
+> `users.handle` no banco, mas nada mais a lê ou grava.
 
 ## Catálogos administráveis
 

@@ -8,7 +8,7 @@
 // abrir, cálculo de rede conhecida, "move to" split/supernet/mesmo prefixo,
 // IP inválido, fechar só pelo "✕", estado sobrevive a fechar/reabrir),
 // Sharing na aba "User account" (listar given/received numa chamada só,
-// validação, criar com handle normalizado pra minúsculas, revogar), e
+// validação, criar com e-mail normalizado pra minúsculas, revogar), e
 // Groups na aba "Groups" (gate super_admin, listar, buscar client-side,
 // criar, abrir "Manage group", adicionar/remover membro recarregando o
 // picker sem cache, renomear, excluir).
@@ -63,7 +63,7 @@ async function mockBase(page, { isSuperAdmin = true } = {}) {
   await page.route('**/api/me', route =>
     route.fulfill({
       json: {
-        username: 'admin', upn: 'admin', handle: 'admin',
+        username: 'admin', upn: 'admin',
         role: isSuperAdmin ? 'super_admin' : 'user',
         isAdmin: isSuperAdmin, isSuperAdmin, authMethod: 'local',
       },
@@ -173,7 +173,7 @@ function makeSharesState(given, received) {
       return { given: g.map(x => ({ ...x })), received: r.map(x => ({ ...x })) };
     },
     create(payload) {
-      const share = { id: nextId++, grantee_handle: payload.handle, share_folders: payload.share_folders, share_commands: payload.share_commands };
+      const share = { id: nextId++, grantee_email: payload.email, share_folders: payload.share_folders, share_commands: payload.share_commands };
       g.push(share);
       calls.create.push(payload);
       return share;
@@ -681,10 +681,10 @@ await withPage(browser, async page => {
 // ════════════════════════════════════════════════
 
 const SHARES_FIXTURE_GIVEN = [
-  { id: 1, grantee_handle: 'bob', share_folders: true, share_commands: false },
-  { id: 2, grantee_handle: 'carol', share_folders: false, share_commands: true },
+  { id: 1, grantee_email: 'bob@example.com', share_folders: true, share_commands: false },
+  { id: 2, grantee_email: 'carol@example.com', share_folders: false, share_commands: true },
 ];
-const SHARES_FIXTURE_RECEIVED = [{ id: 3, grantor_handle: 'dave', share_folders: true, share_commands: true }];
+const SHARES_FIXTURE_RECEIVED = [{ id: 3, grantor_email: 'dave@example.com', share_folders: true, share_commands: true }];
 
 // ── Cenário 16: aba "User account" mostra os 3 sub-blocos de Sharing ──
 await withPage(browser, async page => {
@@ -719,7 +719,7 @@ await withPage(browser, async page => {
   await openUserAccountPane(page);
 
   const content = page.locator('.settings-content');
-  await content.locator('input[placeholder="Their handle"]').fill('erin');
+  await content.locator('input[placeholder="Their e-mail"]').fill('erin@example.com');
   await content.locator('button', { hasText: 'Share' }).click();
 
   await assertEventually(
@@ -729,7 +729,7 @@ await withPage(browser, async page => {
   assert(state.calls.create.length === 0, 'cenário 17: nenhum POST /api/shares foi disparado');
 });
 
-// ── Cenário 17b: como no original — "Share" fica sempre ativo; com handle vazio só foca o campo; "Your handle" mora dentro do bloco Sharing ──
+// ── Cenário 17b: "Share" fica sempre ativo; com e-mail vazio só foca o campo; não existe mais "Your handle" ──
 await withPage(browser, async page => {
   await mockBase(page);
   const state = makeSharesState(SHARES_FIXTURE_GIVEN, SHARES_FIXTURE_RECEIVED);
@@ -742,17 +742,17 @@ await withPage(browser, async page => {
   assert(await shareBtn.isEnabled(), 'cenário 17b: botão "Share" ativo mesmo com o campo vazio');
   await shareBtn.click();
   assert(
-    await content.locator('input[placeholder="Their handle"]').evaluate(el => el === document.activeElement),
-    'cenário 17b: clicar em "Share" com handle vazio foca o campo'
+    await content.locator('input[placeholder="Their e-mail"]').evaluate(el => el === document.activeElement),
+    'cenário 17b: clicar em "Share" com e-mail vazio foca o campo'
   );
-  assert(state.calls.create.length === 0, 'cenário 17b: nenhum POST /api/shares com handle vazio');
+  assert(state.calls.create.length === 0, 'cenário 17b: nenhum POST /api/shares com e-mail vazio');
   assert(
-    (await content.locator('#acctGroupSharing .set-label', { hasText: 'Your handle' }).count()) === 1,
-    'cenário 17b: "Your handle" fica dentro do bloco Sharing'
+    (await content.locator('.set-label', { hasText: 'Your handle' }).count()) === 0 && (await content.locator('code').count()) === 0,
+    'cenário 17b: o campo "Your handle" não existe mais'
   );
 });
 
-// ── Cenário 18: handle em MAIÚSCULAS é enviado em minúsculas ──
+// ── Cenário 18: e-mail em MAIÚSCULAS é enviado em minúsculas ──
 await withPage(browser, async page => {
   await mockBase(page);
   const state = makeSharesState(SHARES_FIXTURE_GIVEN, SHARES_FIXTURE_RECEIVED);
@@ -761,14 +761,14 @@ await withPage(browser, async page => {
   await openUserAccountPane(page);
 
   const content = page.locator('.settings-content');
-  await content.locator('input[placeholder="Their handle"]').fill('ERIN');
+  await content.locator('input[placeholder="Their e-mail"]').fill('ERIN@Example.com');
   await content.locator('label.set-check-row', { hasText: 'Folders' }).locator('input[type="checkbox"]').check();
   await content.locator('button', { hasText: 'Share' }).click();
 
   await assertEventually(() => state.calls.create.length === 1, 'cenário 18: POST /api/shares foi chamado');
   assert(
-    JSON.stringify(state.calls.create[0]) === JSON.stringify({ handle: 'erin', share_folders: true, share_commands: false }),
-    `cenário 18: payload normaliza o handle pra minúsculas (lido: ${JSON.stringify(state.calls.create[0])})`
+    JSON.stringify(state.calls.create[0]) === JSON.stringify({ email: 'erin@example.com', share_folders: true, share_commands: false }),
+    `cenário 18: payload normaliza o e-mail pra minúsculas (lido: ${JSON.stringify(state.calls.create[0])})`
   );
 });
 
@@ -787,7 +787,7 @@ await withPage(browser, async page => {
   await page.waitForSelector('#confirmOverlay.show');
   const msg = await page.locator('#confirmMessage').innerText();
   assert(
-    msg === 'Stop sharing with "bob"? They will immediately lose access to whatever you shared with them.',
+    msg === 'Stop sharing with "bob@example.com"? They will immediately lose access to whatever you shared with them.',
     `cenário 19: mensagem de confirmação exata (lida: "${msg}")`
   );
   await page.locator('#confirmOkBtn').click();

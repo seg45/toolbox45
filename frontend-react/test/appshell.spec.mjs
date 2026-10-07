@@ -53,7 +53,6 @@ async function mockLoggedInAdmin(page, meOverrides = {}) {
       json: {
         username: 'admin',
         upn: 'admin',
-        handle: 'admin',
         role: 'super_admin',
         isAdmin: true,
         isSuperAdmin: true,
@@ -76,7 +75,7 @@ await withPage(browser, async page => {
   assert(page.url().endsWith('/login.html'), 'cenário 1: gate redireciona pra login.html sem sessão');
 });
 
-// ── Cenário 2: sessão válida → header mostra handle + role, sidebar com filtros reais ──
+// ── Cenário 2: sessão válida → header mostra e-mail + role, sidebar com filtros reais ──
 await withPage(browser, async page => {
   await mockLoggedInAdmin(page);
   await page.goto(`${BASE}/index.html`);
@@ -177,23 +176,21 @@ await withPage(browser, async page => {
   await page.screenshot({ path: `${SHOTS}/7-password-change.png` });
 });
 
-// ── Cenário 8: modal — troca de handle chama PUT /api/me/handle ──
+// ── Cenário 8: modal — "User account" não tem mais handle; compartilhar é por e-mail ──
 await withPage(browser, async page => {
   await mockLoggedInAdmin(page);
   let handleCalled = false;
   await page.route('**/api/me/handle', route => {
     handleCalled = true;
-    route.fulfill({ json: { handle: 'novo-handle' } });
+    route.fulfill({ json: {} });
   });
   await page.goto(`${BASE}/index.html`);
   await page.click('.hdr-user');
   await page.click('text=User account');
   await page.waitForSelector('.settings-modal-box');
-  await page.click('text="Change"');
-  await page.fill('input[placeholder="your-handle"]', 'novo-handle');
-  await page.click('text=Save');
-  await assertEventually(async () => (await page.textContent('code')) === 'novo-handle', 'cenário 8: handle atualizado na UI após salvar');
-  assert(handleCalled, 'cenário 8: PUT /api/me/handle foi chamado');
+  assert((await page.locator('text=Your handle').count()) === 0, 'cenário 8: não existe mais "Your handle"');
+  assert((await page.locator('.settings-modal-box input[placeholder="Their e-mail"]').count()) === 1, 'cenário 8: compartilhar pede o e-mail');
+  assert(!handleCalled, 'cenário 8: nenhuma chamada a /api/me/handle');
 });
 
 // ── Cenário 9: conta Google não mostra campos de senha ──

@@ -20,10 +20,10 @@ async function assertEventually(fn, msg, ms = 5000) {
 
 const CATALOGS = { vendors: [], systems: [], versions: [], environments: [], topics: [], parameters: [], prompts: [], exports: [] };
 const USERS = [
-  { username: 'admin', role: 'super_admin', is_local: 1, disabled: 0, created_at: '2026-10-01T10:00:00Z', created_by: 'setup', auth_provider: 'local', handle: 'admin', approved_at: '2026-10-01T10:00:00Z' },
-  { username: 'ana@x.com', role: 'admin', is_local: 0, disabled: 0, created_at: '2026-10-02T10:00:00Z', created_by: 'google-oauth', auth_provider: 'google', handle: 'ana', approved_at: '2026-10-02T10:00:00Z' },
-  { username: 'joao@x.com', role: 'user', is_local: 0, disabled: 1, created_at: '2026-10-03T10:00:00Z', created_by: 'microsoft-oauth', auth_provider: 'microsoft', handle: 'joao', approved_at: null },
-  { username: 'eva@x.com', role: 'user', is_local: 1, disabled: 0, created_at: '2026-10-03T10:00:00Z', created_by: 'admin', auth_provider: 'local', handle: 'eva', approved_at: '2026-10-03T10:00:00Z' },
+  { username: 'admin', role: 'super_admin', is_local: 1, disabled: 0, created_at: '2026-10-01T10:00:00Z', created_by: 'setup', auth_provider: 'local', approved_at: '2026-10-01T10:00:00Z' },
+  { username: 'ana@x.com', role: 'admin', is_local: 0, disabled: 0, created_at: '2026-10-02T10:00:00Z', created_by: 'google-oauth', auth_provider: 'google', approved_at: '2026-10-02T10:00:00Z' },
+  { username: 'joao@x.com', role: 'user', is_local: 0, disabled: 1, created_at: '2026-10-03T10:00:00Z', created_by: 'microsoft-oauth', auth_provider: 'microsoft', approved_at: null },
+  { username: 'eva@x.com', role: 'user', is_local: 1, disabled: 0, created_at: '2026-10-03T10:00:00Z', created_by: 'admin', auth_provider: 'local', approved_at: '2026-10-03T10:00:00Z' },
 ];
 
 async function withRole(browser, role, fn) {
@@ -34,7 +34,7 @@ async function withRole(browser, role, fn) {
   await page.route('**/api/**', route => {
     const p = new URL(route.request().url()).pathname;
     const json = d => route.fulfill({ json: d });
-    if (p === '/api/me') return json({ username: 'rodrigo@seg45.com.br', upn: 'rodrigo@seg45.com.br', handle: 'rodrigo', role: isSuper ? 'super_admin' : isAdmin ? 'admin' : 'user', isAdmin, isSuperAdmin: isSuper, authMethod: 'local' });
+    if (p === '/api/me') return json({ username: 'rodrigo@seg45.com.br', upn: 'rodrigo@seg45.com.br', role: isSuper ? 'super_admin' : isAdmin ? 'admin' : 'user', isAdmin, isSuperAdmin: isSuper, authMethod: 'local' });
     if (p === '/api/catalogs') return json(CATALOGS);
     if (p === '/api/users') return json(USERS);
     if (p === '/api/shares') return json({ given: [], received: [] });

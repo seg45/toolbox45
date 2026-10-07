@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════
 // SHARES (/api/shares) — porta tipada da metade "Sharing" de js/sharing.js
 // (submitNewShare/deleteShare/renderSharesGiven/renderSharesReceived) —
-// fatia 6. A troca de handle/senha do mesmo arquivo original JÁ foi
+// fatia 6. A troca de senha do mesmo arquivo original JÁ foi
 // portada na fatia 2 (ver AccountPane.tsx) — não repetida aqui.
 //
 // Divergência deliberada do original: GET /api/shares já devolve
@@ -19,7 +19,7 @@ export interface ShareGiven {
   share_commands: boolean;
   created_at?: string;
   updated_at?: string;
-  grantee_handle: string;
+  grantee_email: string;
 }
 
 export interface ShareReceived {
@@ -28,7 +28,7 @@ export interface ShareReceived {
   share_commands: boolean;
   created_at?: string;
   updated_at?: string;
-  grantor_handle: string;
+  grantor_email: string;
 }
 
 export interface SharesResponse {
@@ -42,11 +42,11 @@ export async function listShares(): Promise<SharesResponse> {
   return res.json();
 }
 
-export async function createShare(handle: string, shareFolders: boolean, shareCommands: boolean): Promise<ShareGiven> {
+export async function createShare(email: string, shareFolders: boolean, shareCommands: boolean): Promise<ShareGiven> {
   const res = await fetch('/api/shares', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ handle, share_folders: shareFolders, share_commands: shareCommands }),
+    body: JSON.stringify({ email, share_folders: shareFolders, share_commands: shareCommands }),
   });
   if (!res.ok) {
     const body = await parseErrorBody(res);

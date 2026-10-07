@@ -94,8 +94,7 @@ async def list_all_folders(user: CurrentUser = Depends(require_user)):
 
     folder_ids = [r["id"] for r in rows]
     order_by_folder, notes_by_folder = await load_folder_order_and_notes(folder_ids)
-    handle_map = None if is_admin else await cmds.get_handle_map()
-    viewer_ctx = {"username": username, "is_admin": is_admin, "handle_map": handle_map}
+    viewer_ctx = {"username": username, "is_admin": is_admin}
     return [
         {
             "id": r["id"], "username": cmds.mask_username_for_viewer(r["username"], viewer_ctx),
@@ -400,8 +399,7 @@ async def export_folder(folder_id: int, user: CurrentUser = Depends(require_user
     if not owned:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": f"Folder '{folder_id}' not found"})
     is_admin = role_rank(user["role"]) >= 1
-    handle_map = None if is_admin else await cmds.get_handle_map()
-    viewer_ctx = {"username": username, "is_admin": is_admin, "handle_map": handle_map}
+    viewer_ctx = {"username": username, "is_admin": is_admin}
     root = await build_folder_export_node(folder_id, username, viewer_ctx)
     return {"type": "toolbox45-folder-export", "version": 1, "exported_at": _iso_now(), "root": root}
 

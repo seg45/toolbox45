@@ -295,8 +295,8 @@ def test_politica_de_senha_no_registro_e_na_administracao(client, app_env):
 def test_login_continua_aceitando_senha_curta_antiga(client, app_env):
     banco, _ = app_env
     from app.security import hash_password
-    sql(banco, "INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at) "
-               "VALUES ('velho@teste.com', $1, 'user', 1, 'system', 'local', 'velho', NOW())",
+    sql(banco, "INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, approved_at) "
+               "VALUES ('velho@teste.com', $1, 'user', 1, 'system', 'local', NOW())",
         hash_password("abcd"), fetch="exec")
     r = client.post("/api/auth/login", json={"username": "velho@teste.com", "password": "abcd"})
     assert r.status_code == 200, r.text
@@ -540,9 +540,9 @@ def _callback(client, monkeypatch, tenant, id_token, userinfo):
     return client.get("/api/auth/microsoft/callback", params={"state": "abc", "code": "c"})
 
 
-def _usuario_ms(banco, email, handle="vitima"):
-    sql(banco, "INSERT INTO users (username, role, is_local, disabled, created_by, auth_provider, handle, approved_at) "
-               "VALUES ($1, 'user', 0, 0, 'microsoft-oauth', 'microsoft', $2, NOW())", email, handle, fetch="exec")
+def _usuario_ms(banco, email):
+    sql(banco, "INSERT INTO users (username, role, is_local, disabled, created_by, auth_provider, approved_at) "
+               "VALUES ($1, 'user', 0, 0, 'microsoft-oauth', 'microsoft', NOW())", email, fetch="exec")
 
 
 def test_login_microsoft_bloqueia_tenant_do_atacante_com_email_forjado(client, app_env, monkeypatch):
@@ -615,3 +615,41 @@ def test_resanitize_lista_e_aplica(client, app_env, monkeypatch):
     assert not _perigoso(limpo) and "onerror" not in limpo
     assert sql(banco, "SELECT details FROM commands WHERE id = $1", ids[1], fetch="val") == "<b>ok</b>"
     assert asyncio.run(resanitize.run(apply=False)) == 0  # idempotente
+
+
+# ════════════════════════════════════════════════
+# Identidade so por e-mail (sem handle/apelido)
+# ════════════════════════════════════════════════
+def test_me_e_usuarios_nao_expoem_handle(client):
+    admin = _admin(client)
+    assert "handle" not in admin.get("/api/me").json()
+    _criar_usuario(admin, "ana@teste.com")
+    users = admin.get("/api/users").json()
+    assert users and all("handle" not in u for u in users)
+    # a rota de troca de handle deixou de existir
+    assert admin.put("/api/me/handle", json={"handle": "x"}).status_code in (404, 405)
+
+
+def test_compartilhamento_e_feito_por_email(client):
+    admin = _admin(client)
+    _criar_usuario(admin, "ana@teste.com")
+    r = admin.post("/api/shares", json={"email": "Ana@Teste.com", "share_folders": True})
+    assert r.status_code == 201, r.text
+    assert r.json()["grantee_email"] == "ana@teste.com"
+    # o campo antigo "handle" nao identifica mais ninguem
+    r = admin.post("/api/shares", json={"handle": "ana", "share_folders": True})
+    assert r.status_code == 400
+    r = admin.post("/api/shares", json={"email": "ninguem@teste.com", "share_commands": True})
+    assert r.status_code == 404 and "ninguem@teste.com" in r.json()["message"]
+    r = admin.post("/api/shares", json={"email": ADMIN_EMAIL, "share_commands": True})
+    assert r.status_code == 400  # nao compartilha consigo mesmo
+
+    given = admin.get("/api/shares").json()["given"]
+    assert [g["grantee_email"] for g in given] == ["ana@teste.com"]
+
+    tok = _token(client, "ana@teste.com", "senha-forte-1")
+    _as(client, tok)
+    received = client.get("/api/shares").json()["received"]
+    assert [g["grantor_email"] for g in received] == [ADMIN_EMAIL]
+    _back_to_admin(client)
+    assert admin.delete(f"/api/shares/{given[0]['id']}").status_code == 204

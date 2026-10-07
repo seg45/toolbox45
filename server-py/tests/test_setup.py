@@ -85,7 +85,7 @@ def test_setup_cria_super_admin_abre_sessao_e_fecha_a_tela(novo, app_env):
 
     u = sql(banco, "SELECT * FROM users WHERE username = $1", EMAIL, fetch="row")
     assert u["role"] == "super_admin" and u["is_local"] == 1 and u["disabled"] == 0
-    assert u["created_by"] == "setup" and u["approved_at"] is not None and u["handle"] == "dono"
+    assert u["created_by"] == "setup" and u["approved_at"] is not None
     assert sql(banco, "SELECT COUNT(*) FROM folders WHERE username = $1 AND name = 'Favorites'", EMAIL, fetch="val") == 1
     assert sql(banco, "SELECT COUNT(*) FROM audit_log WHERE username = $1 AND details LIKE 'Initial setup%'", EMAIL, fetch="val") == 1
     assert sql(banco, "SELECT COUNT(*) FROM users WHERE username = 'admin'", fetch="val") == 0
@@ -135,9 +135,9 @@ def test_duas_configuracoes_simultaneas_so_uma_vence(novo, app_env):
 # ════════════════════════════════════════════════
 def _popular_legado(banco, senha_admin):
     boot()  # schema + migracoes + seeds (sem admin)
-    sql(banco, """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at)
-                  VALUES ('admin', $1, 'super_admin', 1, 'system', 'local', 'admin', NOW()),
-                         ('ana@x.com', $2, 'user', 1, 'admin', 'local', 'ana', NOW())""",
+    sql(banco, """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, approved_at)
+                  VALUES ('admin', $1, 'super_admin', 1, 'system', 'local', NOW()),
+                         ('ana@x.com', $2, 'user', 1, 'admin', 'local', NOW())""",
         hash_password(senha_admin), hash_password("senha-da-ana-1"), fetch="exec")
     sql(banco, """
         INSERT INTO folders (username, name) VALUES ('admin', 'Favorites'), ('admin', 'Pasta do admin'), ('ana@x.com', 'Favorites');

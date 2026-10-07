@@ -633,38 +633,19 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by    TEXT,
   auth_provider TEXT NOT NULL DEFAULT 'ntlm',   -- 'ntlm' | 'local' | 'google' | 'microsoft' — só identifica a ORIGEM da conta (ver login com Google/Microsoft em server/index.js); não decide permissão (isso é role)
-  -- handle: apelido único e ESCOLHIDO PELO USUÁRIO (gerado automaticamente
-  -- na criação da conta, trocável depois em PUT /api/me/handle — ver
-  -- server/index.js) usado para compartilhar pastas/comandos com outra
-  -- pessoa (ver `shares` abaixo) e para identificar o dono de algo de OUTRO
-  -- usuário na interface, SEM nunca expor o username real (que é sempre
-  -- o e-mail, exceto em contas locais legadas criadas antes do pedido
-  -- "remova o nome de usuário e trate tudo pelo email" — ver POST
-  -- /api/users em server/index.js, e a 'admin' semeada, conta raiz do
-  -- sistema, nunca migrada) — pedido do usuário: "cada usuário deverá ter
-  -- um nome de usuário no sistema... e o e-mail fique restrito". Único via
-  -- idx_users_handle — criado só em runMigrations() (server/db.js), NUNCA
-  -- aqui: numa instalação já existente `CREATE TABLE IF NOT EXISTS` acima é
-  -- um no-op (a tabela já existe), então a coluna `handle` só passa a
-  -- existir de verdade pelo `ALTER TABLE ... ADD COLUMN` de
-  -- runMigrations() — um `CREATE UNIQUE INDEX` aqui, MESMO com IF NOT
-  -- EXISTS, rodaria antes disso e falharia com "column handle does not
-  -- exist" (42703) nessas instalações (foi exatamente o que aconteceu num
-  -- deploy real). runMigrations() só cria o índice DEPOIS de garantir/
-  -- fazer o backfill da coluna — mesmo padrão já usado por idx_folders_parent
-  -- (parent_id) logo abaixo neste arquivo.
-  handle        TEXT,
+  -- (users.handle foi descontinuado: usuários são identificados só pelo
+  -- e-mail/username. Instalações antigas podem ainda ter a coluna/índice
+  -- `handle`, mas nada mais lê ou grava nelas.)
   -- Ver comentário grande acima da tabela (role/approved_at). NULL =
   -- pendente de aprovação; coluna adicionada via ALTER TABLE em
   -- runMigrations() (server/db.js) para instalações existentes — mesmo
-  -- padrão de `handle` acima (CREATE TABLE IF NOT EXISTS é no-op numa
-  -- instalação já existente).
+  -- padrão (CREATE TABLE IF NOT EXISTS é no-op numa instalação já existente).
   approved_at   TIMESTAMPTZ
 );
 
 -- ════════════════════════════════════════════════
 -- Shares — concessão de visibilidade de pastas e/ou comandos de UM usuário
--- (grantor) para OUTRO (grantee), identificado pelo HANDLE que o grantor
+-- (grantor) para OUTRO (grantee), identificado pelo E-MAIL que o grantor
 -- digitou (resolvido para grantee_username na hora de criar a linha — ver
 -- POST /api/shares em server/index.js). Pedido do usuário (compartilhamento
 -- entre usuários):
@@ -677,7 +658,7 @@ CREATE TABLE IF NOT EXISTS users (
 --   4) admins continuam vendo tudo de todo mundo sempre — este mecanismo só
 --      é consultado para usuários comuns (ver isAdmin no código acima).
 -- UNIQUE(grantor,grantee): no máximo uma linha por par — compartilhar de
--- novo com o mesmo handle faz UPSERT (ON CONFLICT ... DO UPDATE) em vez de
+-- novo para o mesmo e-mail faz UPSERT (ON CONFLICT ... DO UPDATE) em vez de
 -- duplicar. CHECK impede um usuário "compartilhar consigo mesmo".
 -- ════════════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS shares (

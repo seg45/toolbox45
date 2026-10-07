@@ -17,7 +17,6 @@ from ..audit import log_audit
 from ..auth_events import log_auth_event
 from ..db import get_pool
 from ..deps import CurrentUser, require_super_admin, role_rank
-from ..handles import generate_unique_handle
 from ..password_policy import password_problem
 from ..security import hash_password_async
 from ..session import delete_user_sessions
@@ -28,7 +27,7 @@ logger = logging.getLogger("toolbox45")
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
-USERS_PUBLIC_COLUMNS = "username, role, is_local, disabled, created_at, created_by, auth_provider, handle, approved_at"
+USERS_PUBLIC_COLUMNS = "username, role, is_local, disabled, created_at, created_by, auth_provider, approved_at"
 PROTECTED_ADMIN_USERNAME = "admin"
 USER_ROLES = ["user", "admin", "super_admin"]
 
@@ -82,12 +81,10 @@ async def create_user(body: dict = Body(default_factory=dict), user: CurrentUser
     if existing:
         raise HTTPException(status_code=409, detail={"error": "conflict", "message": f"User '{trimmed}' already exists"})
 
-    async with pool.acquire() as conn:
-        handle = await generate_unique_handle(conn, trimmed)
     await pool.execute(
-        """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at)
-           VALUES ($1, $2, $3, 1, $4, 'local', $5, NOW())""",
-        trimmed, await hash_password_async(password), role_val, user["username"], handle,
+        """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, approved_at)
+           VALUES ($1, $2, $3, 1, $4, 'local', NOW())""",
+        trimmed, await hash_password_async(password), role_val, user["username"],
     )
     await _ensure_default_folder(trimmed)
     row = await pool.fetchrow(f"SELECT {USERS_PUBLIC_COLUMNS} FROM users WHERE username = $1", trimmed)

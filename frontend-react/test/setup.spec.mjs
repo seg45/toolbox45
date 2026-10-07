@@ -93,7 +93,7 @@ await withPage(browser, async page => {
     body = route.request().postDataJSON();
     route.fulfill({ json: { username: 'dono@empresa.com', role: 'super_admin', mode: 'fresh' } });
   });
-  await page.route('**/api/me', route => route.fulfill({ json: { authMethod: 'local', isAdmin: true, isSuperAdmin: true, handle: 'dono' } }));
+  await page.route('**/api/me', route => route.fulfill({ json: { authMethod: 'local', isAdmin: true, isSuperAdmin: true } }));
   await page.goto(`${BASE}/login.html`);
   await page.waitForSelector(SETUP_FORM);
   await page.fill('input[autocomplete="email"]', 'dono@empresa.com');

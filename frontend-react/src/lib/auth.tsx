@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState(false);
   // Só mostra a tela de "Loading…" (ver AppShell.tsx) na PRIMEIRA carga —
   // uma atualização depois de já autenticado (ex.: AccountPane chamando
-  // refresh() após trocar o handle) não pode desmontar o app inteiro
+  // refresh() após uma ação na conta) não pode desmontar o app inteiro
   // (incluindo o próprio modal de Configurações aberto, que fecharia e
   // perderia o estado local do formulário no meio do caminho). Bug
   // encontrado durante os testes desta fatia — por isso um ref (não

@@ -56,7 +56,7 @@ async function mockBase(page, { isAdmin, isSuperAdmin }, handler) {
   });
   await page.route('**/api/me', route =>
     route.fulfill({
-      json: { username: 'tester', upn: 'tester', handle: 'tester', role: isSuperAdmin ? 'super_admin' : isAdmin ? 'admin' : 'user', isAdmin, isSuperAdmin, authMethod: 'local' },
+      json: { username: 'tester', upn: 'tester', role: isSuperAdmin ? 'super_admin' : isAdmin ? 'admin' : 'user', isAdmin, isSuperAdmin, authMethod: 'local' },
     })
   );
   await page.route('**/api/catalogs', route => route.fulfill({ json: EMPTY_CATALOGS }));

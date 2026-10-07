@@ -166,7 +166,7 @@ async function mockLoggedInAdmin(page, state) {
   await page.route('**/api/me', route =>
     route.fulfill({
       json: {
-        username: 'admin', upn: 'admin', handle: 'admin', role: 'super_admin',
+        username: 'admin', upn: 'admin', role: 'super_admin',
         isAdmin: true, isSuperAdmin: true, authMethod: 'local',
       },
     })

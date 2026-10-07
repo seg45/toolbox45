@@ -23,7 +23,6 @@ export interface User {
   created_at?: string;
   created_by?: string;
   auth_provider?: string;
-  handle?: string;
   approved_at?: string | null;
 }
 

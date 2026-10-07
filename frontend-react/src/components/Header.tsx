@@ -249,7 +249,7 @@ export function Header({ onOpenSettings, logo }: { onOpenSettings: (pane: Settin
       <div className={`dd hdr-user-dd${open ? ' open' : ''}`} ref={ddRef}>
         <button type="button" className="hdr-user" onClick={() => setOpen(o => !o)} title="Account">
           <svg className="hdr-user-ico" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="10" r="3" /><path d="M6.5 18.5a6 6 0 0 1 11 0" /></svg>
-          <span id="currentUserLabel">{auth.me?.handle || auth.me?.upn || ''}</span>
+          <span id="currentUserLabel">{auth.me?.username || auth.me?.upn || ''}</span>
         </button>
         {open && (
           <div className="dd-panel" id="hdrUserPanel" style={{ left: 'auto', right: 0, minWidth: 220 }}>

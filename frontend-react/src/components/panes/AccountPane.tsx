@@ -1,23 +1,23 @@
 // ════════════════════════════════════════════════
 // Aba "User account" do modal de Configurações — porta de index.html
 // (.settings-pane[data-pane="account"], grupo #acctGroupPassword) +
-// js/sharing.js (troca de senha/handle self-service + o grupo "Sharing").
+// js/sharing.js (troca de senha self-service + o grupo "Sharing").
 //
 // Fatia 6 acrescentou o grupo "Sharing" (#acctGroupSharing no original) —
-// compartilhar pastas/comandos com outro handle (POST/DELETE /api/shares)
+// compartilhar pastas/comandos com outro usuário, pelo e-mail (POST/DELETE /api/shares)
 // e as duas listas "Shared by you"/"Shared with you" (GET /api/shares).
 // Divergência deliberada do original: GET /api/shares já devolve
 // {given, received} numa resposta só — aqui é chamado UMA vez (loadShares)
 // e as duas tabelas são derivadas do mesmo resultado, em vez de duas
 // buscas redundantes em paralelo (ver comentário em shares.ts). Carrega
-// junto com handle/senha no mount do componente (useEffect), equivalente a
+// no mount do componente (useEffect), equivalente a
 // switchSettingsPane('account') disparar renderSharingPanel() no original —
 // aqui a própria aba já SER o componente monta tudo de uma vez.
 // ════════════════════════════════════════════════
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../lib/auth';
 import { useConfirm } from '../../lib/useConfirm';
-import { ApiError, updateHandle, updatePassword } from '../../lib/api';
+import { ApiError, updatePassword } from '../../lib/api';
 import { createShare, deleteShare, listShares, type SharesResponse } from '../../lib/shares';
 
 export function AccountPane() {
@@ -53,32 +53,12 @@ export function AccountPane() {
     }
   }
 
-  const [handleValue, setHandleValue] = useState(auth.me?.handle || '');
-  const [editingHandle, setEditingHandle] = useState(false);
-  const [handleError, setHandleError] = useState('');
-  const [handleBusy, setHandleBusy] = useState(false);
-
-  async function saveHandle() {
-    setHandleError('');
-    setHandleBusy(true);
-    try {
-      const res = await updateHandle(handleValue);
-      setHandleValue(res.handle);
-      setEditingHandle(false);
-      await auth.refresh();
-    } catch (e) {
-      setHandleError(e instanceof ApiError ? e.message : 'Failed to update handle.');
-    } finally {
-      setHandleBusy(false);
-    }
-  }
-
   // ── Sharing ──────────────────────────────────────────────────────────
   const [shares, setShares] = useState<SharesResponse | null>(null);
   const [sharesLoading, setSharesLoading] = useState(true);
   const [sharesLoadError, setSharesLoadError] = useState('');
-  const [shareHandle, setShareHandle] = useState('');
-  const shareHandleRef = useRef<HTMLInputElement>(null);
+  const [shareEmail, setShareEmail] = useState('');
+  const shareEmailRef = useRef<HTMLInputElement>(null);
   const [shareFolders, setShareFolders] = useState(false);
   const [shareCommands, setShareCommands] = useState(false);
   const [newShareError, setNewShareError] = useState('');
@@ -103,9 +83,9 @@ export function AccountPane() {
 
   async function submitNewShare() {
     setNewShareError('');
-    const handle = shareHandle.trim().toLowerCase();
-    if (!handle) {
-      shareHandleRef.current?.focus();
+    const email = shareEmail.trim().toLowerCase();
+    if (!email) {
+      shareEmailRef.current?.focus();
       return;
     }
     if (!shareFolders && !shareCommands) {
@@ -114,8 +94,8 @@ export function AccountPane() {
     }
     setShareBusy(true);
     try {
-      await createShare(handle, shareFolders, shareCommands);
-      setShareHandle('');
+      await createShare(email, shareFolders, shareCommands);
+      setShareEmail('');
       setShareFolders(false);
       setShareCommands(false);
       // Só "Shared by you" precisa recarregar depois de um novo
@@ -130,8 +110,8 @@ export function AccountPane() {
     }
   }
 
-  async function revokeShare(id: number, handle: string) {
-    const ok = await confirm(`Stop sharing with "${handle}"? They will immediately lose access to whatever you shared with them.`, { danger: true });
+  async function revokeShare(id: number, email: string) {
+    const ok = await confirm(`Stop sharing with "${email}"? They will immediately lose access to whatever you shared with them.`, { danger: true });
     if (!ok) return;
     try {
       await deleteShare(id);
@@ -175,57 +155,20 @@ export function AccountPane() {
       <div className="set-group" id="acctGroupSharing">
         <span className="set-label">Sharing</span>
         <div className="set-hint">
-          Folders and commands are private by default. Share your handle with someone so they can see yours, or share below to see someone
-          else's.
+          Folders and commands are private by default. Share with someone by e-mail so they can see yours; what others share with you shows up below.
         </div>
         <div className="set-group" style={{ marginTop: 10 }}>
-          <span className="set-label">Your handle</span>
-          <div className="acct-inline-row">
-            {!editingHandle ? (
-              <>
-                <code>{handleValue || '—'}</code>
-                <button type="button" className="btn btn-sm" onClick={() => setEditingHandle(true)}>Change</button>
-              </>
-            ) : (
-              <>
-                <input
-                  className="set-input"
-                  type="text"
-                  style={{ maxWidth: 180 }}
-                  placeholder="your-handle"
-                  autoComplete="off"
-                  value={handleValue}
-                  onChange={e => setHandleValue(e.target.value)}
-                />
-                <button type="button" className="btn btn-sm btn-primary" disabled={handleBusy} onClick={saveHandle}>Save</button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={() => {
-                    setHandleValue(auth.me?.handle || '');
-                    setHandleError('');
-                    setEditingHandle(false);
-                  }}
-                >
-                  Cancel
-                </button>
-              </>
-            )}
-          </div>
-          {handleError && <div className="set-hint" style={{ color: 'var(--red)' }}>{handleError}</div>}
-        </div>
-        <div className="set-group" style={{ marginTop: 14 }}>
           <span className="set-label">Share with someone</span>
           <div className="acct-inline-row">
             <input
               className="set-input"
-              type="text"
-              style={{ maxWidth: 180 }}
-              placeholder="Their handle"
-              ref={shareHandleRef}
+              type="email"
+              style={{ maxWidth: 240 }}
+              placeholder="Their e-mail"
+              ref={shareEmailRef}
               autoComplete="off"
-              value={shareHandle}
-              onChange={e => setShareHandle(e.target.value)}
+              value={shareEmail}
+              onChange={e => setShareEmail(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Enter') submitNewShare();
               }}
@@ -254,7 +197,7 @@ export function AccountPane() {
             <table className="audit-log-table">
               <thead>
                 <tr>
-                  <th>Handle</th>
+                  <th>Email</th>
                   <th>Folders</th>
                   <th>Commands</th>
                   <th></th>
@@ -276,11 +219,11 @@ export function AccountPane() {
                 ) : (
                   shares?.given.map(s => (
                     <tr key={s.id}>
-                      <td>{s.grantee_handle}</td>
+                      <td>{s.grantee_email}</td>
                       <td>{s.share_folders ? '✓' : '—'}</td>
                       <td>{s.share_commands ? '✓' : '—'}</td>
                       <td>
-                        <button type="button" className="btn btn-sm" onClick={() => revokeShare(s.id, s.grantee_handle)}>
+                        <button type="button" className="btn btn-sm" onClick={() => revokeShare(s.id, s.grantee_email)}>
                           Revoke
                         </button>
                       </td>
@@ -300,7 +243,7 @@ export function AccountPane() {
             <table className="audit-log-table">
               <thead>
                 <tr>
-                  <th>Handle</th>
+                  <th>Email</th>
                   <th>Folders</th>
                   <th>Commands</th>
                 </tr>
@@ -321,7 +264,7 @@ export function AccountPane() {
                 ) : (
                   shares?.received.map(s => (
                     <tr key={s.id}>
-                      <td>{s.grantor_handle}</td>
+                      <td>{s.grantor_email}</td>
                       <td>{s.share_folders ? '✓' : '—'}</td>
                       <td>{s.share_commands ? '✓' : '—'}</td>
                     </tr>

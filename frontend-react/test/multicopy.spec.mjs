@@ -48,7 +48,7 @@ async function withPage(browser, isAdmin, fn) {
     const req = route.request();
     const p = new URL(req.url()).pathname;
     const json = d => route.fulfill({ json: d });
-    if (p === '/api/me') return json({ username: 'admin', handle: 'admin', role: isAdmin ? 'super_admin' : 'user', isAdmin, isSuperAdmin: isAdmin, authMethod: 'local' });
+    if (p === '/api/me') return json({ username: 'admin', role: isAdmin ? 'super_admin' : 'user', isAdmin, isSuperAdmin: isAdmin, authMethod: 'local' });
     if (p === '/api/catalogs') return json(CATALOGS);
     if (p === '/api/commands') return json(commands);
     const m = p.match(/^\/api\/commands\/(\d+)$/);

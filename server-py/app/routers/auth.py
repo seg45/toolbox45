@@ -17,7 +17,6 @@ from pydantic import BaseModel
 from .. import oauth, setup
 from ..auth_events import log_auth_event
 from ..db import get_pool
-from ..handles import generate_unique_handle
 from ..login_guard import client_ip, login_limiter
 from ..security import burn_verify, hash_password_async, verify_password_async
 from ..password_policy import password_problem
@@ -227,11 +226,10 @@ async def register(payload: RegisterRequest, request: Request) -> dict:
         )
 
     async with pool.acquire() as conn:
-        handle = await generate_unique_handle(conn, normalized_email)
         await conn.execute(
-            """INSERT INTO users (username, password_hash, role, is_local, disabled, created_by, auth_provider, handle)
-               VALUES ($1, $2, 'user', 1, 1, 'self-registration', 'local', $3)""",
-            normalized_email, await hash_password_async(password), handle,
+            """INSERT INTO users (username, password_hash, role, is_local, disabled, created_by, auth_provider)
+               VALUES ($1, $2, 'user', 1, 1, 'self-registration', 'local')""",
+            normalized_email, await hash_password_async(password),
         )
         # ensureDefaultFolder(): toda conta nova ja nasce com a pasta
         # "Favorites" -- ON CONFLICT DO NOTHING pelo mesmo motivo do Node

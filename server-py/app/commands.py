@@ -119,19 +119,9 @@ async def find_command(command_id: Any) -> Optional[dict]:
     return dict(row) if row else None
 
 
-async def get_handle_map() -> dict:
-    pool = get_pool()
-    rows = await pool.fetch("SELECT username, handle FROM users")
-    return {r["username"]: r["handle"] for r in rows}
-
-
 def mask_username_for_viewer(raw_username: Optional[str], viewer_ctx: Optional[dict]) -> Optional[str]:
-    if not raw_username or raw_username == "System":
-        return raw_username
-    if not viewer_ctx or viewer_ctx.get("is_admin") or raw_username == viewer_ctx.get("username"):
-        return raw_username
-    handle_map = viewer_ctx.get("handle_map") or {}
-    return handle_map.get(raw_username) or raw_username
+    # Sem mascaramento: o dono de um item e sempre identificado pelo e-mail.
+    return raw_username
 
 
 def _shape_line(l: dict) -> dict:

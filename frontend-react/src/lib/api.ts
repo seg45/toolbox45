@@ -23,7 +23,6 @@ export interface SetupStatus {
 export interface MeResponse {
   username?: string;
   upn?: string;
-  handle?: string;
   role?: string;
   isAdmin?: boolean;
   isSuperAdmin?: boolean;
@@ -172,19 +171,6 @@ export async function logout(): Promise<void> {
     // best-effort — mesmo padrão do original (authLogout() em js/auth.js):
     // quem chama redireciona pra login.html de qualquer forma.
   }
-}
-
-export async function updateHandle(handle: string): Promise<{ handle: string }> {
-  const res = await fetch('/api/me/handle', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ handle }),
-  });
-  if (!res.ok) {
-    const body = await parseErrorBody(res);
-    throw new ApiError(res.status, body.message || 'Failed to update handle.', body.error);
-  }
-  return res.json();
 }
 
 export async function updatePassword(currentPassword: string, newPassword: string): Promise<void> {

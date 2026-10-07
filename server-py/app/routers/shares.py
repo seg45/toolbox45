@@ -1,6 +1,6 @@
 """GET/POST/DELETE /api/shares -- porta 1:1 de server/index.js (~linhas
 1441-1512). Compartilhamento direcional (grantor -> grantee) identificado
-por *handle* (nao username), com dois toggles independentes
+por e-mail (username), com dois toggles independentes
 (share_folders/share_commands) e UPSERT via ON CONFLICT -- sem fluxo de
 aceite (o grantee nunca precisa confirmar).
 """
@@ -11,7 +11,6 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from ..audit import log_audit
 from ..db import get_pool
 from ..deps import CurrentUser, require_user
-from ..handles import normalize_handle
 
 router = APIRouter(prefix="/api/shares", tags=["shares"])
 
@@ -22,15 +21,15 @@ async def list_shares(user: CurrentUser = Depends(require_user)):
     pool = get_pool()
     given, received = await asyncio.gather(
         pool.fetch(
-            """SELECT s.id, s.share_folders, s.share_commands, s.created_at, s.updated_at, u.handle AS grantee_handle
+            """SELECT s.id, s.share_folders, s.share_commands, s.created_at, s.updated_at, u.username AS grantee_email
                FROM shares s JOIN users u ON u.username = s.grantee_username
-               WHERE s.grantor_username = $1 ORDER BY u.handle""",
+               WHERE s.grantor_username = $1 ORDER BY u.username""",
             username,
         ),
         pool.fetch(
-            """SELECT s.id, s.share_folders, s.share_commands, s.created_at, s.updated_at, u.handle AS grantor_handle
+            """SELECT s.id, s.share_folders, s.share_commands, s.created_at, s.updated_at, u.username AS grantor_email
                FROM shares s JOIN users u ON u.username = s.grantor_username
-               WHERE s.grantee_username = $1 ORDER BY u.handle""",
+               WHERE s.grantee_username = $1 ORDER BY u.username""",
             username,
         ),
     )
@@ -40,11 +39,11 @@ async def list_shares(user: CurrentUser = Depends(require_user)):
 @router.post("", status_code=201)
 async def create_share(body: dict = Body(default_factory=dict), user: CurrentUser = Depends(require_user)):
     username = user["username"]
-    handle = normalize_handle(body.get("handle"))
+    email = str(body.get("email") or "").strip().lower()
     share_folders = bool(body.get("share_folders"))
     share_commands = bool(body.get("share_commands"))
-    if not handle:
-        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": '"handle" is required'})
+    if not email:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": '"email" is required'})
     if not share_folders and not share_commands:
         raise HTTPException(
             status_code=400,
@@ -52,9 +51,9 @@ async def create_share(body: dict = Body(default_factory=dict), user: CurrentUse
         )
 
     pool = get_pool()
-    target = await pool.fetchrow("SELECT username, handle FROM users WHERE handle = $1", handle)
+    target = await pool.fetchrow("SELECT username FROM users WHERE lower(username) = $1", email)
     if not target:
-        raise HTTPException(status_code=404, detail={"error": "not_found", "message": f'No user found with handle "{handle}"'})
+        raise HTTPException(status_code=404, detail={"error": "not_found", "message": f'No user found with e-mail "{email}"'})
     if target["username"] == username:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "You cannot share with yourself"})
 
@@ -67,11 +66,11 @@ async def create_share(body: dict = Body(default_factory=dict), user: CurrentUse
         username, target["username"], share_folders, share_commands,
     )
     await log_audit(
-        username, "update", "share", str(row["id"]), target["handle"],
+        username, "update", "share", str(row["id"]), target["username"],
         f"Folders: {'on' if share_folders else 'off'}, Commands: {'on' if share_commands else 'off'}",
     )
     result = dict(row)
-    result["grantee_handle"] = target["handle"]
+    result["grantee_email"] = target["username"]
     return result
 
 
@@ -80,11 +79,11 @@ async def delete_share(share_id: int, user: CurrentUser = Depends(require_user))
     username = user["username"]
     pool = get_pool()
     before = await pool.fetchrow(
-        """SELECT s.id, u.handle FROM shares s JOIN users u ON u.username = s.grantee_username
+        """SELECT s.id, u.username FROM shares s JOIN users u ON u.username = s.grantee_username
            WHERE s.id = $1 AND s.grantor_username = $2""",
         share_id, username,
     )
     if not before:
         raise HTTPException(status_code=404, detail={"error": "not_found", "message": f"Share '{share_id}' not found"})
     await pool.execute("DELETE FROM shares WHERE id = $1 AND grantor_username = $2", share_id, username)
-    await log_audit(username, "delete", "share", str(share_id), before["handle"])
+    await log_audit(username, "delete", "share", str(share_id), before["username"])

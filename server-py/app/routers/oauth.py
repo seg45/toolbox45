@@ -20,7 +20,6 @@ from fastapi.responses import PlainTextResponse, RedirectResponse
 
 from .. import oauth
 from ..db import get_pool
-from ..handles import generate_unique_handle
 from ..auth_events import log_auth_event
 from ..session import create_session, request_is_https, set_session_cookie
 
@@ -119,12 +118,11 @@ async def _provision_or_login(email: str, provider: str, created_by: str):
         return ("login", user)
 
     async with pool.acquire() as conn:
-        handle = await generate_unique_handle(conn, email)
         await conn.execute(
-            """INSERT INTO users (username, role, is_local, disabled, created_by, auth_provider, handle)
-               VALUES ($1, 'user', 0, 1, $2, $3, $4)
+            """INSERT INTO users (username, role, is_local, disabled, created_by, auth_provider)
+               VALUES ($1, 'user', 0, 1, $2, $3)
                ON CONFLICT (username) DO NOTHING""",
-            email, created_by, provider, handle,
+            email, created_by, provider,
         )
         new_user = await conn.fetchrow("SELECT * FROM users WHERE username = $1", email)
         if not new_user:

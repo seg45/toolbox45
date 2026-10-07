@@ -91,7 +91,7 @@ await withPage(browser, async page => {
     loginCalled = true;
     route.fulfill({ json: { username: 'admin', role: 'super_admin' } });
   });
-  await page.route('**/api/me', route => route.fulfill({ json: { authMethod: 'local', isAdmin: true, isSuperAdmin: true, handle: 'admin' } }));
+  await page.route('**/api/me', route => route.fulfill({ json: { authMethod: 'local', isAdmin: true, isSuperAdmin: true } }));
   await page.goto(`${BASE}/login.html`);
   await page.fill('input[autocomplete="username"]', 'admin');
   await page.fill('input[autocomplete="current-password"]', 'senha-teste');

@@ -19,7 +19,6 @@ import circular: db.py e quem chama run_migrations()).
 import logging
 import re
 
-from .handles import generate_unique_handle
 
 logger = logging.getLogger("toolbox45")
 
@@ -287,18 +286,10 @@ async def run_migrations(pool) -> None:
     except Exception as err:  # noqa: BLE001
         logger.error("[db] Falha ao rodar migrações: %s", err)
 
-    # --- Bloco 2: users.handle + tabela `shares` ------------------------------
-    # ADD COLUMN nullable de proposito: instalacoes ja existentes ganham a
-    # coluna sem handle nenhum ainda; o backfill gera um handle unico para
-    # cada usuario que ainda nao tem um ANTES do indice unico ser criado.
+    # --- Bloco 2: tabela `shares` ---------------------------------------------
+    # (users.handle foi descontinuado: tudo e identificado pelo e-mail/username.
+    # A coluna e o indice antigos, se existirem, ficam intocados e sem uso.)
     try:
-        await pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS handle TEXT")
-        no_handle = await pool.fetch("SELECT username FROM users WHERE handle IS NULL")
-        for r in no_handle:
-            username = r["username"]
-            handle = await generate_unique_handle(pool, username)
-            await pool.execute("UPDATE users SET handle = $1 WHERE username = $2", handle, username)
-        await pool.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle ON users(handle)")
         await pool.execute("""
       CREATE TABLE IF NOT EXISTS shares (
         id               SERIAL PRIMARY KEY,
@@ -314,7 +305,7 @@ async def run_migrations(pool) -> None:
     """)
         await pool.execute("CREATE INDEX IF NOT EXISTS idx_shares_grantee ON shares(grantee_username)")
     except Exception as err:  # noqa: BLE001
-        logger.error("[db] Falha ao migrar users.handle / criar tabela shares: %s", err)
+        logger.error("[db] Falha ao criar tabela shares: %s", err)
 
     # --- Bloco 3: environments.system/vendor ---------------------------------
     # Nullable no ADD COLUMN de proposito (uma instalacao ja existente pode ter

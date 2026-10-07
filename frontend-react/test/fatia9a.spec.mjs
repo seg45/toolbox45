@@ -96,7 +96,7 @@ async function mockBase(page, { isAdmin = false, isSuperAdmin = false } = {}) {
     counters.me++;
     return route.fulfill({
       json: {
-        username: 'tester', upn: 'tester', handle: 'tester',
+        username: 'tester', upn: 'tester',
         role: isSuperAdmin ? 'super_admin' : isAdmin ? 'admin' : 'user',
         isAdmin, isSuperAdmin, authMethod: 'local',
       },

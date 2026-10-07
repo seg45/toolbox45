@@ -280,7 +280,7 @@
 
 /* Aba "User account" (data-pane="account") — Password + Sharing. Pedido do
    usuário: "organizar melhor o layout dessa página" — antes cada linha
-   (handle, novo compartilhamento) reaproveitava .settings-action-row
+   (e-mail, novo compartilhamento) reaproveitava .settings-action-row
    (flex-direction:column + botões full-width, pensado pra listas de botões
    empilhados como Export/Import acima), o que deixava tudo centralizado e
    os botões (Change/Share) esticados a largura toda. .acct-inline-row é o

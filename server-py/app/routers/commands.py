@@ -24,8 +24,8 @@ from ..deps import CurrentUser, require_user, role_rank
 router = APIRouter(prefix="/api/commands", tags=["commands"])
 
 
-def _viewer_ctx(username: str, is_admin: bool, handle_map: Optional[dict]) -> dict:
-    return {"username": username, "is_admin": is_admin, "handle_map": handle_map}
+def _viewer_ctx(username: str, is_admin: bool) -> dict:
+    return {"username": username, "is_admin": is_admin}
 
 
 @router.get("")
@@ -108,8 +108,7 @@ async def list_commands(
     pool = get_pool()
     rows = await pool.fetch(sql, *params)
 
-    handle_map = None if is_admin else await cmds.get_handle_map()
-    viewer_ctx = _viewer_ctx(username, is_admin, handle_map)
+    viewer_ctx = _viewer_ctx(username, is_admin)
     return await cmds.shape_commands_batch([dict(r) for r in rows], username, viewer_ctx)
 
 
@@ -140,8 +139,7 @@ async def get_command(command_id: int, user: CurrentUser = Depends(require_user)
         if not vis:
             raise HTTPException(status_code=404, detail={"error": "not_found", "message": f"Command '{command_id}' not found"})
 
-    handle_map = None if is_admin else await cmds.get_handle_map()
-    return await cmds.shape_command(row, username, _viewer_ctx(username, is_admin, handle_map))
+    return await cmds.shape_command(row, username, _viewer_ctx(username, is_admin))
 
 
 @router.post("", status_code=201)
@@ -191,8 +189,8 @@ async def create_command(
     row = await cmds.find_command(command_id)
     # created_by === username sempre aqui (comando recem-criado pelo
     # proprio usuario) -- mask_username_for_viewer nunca mascara a propria
-    # criacao, entao is_admin/handle_map nao importam neste caso.
-    return await cmds.shape_command(row, username, _viewer_ctx(username, False, None))
+    # criacao, entao is_admin nao importa neste caso.
+    return await cmds.shape_command(row, username, _viewer_ctx(username, False))
 
 
 @router.put("/{command_id}")

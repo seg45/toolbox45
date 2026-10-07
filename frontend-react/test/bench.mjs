@@ -31,7 +31,7 @@ for (const n of process.argv.slice(2).map(Number)) {
     window.__lt = 0; try { new PerformanceObserver(l => l.getEntries().forEach(e => (window.__lt += e.duration))).observe({ entryTypes: ['longtask'] }); } catch {}
   });
   const cmds = make(n);
-  await page.route('**/api/me', r => r.fulfill({ json: { username: 'admin', upn: 'admin', handle: 'admin', role: 'super_admin', isAdmin: true, isSuperAdmin: true, authMethod: 'local' } }));
+  await page.route('**/api/me', r => r.fulfill({ json: { username: 'admin', upn: 'admin', role: 'super_admin', isAdmin: true, isSuperAdmin: true, authMethod: 'local' } }));
   await page.route('**/api/catalogs', r => r.fulfill({ json: CATALOGS }));
   await page.route('**/api/commands', r => r.fulfill({ json: cmds }));
   await page.route('**/api/folders**', r => r.fulfill({ json: [] }));

@@ -35,7 +35,7 @@ pasta (reaproveita sanitize_note_html(), ja portado na fatia 4).
 Fatia 6 (links + compartilhamento + grupos): GET/POST/PUT/DELETE
 /api/links* (app/routers/links.py, self-service, sem admin bypass),
 GET/POST/DELETE /api/shares (app/routers/shares.py, direcional por
-*handle*, dois toggles independentes share_folders/share_commands via
+e-mail, dois toggles independentes share_folders/share_commands via
 UPSERT) e GET/POST/PUT/DELETE /api/groups* (app/routers/groups.py, 6
 rotas, todas atras de require_super_admin -- grupos sao simetricos e
 tudo-ou-nada, membership N:N via group_members).
@@ -46,8 +46,7 @@ Fatia 7 (administracao de usuarios): GET/POST/PUT/DELETE /api/users*
 fixos, nunca pode ser excluida) e ha uma guarda de lockout
 (count_enabled_admins) que recusa remover o ultimo admin/super_admin
 habilitado, via mudanca de role, disabled ou exclusao. Reaproveita
-EMAIL_RE (app/routers/auth.py), hash_password (app/security.py) e
-generate_unique_handle (app/handles.py) ja portados nas fatias 2/4.
+EMAIL_RE (app/routers/auth.py), hash_password (app/security.py) ja portados nas fatias 2/4.
 
 Fatia 8 (catalogo administrativo): GET /api/catalogs (leitura em lote, so
 require_user) + CRUD de vendors/systems/versions/environments/topics/

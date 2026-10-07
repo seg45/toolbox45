@@ -151,7 +151,7 @@ def todas_contagens(nome):
 
 # ── DDL legado minimo embutido (so o que cada cenario precisa) ──────────────
 def ddl_legado_users() -> str:
-    """users de uma era ANTIGA: sem auth_provider, handle e approved_at."""
+    """users de uma era ANTIGA: sem auth_provider e approved_at."""
     return """
     CREATE TABLE users (
       username      TEXT PRIMARY KEY,
@@ -257,9 +257,9 @@ def test_banco_novo_semeia_catalogos_e_nao_cria_nenhum_usuario(banco):
     # Indices criados em run_migrations()
     idx = {r["indexname"]: r["indexdef"] for r in sql(
         banco, "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public'")}
-    for nome in ("idx_users_handle", "idx_environments_system", "idx_folders_parent", "idx_shares_grantee"):
+    for nome in ("idx_environments_system", "idx_folders_parent", "idx_shares_grantee"):
         assert nome in idx, f"indice {nome} nao foi criado"
-    assert idx["idx_users_handle"].startswith("CREATE UNIQUE INDEX")
+    assert "idx_users_handle" not in idx  # handle descontinuado
 
     # Banco novo ja nasce com commands.id inteiro (sequencia padrao do SERIAL)
     assert sql(banco, "SELECT pg_get_serial_sequence('commands', 'id')", fetch="val") == "public.commands_id_seq"
@@ -291,8 +291,8 @@ def test_init_db_duas_vezes_e_idempotente(banco):
 def test_boot_nao_recria_nem_altera_usuarios_existentes(banco):
     boot()
     novo = hash_password("nova-senha-forte")
-    sql(banco, """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at)
-                  VALUES ('dono@x.com', $1, 'super_admin', 1, 'setup', 'local', 'dono', NOW())""", novo, fetch="exec")
+    sql(banco, """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, approved_at)
+                  VALUES ('dono@x.com', $1, 'super_admin', 1, 'setup', 'local', NOW())""", novo, fetch="exec")
     boot()
     assert sql(banco, "SELECT password_hash FROM users WHERE username = 'dono@x.com'", fetch="val") == novo
     assert sql(banco, "SELECT COUNT(*) FROM users WHERE username = 'admin'", fetch="val") == 0  # 'admin' nunca volta
@@ -341,8 +341,8 @@ def test_esvaziar_tabela_inteira_reativa_o_seed(banco):
 # ════════════════════════════════════════════════
 def test_usuario_pendente_continua_pendente_apos_dois_boots(banco):
     boot()
-    sql(banco, """INSERT INTO users (username, password_hash, role, is_local, disabled, created_by, auth_provider, handle)
-                  VALUES ('pend@x.com', $1, 'user', 1, 1, 'self-registration', 'local', 'pend')""",
+    sql(banco, """INSERT INTO users (username, password_hash, role, is_local, disabled, created_by, auth_provider)
+                  VALUES ('pend@x.com', $1, 'user', 1, 1, 'self-registration', 'local')""",
         hash_password("senha123"), fetch="exec")
     assert sql(banco, "SELECT approved_at FROM users WHERE username = 'pend@x.com'", fetch="val") is None
 
@@ -354,7 +354,7 @@ def test_usuario_pendente_continua_pendente_apos_dois_boots(banco):
 
 
 def test_banco_legado_sem_approved_at_aprova_existentes_uma_vez(banco):
-    # users legado: sem approved_at (nem handle/auth_provider)
+    # users legado: sem approved_at (nem auth_provider)
     sql(banco, ddl_legado_users(), fetch="exec")
     sql(banco, """INSERT INTO users (username, password_hash, role, is_local, disabled, created_by)
                   VALUES ('antigo1@x.com', NULL, 'user', 1, 0, 'admin'),
@@ -367,8 +367,8 @@ def test_banco_legado_sem_approved_at_aprova_existentes_uma_vez(banco):
     assert sql(banco, "SELECT approved_at = created_at FROM users WHERE username = 'antigo1@x.com'", fetch="val") is True
 
     # Um usuario pendente criado DEPOIS (a coluna ja existe) nao e aprovado no boot seguinte
-    sql(banco, """INSERT INTO users (username, role, is_local, disabled, created_by, auth_provider, handle)
-                  VALUES ('novo@x.com', 'user', 1, 1, 'self-registration', 'local', 'novo')""", fetch="exec")
+    sql(banco, """INSERT INTO users (username, role, is_local, disabled, created_by, auth_provider)
+                  VALUES ('novo@x.com', 'user', 1, 1, 'self-registration', 'local')""", fetch="exec")
     boot()
     assert sql(banco, "SELECT approved_at FROM users WHERE username = 'novo@x.com'", fetch="val") is None
     assert sql(banco, "SELECT disabled FROM users WHERE username = 'novo@x.com'", fetch="val") == 1
@@ -385,42 +385,23 @@ def test_auth_provider_backfill_em_banco_legado(banco):
 
 
 # ════════════════════════════════════════════════
-# 5) Backfill de handle
+# 5) handle descontinuado
 # ════════════════════════════════════════════════
-def test_backfill_de_handle_com_colisao_e_indice_unico(banco):
+def test_boot_nao_cria_coluna_nem_indice_de_handle(banco):
+    boot()
+    cols = {r["column_name"] for r in sql(banco, "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")}
+    assert "handle" not in cols
+    assert sql(banco, "SELECT COUNT(*) FROM pg_indexes WHERE indexname = 'idx_users_handle'", fetch="val") == 0
+
+
+def test_boot_nao_gera_handle_em_banco_legado(banco):
     sql(banco, ddl_legado_users(), fetch="exec")
-    # ordem de insercao = ordem fisica = ordem do SELECT sem ORDER BY do backfill
     sql(banco, """INSERT INTO users (username, role, is_local, created_by) VALUES
-                  ('ana@a.com', 'user', 1, 'admin'),
-                  ('ana@b.com', 'user', 1, 'admin'),
-                  ('Joao.Silva+tag@x.com', 'user', 1, 'admin'),
-                  ('a@x.com', 'user', 1, 'admin')""", fetch="exec")
-    assert "handle" not in {r["column_name"] for r in sql(banco, "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")}
-
+                  ('ana@a.com', 'user', 1, 'admin'), ('ana@b.com', 'user', 1, 'admin')""", fetch="exec")
     boot()
-    handles = {r["username"]: r["handle"] for r in sql(banco, "SELECT username, handle FROM users")}
-    assert handles["ana@a.com"] == "ana"
-    assert handles["ana@b.com"] == "ana-2"           # colisao -> sufixo -2
-    assert handles["Joao.Silva+tag@x.com"] == "joao.silva-tag"  # slugify: caracteres invalidos viram '-'
-    assert handles["a@x.com"] == "user-a"            # menos de 2 caracteres -> prefixo user-
-    assert len(set(handles.values())) == len(handles)  # todos distintos
-
-    # indice UNICO existe de verdade (duplicar handle e rejeitado)
-    indexdef = sql(banco, "SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_users_handle'", fetch="val")
-    assert indexdef.startswith("CREATE UNIQUE INDEX")
-    with pytest.raises(asyncpg.UniqueViolationError):
-        sql(banco, "UPDATE users SET handle = 'ana' WHERE username = 'ana@b.com'", fetch="exec")
-
-
-def test_backfill_de_handle_so_toca_quem_nao_tem(banco):
-    boot()
-    sql(banco, """INSERT INTO users (username, role, is_local, created_by, auth_provider, handle, approved_at)
-                  VALUES ('ana@a.com', 'user', 1, 'admin', 'local', 'apelido-escolhido', NOW()),
-                         ('ana@b.com', 'user', 1, 'admin', 'local', NULL, NOW())""", fetch="exec")
-    boot()
-    handles = {r["username"]: r["handle"] for r in sql(banco, "SELECT username, handle FROM users")}
-    assert handles["ana@a.com"] == "apelido-escolhido"  # nunca sobrescreve um handle existente
-    assert handles["ana@b.com"] == "ana"                # o slug livre
+    cols = {r["column_name"] for r in sql(banco, "SELECT column_name FROM information_schema.columns WHERE table_name = 'users'")}
+    assert "handle" not in cols
+    assert sql(banco, "SELECT COUNT(*) FROM users", fetch="val") == 2
 
 
 # ════════════════════════════════════════════════
@@ -657,13 +638,13 @@ def test_erro_num_bloco_e_logado_e_blocos_seguintes_rodam(banco, monkeypatch, ca
     sql(banco, "DELETE FROM parameters WHERE key = 'host'", fetch="exec")  # sera reinserido pelo Bloco 4 (posterior)
     sql(banco, "DELETE FROM shares", fetch="exec")
 
-    _injetar_falha(monkeypatch, "ALTER TABLE users ADD COLUMN IF NOT EXISTS handle TEXT")
+    _injetar_falha(monkeypatch, "CREATE TABLE IF NOT EXISTS shares")
     with caplog.at_level(logging.INFO, logger="toolbox45"):
         boot()  # nao propaga a excecao
 
     erros = [r for r in caplog.records if r.name == "toolbox45" and r.levelno == logging.ERROR]
     msgs = [r.getMessage() for r in erros]
-    assert any("Falha ao migrar users.handle / criar tabela shares" in m and "falha injetada" in m for m in msgs), msgs
+    assert any("Falha ao criar tabela shares" in m and "falha injetada" in m for m in msgs), msgs
     # so o bloco 2 falhou: nenhum outro erro de bloco foi logado
     assert len(erros) == 1, msgs
     # blocos POSTERIORES ainda rodaram: parametro fixo garantido (Bloco 4) e seeds
@@ -673,8 +654,8 @@ def test_erro_num_bloco_e_logado_e_blocos_seguintes_rodam(banco, monkeypatch, ca
 def test_erro_aborta_so_o_resto_do_mesmo_bloco(banco, monkeypatch, caplog):
     boot()
     # conta 'admin' LEGADA (instalacao antiga) rebaixada: o boot normal a reforca como super_admin
-    sql(banco, """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at)
-                  VALUES ('admin', $1, 'admin', 1, 'system', 'local', 'admin', NOW())""", hash_password("admin"), fetch="exec")
+    sql(banco, """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, approved_at)
+                  VALUES ('admin', $1, 'admin', 1, 'system', 'local', NOW())""", hash_password("admin"), fetch="exec")
     sql(banco, "DELETE FROM parameters WHERE key = 'host'", fetch="exec")
 
     # 1a instrucao do Bloco 1: o RESTO do bloco (incluindo o reforco de super_admin) nao roda...

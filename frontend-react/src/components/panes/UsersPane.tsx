@@ -178,7 +178,6 @@ export function UsersPane() {
                           <Avatar name={u.username} />
                           <div className="person-text">
                             <span className="person-name">{u.username}</span>
-                            {u.handle && u.handle !== u.username && <span className="person-sub">@{u.handle}</span>}
                           </div>
                         </div>
                       </td>

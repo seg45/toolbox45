@@ -60,7 +60,7 @@ async function newPage(browser, withCsp) {
     window.__csp = [];
     document.addEventListener('securitypolicyviolation', e => window.__csp.push(`${e.violatedDirective} ${e.blockedURI}`));
   });
-  await page.route('**/api/me', r => r.fulfill({ json: { username: 'admin', upn: 'admin', handle: 'admin', role: 'super_admin', isAdmin: true, isSuperAdmin: true, authMethod: 'local' } }));
+  await page.route('**/api/me', r => r.fulfill({ json: { username: 'admin', upn: 'admin', role: 'super_admin', isAdmin: true, isSuperAdmin: true, authMethod: 'local' } }));
   await page.route('**/api/catalogs', r => r.fulfill({ json: CATALOGS }));
   await page.route('**/api/commands', r => r.fulfill({ json: cmds }));
   await page.route('**/api/folders**', r => r.fulfill({ json: [] }));

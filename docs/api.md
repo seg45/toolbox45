@@ -70,8 +70,7 @@ o acesso de cada rota é `server-py/app/deps.py` (`require_user`, `require_admin
   `POST /api/backups/:filename/restore`; um backup carrega os hashes de senha e restaurar
   sobrescreve a tabela `users`), o **certificado SSL/TLS** (`/api/system/ssl-certificate*`,
   inclui a chave privada) e a **configuração OAuth** (`/api/system/oauth*`, inclui o client
-  secret) e o **registro de acessos** (`GET /api/auth-events`). API keys nunca têm
-  `super_admin`, então também recebem `403` nessas rotas.
+  secret). API keys nunca têm `super_admin`, então também recebem `403` nessas rotas.
   Nas seções abaixo, esses endpoints vêm marcados **(super_admin)**.
 
 **Exemplo (curl, API key):**
@@ -122,9 +121,7 @@ tópico).
 usuário comum só recebe comandos de referência (`created_by` nulo ou `"System"`), os
 PRÓPRIOS comandos, e os de quem compartilhou comandos com ele (`share_commands: true`
 numa concessão em `/api/shares`). Admins continuam recebendo todos, sem exceção. O
-`created_by`/`modified_by` de um comando de OUTRA pessoa vem trocado pelo **handle**
-dela, nunca o username real (ver `GET /api/me`/`/api/shares` abaixo) — exceto para
-admins, que continuam vendo o username real de qualquer um.
+`created_by`/`modified_by` de um comando é sempre o e-mail (username) de quem o criou/alterou.
 
 Filtros opcionais via query string — todos combináveis (AND):
 
@@ -276,8 +273,7 @@ usuário que está fazendo a requisição.
   **Compartilhamento entre usuários** abaixo): as PRÓPRIAS pastas, mais as de quem
   compartilhou pastas (`share_folders: true`) com quem pediu; admins continuam
   recebendo as de todo mundo, sem exceção. Cada pasta ganha um campo extra
-  `"username"` — para uma pasta de outra pessoa, esse campo vem trocado pelo
-  **handle** dela (nunca o username real), exceto para admins. Usado pelo seletor de
+  `"username"` — o e-mail do dono da pasta. Usado pelo seletor de
   escopo de pastas "All"/usuário específico dentro de Folders — ver `docs/README.md`/
   comentários em `frontend-react/src/components/commands/FolderScopeDropdown.tsx`.
 - `POST /api/folders` — corpo `{ "name": "..." }`. `201` com a pasta criada
@@ -365,17 +361,14 @@ Identifica o chamador atual, seu papel e como foi autenticado. Exige sessão ou 
   "role": "admin",
   "isAdmin": true,
   "isSuperAdmin": false,
-  "authMethod": "google",
-  "handle": "rsilva"
+  "authMethod": "google"
 }
 ```
 `upn` espelha `username` (mantido só por compatibilidade com respostas antigas — quando
 a identificação vinha do Windows/NTLM, `upn` era resolvido separadamente via Active
 Directory). `authMethod` é `"local"` | `"google"` | `"microsoft"` | `"api_key"`. Para chamadas com API
 key, `username` é `api:<nome da key>`, `upn` espelha o mesmo valor e `role`/`isAdmin`
-sempre vêm como admin (ver seção Permissões acima). `handle` é o apelido de
-compartilhamento do usuário (ver seção **Compartilhamento entre usuários** abaixo);
-`null` para chamadas via API key.
+sempre vêm como admin (ver seção Permissões acima).
 
 ---
 
@@ -387,31 +380,22 @@ unauthorized` se a senha atual estiver errada; `400 validation_error` se a nova 
 inválida. Errar a senha atual conta para o bloqueio (5 por (IP, usuário), 10 por usuário e 30
 por IP em 15 min): depois disso `429 too_many_attempts` com `Retry-After`.
 
-## Compartilhamento entre usuários (`/api/me/handle`, `/api/shares`)
+## Compartilhamento entre usuários (`/api/shares`)
 
 Por padrão, pastas e comandos de um usuário são **privados**: os demais só os veem se
-o dono compartilhar explicitamente. Cada usuário tem um **handle** — um apelido único,
-gerado automaticamente na criação da conta e trocável livremente depois — usado para
-identificá-lo nesse compartilhamento **sem expor o username real** (que é o e-mail, no
-caso de contas Google). Admins continuam vendo as pastas/comandos de todo mundo sempre,
-independente de qualquer concessão aqui (ver **Permissões** acima).
-
-### `PUT /api/me/handle`
-Troca o próprio handle. Corpo `{ "handle": "novo-handle" }` — minúsculas, 2 a 32
-caracteres, `[a-z0-9._-]`, começando/terminando em letra ou número (o servidor já
-normaliza para minúsculas antes de validar). `200` com `{ "handle": "novo-handle" }`.
-`400 validation_error` se o formato for inválido. `409 conflict` se já estiver em uso
-por outra conta (handles são únicos globalmente).
+o dono compartilhar explicitamente. O outro usuário é identificado pelo **e-mail**
+(username da conta; não há apelido). Admins continuam vendo as pastas/comandos de todo
+mundo sempre, independente de qualquer concessão aqui (ver **Permissões** acima).
 
 ### `GET /api/shares`
 Lista as concessões do usuário atual, nos dois sentidos:
 ```json
 {
   "given": [
-    { "id": 1, "share_folders": true, "share_commands": false, "created_at": "...", "updated_at": "...", "grantee_handle": "jsilva" }
+    { "id": 1, "share_folders": true, "share_commands": false, "created_at": "...", "updated_at": "...", "grantee_email": "jsilva@example.com" }
   ],
   "received": [
-    { "id": 4, "share_folders": true, "share_commands": true, "created_at": "...", "updated_at": "...", "grantor_handle": "mcosta" }
+    { "id": 4, "share_folders": true, "share_commands": true, "created_at": "...", "updated_at": "...", "grantor_email": "mcosta@example.com" }
   ]
 }
 ```
@@ -419,17 +403,17 @@ Lista as concessões do usuário atual, nos dois sentidos:
 (só leitura aqui — quem revoga é sempre o grantor).
 
 ### `POST /api/shares`
-Cria ou atualiza (UPSERT) uma concessão para o handle informado. Corpo:
+Cria ou atualiza (UPSERT) uma concessão para o e-mail informado. Corpo:
 ```json
-{ "handle": "jsilva", "share_folders": true, "share_commands": false }
+{ "email": "jsilva@example.com", "share_folders": true, "share_commands": false }
 ```
 Pelo menos um de `share_folders`/`share_commands` precisa ser `true`. Vale
 IMEDIATAMENTE — não há fluxo de aceite do outro lado. Chamar de novo com o mesmo
-`handle` só atualiza os toggles da concessão já existente (não duplica). `201` com a
-concessão criada/atualizada (inclui `grantee_handle`). `400 validation_error` se faltar
-`handle`, se os dois toggles vierem `false`, ou se `handle` for o do próprio usuário
+`email` só atualiza os toggles da concessão já existente (não duplica). `201` com a
+concessão criada/atualizada (inclui `grantee_email`). `400 validation_error` se faltar
+`email`, se os dois toggles vierem `false`, ou se `email` for o do próprio usuário
 (não dá para compartilhar consigo mesmo). `404 not_found` se não existir ninguém com
-esse handle.
+esse e-mail (a busca ignora maiúsculas/minúsculas).
 
 ### `DELETE /api/shares/:id`
 Revoga uma concessão que EU dei (só o grantor pode revogar a própria). `204`. `404
@@ -626,15 +610,12 @@ e-mail, configure o ID do tenant em Settings → System → OAuth. Depois disso:
 Lista todo usuário já visto pela aplicação (contas locais, Google ou Microsoft — `auth_provider`
 distingue). Nunca devolve `password_hash`.
 ```json
-[{ "username": "admin", "role": "super_admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system", "auth_provider": "local", "handle": "admin" },
- { "username": "jsilva@gmail.com", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": "google-oauth", "auth_provider": "google", "handle": "jsilva" }]
+[{ "username": "admin", "role": "super_admin", "is_local": 1, "disabled": 0, "created_at": "...", "created_by": "system", "auth_provider": "local" },
+ { "username": "jsilva@gmail.com", "role": "user", "is_local": 0, "disabled": 0, "created_at": "...", "created_by": "google-oauth", "auth_provider": "google" }]
 ```
 Instalações antigas (de antes do login do Windows/NTLM ser removido) podem ainda listar
 contas com `auth_provider: "ntlm"` — nunca fazem login (não têm senha nem vínculo com
 Google); um admin pode desabilitá-las/excluí-las quando não forem mais necessárias.
-`handle` é o apelido de compartilhamento da conta (ver **Compartilhamento entre
-usuários** acima) — aqui, como em toda esta seção admin-only, vem sempre como o
-handle de verdade (nunca mascarado).
 
 ### `POST /api/users` — **(super_admin)**
 Cria uma conta **local** — corpo `{ "username", "password" (8 a 256 caracteres, diferente do e-mail), "role"? }`
@@ -669,35 +650,6 @@ mais recente primeiro, limite de 1000 linhas.
 [{ "id": 42, "ts": "2026-08-04T12:00:00.000Z", "username": "rsilva", "action": "update", "command_id": "fwmonitor", "command_name": "fw monitor" }]
 ```
 `action` é `create` | `update` | `delete`.
-
----
-
-## Registro de acessos (`GET /api/auth-events`) — **(super_admin)**
-Quem entrou, quem errou a senha e quem foi bloqueado — separado do audit log de comandos
-(tabela própria `auth_events`, retenção de **180 dias**, teto de 200 000 linhas; a limpeza
-roda sozinha a cada ~10 min). Mais recente primeiro. Na UI: Configurações → Database →
-**View access log**.
-
-Query: `limit` (1–1000, padrão 200), `event` (um dos valores abaixo), `username`
-(exato) e `hours` (só os últimos N horas). Valor inválido → `400 validation_error`.
-```json
-[{ "id": 913, "ts": "2026-10-06T14:02:11.000Z", "event": "login_failed", "username": "ana@empresa.com",
-   "ip": "203.0.113.7", "user_agent": "Mozilla/5.0 ...", "detail": "bad_password" }]
-```
-`event`: `login_success`, `login_failed` (`detail`: `bad_password` | `unknown_user` |
-`account_disabled`), `login_blocked` (limite de tentativas; no máximo 1 linha por minuto
-por IP+usuário), `setup_completed`, `register`, `password_changed` (`detail` traz
-`other_sessions_revoked=N`), `password_change_failed`, `password_change_blocked`,
-`password_reset_by_admin` (`detail`: `by=<admin>; N session(s) revoked`), `oauth_login`,
-`oauth_pending` (conta nova aguardando aprovação) e `oauth_failed` (`detail`:
-`<provedor>:<motivo>`).
-
-Nunca grava senha nem hash. O `username` de um login que falhou só é guardado se tiver
-formato de e-mail (senão fica `(formato invalido)`, para não registrar uma senha digitada
-no campo errado); caracteres de controle são removidos e o user-agent é cortado em 200.
-Se a gravação do evento falhar, o login/rota segue normalmente (só vai para o log do
-servidor). `ip` é o IP real do cliente (`X-Real-IP`); se o Docker mascarar a origem
-(userland-proxy), aparece `docker-gateway` — ver docs/install-instructions.txt, seção 13.
 
 ---
 
@@ -912,9 +864,7 @@ provedor fica desabilitado. As rotas de login em si (`/api/auth/google`,
 `/api/auth/microsoft`) estão nas seções **Login com Google/Microsoft** acima.
 
 - `GET /api/system/oauth` → estado dos dois provedores (o secret **nunca** é devolvido,
-  só `clientSecretSet`; `secretUnreadable: true` quando o secret está cifrado no banco mas
-  a chave `TOOLBOX45_SECRET_KEY` falta ou é outra — nesse caso a linha do banco é ignorada
-  e é preciso salvar o secret de novo):
+  só `clientSecretSet`):
   ```json
   { "google":    { "configured": true, "source": "db", "clientId": "...apps.googleusercontent.com", "clientSecretSet": true,
                    "redirectUri": "https://toolbox.seg45.com.br/api/auth/google/callback", "updatedAt": "...", "updatedBy": "admin" },
@@ -932,15 +882,6 @@ provedor fica desabilitado. As rotas de login em si (`/api/auth/google`,
   `400 validation_error`; `404 not_found` para provedor desconhecido.
 - `DELETE /api/system/oauth/:provider` — apaga a configuração do banco e recarrega →
   `200 { "ok": true }`. `404 not_found` para provedor desconhecido.
-
-**Secret cifrado em repouso.** Com `TOOLBOX45_SECRET_KEY` definida no `.env` (≥ 32
-caracteres; `scripts/init-secret-key.sh` gera e aplica), o client secret é gravado no banco
-como `enc:v1:<base64url>` (AES-256-GCM, chave derivada por HKDF-SHA256, vinculado ao
-provedor). A chave fica só no `.env` do servidor, fora do banco e dos backups: um dump ou
-backup vazado não revela o secret. Secrets antigos em texto puro são cifrados no boot.
-Sem a chave o comportamento é o antigo (texto puro, com aviso no log). Se a chave se perder
-é só reconfigurar o OAuth pela UI; um backup restaurado em outro servidor precisa da mesma
-chave.
 
 ---
 
@@ -979,5 +920,5 @@ mudam.
 ## Referências
 
 - Schema completo do banco: `server-py/app/schema.sql`.
-- Implementação das rotas: `server-py/app/routers/*.py` (um módulo por domínio: `auth`, `oauth`, `me`, `commands`, `folders`, `notes`, `links`, `shares`, `groups`, `users`, `catalog`, `system`, `api_keys`, `backup`, `auth_events`); regras compartilhadas em `server-py/app/` (`deps.py` — autenticação/autorização, `commands.py`, `folders.py`, `catalog.py`, `audit.py`).
+- Implementação das rotas: `server-py/app/routers/*.py` (um módulo por domínio: `auth`, `oauth`, `me`, `commands`, `folders`, `notes`, `links`, `shares`, `groups`, `users`, `catalog`, `system`, `api_keys`, `backup`); regras compartilhadas em `server-py/app/` (`deps.py` — autenticação/autorização, `commands.py`, `folders.py`, `catalog.py`, `audit.py`).
 - Modelo de containers/deploy: `docs/install-instructions.txt`.

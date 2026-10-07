@@ -21,7 +21,6 @@ import logging
 from typing import Optional
 
 from .db import get_pool
-from .handles import generate_unique_handle
 from .security import verify_password_async
 
 logger = logging.getLogger("toolbox45")
@@ -115,11 +114,10 @@ async def _run_setup(pool, email: str, password_hash: str) -> str:
             if await conn.fetchval("SELECT 1 FROM users WHERE username = $1", email):
                 raise ValueError("email_in_use")
 
-            handle = await generate_unique_handle(conn, email)
             await conn.execute(
-                """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, handle, approved_at)
-                   VALUES ($1, $2, 'super_admin', 1, 'setup', 'local', $3, NOW())""",
-                email, password_hash, handle,
+                """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, approved_at)
+                   VALUES ($1, $2, 'super_admin', 1, 'setup', 'local', NOW())""",
+                email, password_hash,
             )
             if mode == "migrate":
                 await conn.execute("DELETE FROM sessions WHERE username = $1", DEFAULT_ADMIN_USERNAME)
