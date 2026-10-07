@@ -88,6 +88,7 @@ import { useFolderDrag, type FolderItemType, type FolderOrderedItem } from '../.
 import { useFolderPrompt } from '../../lib/useFolderPrompt';
 import { CollapsibleSection } from './CollapsibleSection';
 import { CommandCard } from './CommandCard';
+import { MultiCopyBar } from './MultiCopyBar';
 import { LAZY_CARD_THRESHOLD, LazyCard } from './LazyCard';
 import { CommandEditorModal, type EditorMode } from './CommandEditorModal';
 import { ContentToolbar } from './ContentToolbar';
@@ -1140,6 +1141,9 @@ export function CommandsContent({
           </>
         )}
       </FoldersUIContext.Provider>
+      {/* Barra flutuante da cópia em lote (duplo clique num botão de copiar) —
+          portal pelo mesmo motivo do editor abaixo (stacking context de .main). */}
+      {createPortal(<MultiCopyBar onDeleted={refreshCommands} />, document.body)}
       {editor &&
         (editor.mode === 'create' || (commands && commands.some(c => c.id === editor.id))) &&
         // Portal pro <body> — `.main` (ancestral direto deste componente)

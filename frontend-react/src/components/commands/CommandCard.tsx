@@ -73,7 +73,7 @@ export function CommandCard({
           )}
         </span>
       </div>
-      <TerminalLines lines={card.lines} showImages={showImages} />
+      <TerminalLines lines={card.lines} showImages={showImages} cmdId={card.id} />
       {hasDetails && (
         <div className="card-about">
           <div className="about-body">

@@ -5,7 +5,8 @@
 // de seleção múltipla (duplo clique, MULTI_COPY_MODE, _mc*) fica de fora do
 // escopo desta fatia (nenhuma outra funcionalidade depende dele ainda).
 // ════════════════════════════════════════════════
-import { useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { enterMultiCopy, isMultiCopyActive, toggleMultiCopy, useMultiCopy } from '../../lib/multiCopy';
 
 const COPY_ICON = (
   <svg width="10" height="10" fill="none" viewBox="0 0 16 16">
@@ -64,11 +65,44 @@ export function copyToClipboard(text: string): Promise<void> {
 
 type CopyState = 'idle' | 'ok' | 'err';
 
-export function CopyButton({ text }: { text: string }) {
+// Janela pra distinguir clique simples de duplo clique (MULTI_COPY_DBLCLICK_MS
+// no original). Um clique simples copia a linha depois dessa janela; o duplo
+// clique entra no modo de seleção múltipla (ver lib/multiCopy.ts).
+const MULTI_COPY_DBLCLICK_MS = 300;
+
+export function CopyButton({ text, cmdId }: { text: string; cmdId?: number }) {
   const [state, setState] = useState<CopyState>('idle');
   const timerRef = useRef<number | undefined>(undefined);
+  const clickTimerRef = useRef<number | undefined>(undefined);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const key = useId();
+  const { selected } = useMultiCopy();
+  const picked = selected.has(key);
+
+  // Desmontar com cópia individual pendente não pode copiar depois.
+  useEffect(() => () => window.clearTimeout(clickTimerRef.current), []);
 
   function handleClick() {
+    const entry = () => ({ el: btnRef.current as HTMLElement, text, cmdId });
+    if (isMultiCopyActive()) {
+      toggleMultiCopy(key, entry());
+      return;
+    }
+    if (clickTimerRef.current !== undefined) {
+      // 2º clique dentro da janela = duplo clique: cancela a cópia individual
+      // pendente do 1º clique e entra no modo já marcando esta linha.
+      window.clearTimeout(clickTimerRef.current);
+      clickTimerRef.current = undefined;
+      enterMultiCopy(key, entry());
+      return;
+    }
+    clickTimerRef.current = window.setTimeout(() => {
+      clickTimerRef.current = undefined;
+      doSingleCopy();
+    }, MULTI_COPY_DBLCLICK_MS);
+  }
+
+  function doSingleCopy() {
     copyToClipboard(text)
       .then(() => {
         window.clearTimeout(timerRef.current);
@@ -83,11 +117,11 @@ export function CopyButton({ text }: { text: string }) {
       });
   }
 
-  const title = state === 'ok' ? 'Copied!' : state === 'err' ? 'Copy failed — select and copy manually' : 'Copy';
-  const cls = `copy-btn copy-btn-inline${state === 'ok' ? ' ok' : ''}${state === 'err' ? ' err' : ''}`;
+  const title = state === 'ok' ? 'Copied!' : state === 'err' ? 'Copy failed — select and copy manually' : 'Copy (double-click to select multiple commands)';
+  const cls = `copy-btn copy-btn-inline${state === 'ok' ? ' ok' : ''}${state === 'err' ? ' err' : ''}${picked ? ' multi-on' : ''}`;
 
   return (
-    <button type="button" className={cls} title={title} onClick={handleClick}>
+    <button type="button" ref={btnRef} className={cls} title={title} aria-pressed={picked ? true : undefined} onClick={handleClick} onDoubleClick={ev => ev.preventDefault()}>
       {state === 'ok' ? (
         <>
           {OK_ICON}

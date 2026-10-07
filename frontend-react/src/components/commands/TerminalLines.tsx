@@ -32,7 +32,7 @@ function isCmdLine(l: TermLine): l is { p: string | null; c: string } {
   return !('type' in l);
 }
 
-export function TerminalLines({ lines, showImages }: { lines: TermLine[]; showImages: boolean }) {
+export function TerminalLines({ lines, showImages, cmdId }: { lines: TermLine[]; showImages: boolean; cmdId?: number }) {
   return (
     <div className="term">
       {lines.map((l, i) => {
@@ -42,7 +42,7 @@ export function TerminalLines({ lines, showImages }: { lines: TermLine[]; showIm
             <span className="cmd-line" key={i}>
               <span className="pr">{prompt} </span>
               <span dangerouslySetInnerHTML={{ __html: safeHL(l.c) }} />
-              <CopyButton text={stripVarMarkers(l.c)} />
+              <CopyButton text={stripVarMarkers(l.c)} cmdId={cmdId} />
             </span>
           );
         }
