@@ -15,8 +15,8 @@ migração (inventário de rotas, decisões, validações por fatia) está no do
   (`deps.py` — autenticação/autorização, `commands.py`, `folders.py`, `catalog.py`,
   `audit.py`, `sanitize.py`, `tls.py`, `backup.py`…). Referência da API em `docs/api.md`.
 - No boot (`app/db.py`): aplica `app/schema.sql`, roda as migrações idempotentes
-  (`app/migrations.py`) e semeia os padrões de primeira instalação (`app/seeds.py`:
-  pasta Favorites, catálogo base — não há mais usuário padrão: o primeiro `super_admin` é criado
+  (`app/migrations.py`) e as seeds (`app/seeds.py`: a instalação nasce vazia — só a pasta Favorites de cada usuário é criada;
+  nenhum catálogo, comando ou usuário padrão: o primeiro `super_admin` é criado
   pela configuração inicial, `app/setup.py`). Veja
   `docs/server-overview.md`.
 - Também no boot/em segundo plano: recarrega a config de OAuth (banco > variáveis de
@@ -54,7 +54,7 @@ pip install -r requirements.txt pytest
 python -m pytest tests
 ```
 
-A suíte (`tests/test_boot.py`) cobre o boot completo: instalação do zero, idempotência,
+A suíte (`tests/test_boot.py`) cobre o boot completo: instalação do zero (sem nenhum dado), idempotência,
 migrações de bancos legados e o ciclo de vida do FastAPI (configuração inicial, login, catálogo);
 `tests/test_setup.py` cobre o primeiro acesso (instalação nova e migração do `admin` legado).
 

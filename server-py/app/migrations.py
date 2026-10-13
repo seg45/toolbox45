@@ -236,8 +236,8 @@ async def run_migrations(pool) -> None:
         # command_lines.export_template -- substitui o antigo checkbox unico
         # "Exportable" (supports_export INTEGER 0/1) por um catalogo de
         # templates (Exports). O backfill ('> {{logFile}}') e EXATAMENTE o
-        # redirecionamento fixo que supports_export=1 produzia antes, e casa
-        # com o item padrao semeado em seed_default_exports().
+        # redirecionamento fixo que supports_export=1 produzia antes, e e so
+        # converte dados de instalacoes antigas (nao semeia nada).
         await pool.execute("ALTER TABLE command_lines ADD COLUMN IF NOT EXISTS export_template TEXT")
         await pool.execute("""
       DO $$
@@ -371,35 +371,6 @@ async def run_migrations(pool) -> None:
             logger.warning("[db] %s ambiente(s) ainda sem Sistema após a migração automática — corrija manualmente em Register → Environments antes de contar com a obrigatoriedade desse campo.", pending)
     except Exception as err:  # noqa: BLE001
         logger.error("[db] Falha ao migrar environments.system/vendor: %s", err)
-
-    # --- Bloco 4: parametros fixos padrao (reinseridos a cada boot) ----------
-    # Garante que os 8 parametros "fixos" da linha unica do campo de busca
-    # sempre EXISTAM no catalogo. seed_default_parameters() so semeia numa
-    # tabela vazia; numa instalacao parcialmente preenchida o seed nunca roda
-    # de novo. ON CONFLICT (key) DO NOTHING: so cria o que estiver faltando,
-    # nunca sobrescreve um parametro ja cadastrado.
-    try:
-        FIXED_PARAM_DEFAULTS = [
-            {"key": "src_ip", "label": "Source"},
-            {"key": "dst_ip", "label": "Destination"},
-            {"key": "src_port", "label": "Source Port"},
-            {"key": "dst_port", "label": "Destination Port"},
-            {"key": "user", "label": "User"},
-            {"key": "host", "label": "Host"},
-            {"key": "license", "label": "License"},
-            {"key": "signature", "label": "Signature"},
-        ]
-        max_sort = await pool.fetchval("SELECT COALESCE(MAX(sort_order), -1) AS m FROM parameters")
-        next_sort = int(max_sort) + 1
-        for p in FIXED_PARAM_DEFAULTS:
-            tag = await pool.execute(
-                "INSERT INTO parameters (key, label, sort_order) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING",
-                p["key"], p["label"], next_sort,
-            )
-            if _row_count(tag):
-                next_sort += 1
-    except Exception as err:  # noqa: BLE001
-        logger.error("[db] Falha ao garantir parâmetros fixos padrão: %s", err)
 
     # --- Bloco 5: favoritos legados (user_favorites) -> folders --------------
     # Migracao de dados: feature "Favorites" (tabela legada user_favorites)

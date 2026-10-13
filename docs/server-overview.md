@@ -39,14 +39,16 @@ Postgres — retrying for about a minute while the database comes up — and the
 1. applies `app/schema.sql` (idempotent: `CREATE TABLE IF NOT EXISTS`);
 2. runs the idempotent migrations (`app/migrations.py`), safe to repeat on every boot and
    on a database that was created by the old Node backend;
-3. seeds first-install defaults (`app/seeds.py`), each one only when its table is empty:
-   the `Favorites` folder per user (no default account is created — the first `super_admin`
-   comes from the first-access setup screen, see `docs/api.md`),
-   vendors, systems, versions, environments, search parameters, prompts and export
-   templates. The 8 fixed search parameters (`src_ip`, `dst_ip`, `src_port`, `dst_port`,
-   `user`, `host`, `license`, `signature`) are re-created on every boot if missing.
+3. seeds (`app/seeds.py`): a **new installation starts empty** — no vendors, systems,
+   versions, environments, search parameters, prompts, export templates, topics or commands
+   are created, and no default account either (the first `super_admin` comes from the
+   first-access setup screen, see `docs/api.md`). The only row created for a user is their
+   (empty) `Favorites` folder, which the app treats as a fixed folder of every account; a
+   one-row internal marker for a one-time data migration (`user_data`, user `__migrations__`)
+   is also written. Everything else is registered by the administrator (**Settings →
+   Register**) or imported.
 
-No commands and no topics are pre-loaded: create them in the app, or import commands from
+Create the catalogs and commands in the app, or import commands from
 CSV (**Settings → Database → Commands → Import**; see `../import-templates/`). The old
 `seed.js` (a one-off loader of ~30 reference commands) and `perf-seed.js` (synthetic data for
 load tests) were not ported and were removed in the cutover; `seed.js` had already stopped

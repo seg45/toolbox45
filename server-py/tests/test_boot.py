@@ -237,7 +237,7 @@ def ddl_legado_comandos(tipo_id: str, com_details: bool = False) -> str:
 # ════════════════════════════════════════════════
 # 1) Banco novo
 # ════════════════════════════════════════════════
-def test_banco_novo_semeia_catalogos_e_nao_cria_nenhum_usuario(banco):
+def test_banco_novo_nasce_vazio_sem_nenhum_dado_cadastrado(banco):
     boot()
 
     # Nao existe mais conta padrao (admin/admin): o primeiro super_admin nasce na
@@ -245,14 +245,15 @@ def test_banco_novo_semeia_catalogos_e_nao_cria_nenhum_usuario(banco):
     assert sql(banco, "SELECT COUNT(*) FROM users", fetch="val") == 0
     assert sql(banco, "SELECT COUNT(*) FROM folders", fetch="val") == 0
 
-    # Contagens do catalogo padrao
-    assert contagens(banco, "vendors", "systems", "versions", "environments", "parameters", "prompts", "exports") == {
-        "vendors": 2, "systems": 2, "versions": 8, "environments": 10, "parameters": 8, "prompts": 4, "exports": 1,
-    }
-    assert [r["key"] for r in sql(banco, "SELECT key FROM vendors ORDER BY sort_order")] == ["check-point", "fortinet"]
-    assert [r["key"] for r in sql(banco, "SELECT key FROM prompts ORDER BY sort_order")] == [
-        "expert-fw", "clish", "fgt", "fgt-config"]
-    assert sql(banco, "SELECT key FROM exports", fetch="val") == "redirect-logfile"
+    # Nenhum catalogo e semeado: tudo vazio ate o administrador cadastrar/importar.
+    assert contagens(banco, *CATALOGOS) == {t: 0 for t in CATALOGOS}
+    # E nenhuma outra tabela recebe linhas: a unica excecao e a marca interna da
+    # migracao "cpa-theme" (user_data / __migrations__), que nao e dado de usuario.
+    for t in [r["tablename"] for r in sql(banco, "SELECT tablename FROM pg_tables WHERE schemaname = 'public'")]:
+        n = sql(banco, f'SELECT COUNT(*) FROM "{t}"', fetch="val")
+        esperado = 1 if t == "user_data" else 0
+        assert n == esperado, f"tabela {t} tem {n} linha(s) numa instalacao nova"
+    assert sql(banco, "SELECT username FROM user_data", fetch="val") == "__migrations__"
 
     # Indices criados em run_migrations()
     idx = {r["indexname"]: r["indexdef"] for r in sql(
@@ -285,7 +286,7 @@ def test_init_db_duas_vezes_e_idempotente(banco):
     assert indices(banco) == idx1
     assert sql(banco, "SELECT COUNT(*) FROM users", fetch="val") == 0  # boot nunca cria usuario
     assert {t: [tuple(r) for r in sql(banco, f"SELECT * FROM {t} ORDER BY 1, 2")] for t in ("parameters", "vendors", "prompts")} == cat1
-    assert contagens(banco, *CATALOGOS)["versions"] == 8
+    assert contagens(banco, *CATALOGOS) == {t: 0 for t in CATALOGOS}
 
 
 def test_boot_nao_recria_nem_altera_usuarios_existentes(banco):
@@ -299,41 +300,17 @@ def test_boot_nao_recria_nem_altera_usuarios_existentes(banco):
 
 
 # ════════════════════════════════════════════════
-# 3) Seeds so se a tabela estiver vazia (parametros fixos: excecao)
+# 3) Nada e (re)semeado: o que o administrador apaga nao volta
 # ════════════════════════════════════════════════
-def test_seeds_so_se_vazio_mas_parametros_fixos_sao_garantidos(banco):
+def test_boot_nunca_semeia_nem_reinsere_catalogos(banco):
     boot()
-
-    # Vendors: apagar 1 NAO o reinsere (a tabela nao esta vazia).
-    sql(banco, "DELETE FROM vendors WHERE key = 'fortinet'", fetch="exec")
-    # Prompts: apagar 1 tambem nao volta.
-    sql(banco, "DELETE FROM prompts WHERE key = 'fgt'", fetch="exec")
-    # Parametros fixos: apagar 1 DOS 8 e reinserido (Bloco 4 de run_migrations,
-    # fora do "so se vazio"), no FIM da ordenacao (max(sort_order) + 1).
-    sql(banco, "DELETE FROM parameters WHERE key = 'host'", fetch="exec")
-    assert contagens(banco, "vendors", "prompts", "parameters") == {"vendors": 1, "prompts": 3, "parameters": 7}
-    sistemas_antes = contagens(banco, "systems", "versions", "environments")
-
+    sql(banco, "INSERT INTO vendors (key, label, sort_order) VALUES ('acme', 'Acme', 0)", fetch="exec")
+    sql(banco, "INSERT INTO parameters (key, label, sort_order) VALUES ('host', 'Host', 0)", fetch="exec")
+    sql(banco, "DELETE FROM parameters", fetch="exec")  # esvaziar a tabela inteira
+    sql(banco, "DELETE FROM vendors", fetch="exec")
     boot()
-
-    assert [r["key"] for r in sql(banco, "SELECT key FROM vendors")] == ["check-point"]  # fortinet continua apagado
-    assert "fgt" not in {r["key"] for r in sql(banco, "SELECT key FROM prompts")}
-    assert contagens(banco, "prompts")["prompts"] == 3
-    assert contagens(banco, "parameters")["parameters"] == 8  # 'host' voltou
-    host = sql(banco, "SELECT label, sort_order FROM parameters WHERE key = 'host'", fetch="row")
-    assert host["label"] == "Host"
-    assert host["sort_order"] == 8  # appendado depois do maior sort_order (7)
-    # systems/versions/environments restantes (os do check-point) nao foram tocados
-    assert contagens(banco, "systems", "versions", "environments") == sistemas_antes
-
-
-def test_esvaziar_tabela_inteira_reativa_o_seed(banco):
-    """A regra e 'tabela totalmente vazia': apagar TODOS os prompts faz o seed
-    voltar no proximo boot (comportamento herdado do Node)."""
     boot()
-    sql(banco, "DELETE FROM prompts", fetch="exec")
-    boot()
-    assert contagens(banco, "prompts")["prompts"] == 4
+    assert contagens(banco, *CATALOGOS) == {t: 0 for t in CATALOGOS}
 
 
 # ════════════════════════════════════════════════
@@ -635,7 +612,6 @@ def _injetar_falha(monkeypatch, trecho):
 
 def test_erro_num_bloco_e_logado_e_blocos_seguintes_rodam(banco, monkeypatch, caplog):
     boot()
-    sql(banco, "DELETE FROM parameters WHERE key = 'host'", fetch="exec")  # sera reinserido pelo Bloco 4 (posterior)
     sql(banco, "DELETE FROM shares", fetch="exec")
 
     _injetar_falha(monkeypatch, "CREATE TABLE IF NOT EXISTS shares")
@@ -647,8 +623,9 @@ def test_erro_num_bloco_e_logado_e_blocos_seguintes_rodam(banco, monkeypatch, ca
     assert any("Falha ao criar tabela shares" in m and "falha injetada" in m for m in msgs), msgs
     # so o bloco 2 falhou: nenhum outro erro de bloco foi logado
     assert len(erros) == 1, msgs
-    # blocos POSTERIORES ainda rodaram: parametro fixo garantido (Bloco 4) e seeds
-    assert sql(banco, "SELECT COUNT(*) FROM parameters WHERE key = 'host'", fetch="val") == 1
+    # blocos POSTERIORES ainda rodaram: a tabela shares foi recriada pelo boot sem erro
+    assert sql(banco, "SELECT COUNT(*) FROM shares", fetch="val") == 0
+    assert sql(banco, "SELECT COUNT(*) FROM user_data WHERE username = '__migrations__'", fetch="val") == 1
 
 
 def test_erro_aborta_so_o_resto_do_mesmo_bloco(banco, monkeypatch, caplog):
@@ -656,7 +633,7 @@ def test_erro_aborta_so_o_resto_do_mesmo_bloco(banco, monkeypatch, caplog):
     # conta 'admin' LEGADA (instalacao antiga) rebaixada: o boot normal a reforca como super_admin
     sql(banco, """INSERT INTO users (username, password_hash, role, is_local, created_by, auth_provider, approved_at)
                   VALUES ('admin', $1, 'admin', 1, 'system', 'local', NOW())""", hash_password("admin"), fetch="exec")
-    sql(banco, "DELETE FROM parameters WHERE key = 'host'", fetch="exec")
+    sql(banco, "DELETE FROM user_data WHERE username = '__migrations__'", fetch="exec")
 
     # 1a instrucao do Bloco 1: o RESTO do bloco (incluindo o reforco de super_admin) nao roda...
     _injetar_falha(monkeypatch, "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider")
@@ -665,8 +642,8 @@ def test_erro_aborta_so_o_resto_do_mesmo_bloco(banco, monkeypatch, caplog):
     msgs = [r.getMessage() for r in caplog.records if r.name == "toolbox45" and r.levelno == logging.ERROR]
     assert any("Falha ao rodar migrações" in m and "falha injetada" in m for m in msgs), msgs
     assert sql(banco, "SELECT role FROM users WHERE username = 'admin'", fetch="val") == "admin"
-    # ...mas os blocos seguintes rodaram normalmente
-    assert sql(banco, "SELECT COUNT(*) FROM parameters WHERE key = 'host'", fetch="val") == 1
+    # ...mas os blocos seguintes rodaram normalmente (a marca da migracao cpa-theme voltou)
+    assert sql(banco, "SELECT COUNT(*) FROM user_data WHERE username = '__migrations__'", fetch="val") == 1
 
     # sem a falha injetada, o proximo boot reforca o role
     monkeypatch.setattr(db, "run_migrations", run_migrations)
@@ -674,19 +651,14 @@ def test_erro_aborta_so_o_resto_do_mesmo_bloco(banco, monkeypatch, caplog):
     assert sql(banco, "SELECT role FROM users WHERE username = 'admin'", fetch="val") == "super_admin"
 
 
-def test_erro_numa_seed_nao_impede_as_seguintes(banco, caplog):
-    """Cada seed tem o proprio try/except: uma que falha (aqui, `systems`
-    renomeada -> relacao inexistente) loga o erro e as seguintes rodam."""
+def test_erro_na_seed_de_folders_e_logado_e_nao_propaga(banco, caplog):
+    """A unica seed (pasta Favorites) tem try/except: se falhar, loga e segue."""
     boot()
-    sql(banco, "DELETE FROM parameters", fetch="exec")
-    sql(banco, "DELETE FROM prompts", fetch="exec")
-    sql(banco, "ALTER TABLE systems RENAME TO systems_x", fetch="exec")
+    sql(banco, "ALTER TABLE folders RENAME TO folders_x", fetch="exec")
     with caplog.at_level(logging.INFO, logger="toolbox45"):
         asyncio.run(_run_seeds_only())
     msgs = [r.getMessage() for r in caplog.records if r.name == "toolbox45" and r.levelno == logging.ERROR]
-    assert len(msgs) == 1 and "Systems" in msgs[0], msgs
-    # seeds POSTERIORES a de systems (parameters, prompts) ainda rodaram
-    assert contagens(banco, "parameters", "prompts") == {"parameters": 8, "prompts": 4}
+    assert len(msgs) == 1 and "Favorites" in msgs[0], msgs
 
 
 async def _run_seeds_only():
@@ -753,10 +725,9 @@ def test_ponta_a_ponta_lifespan_login_e_catalogos(banco, monkeypatch, tmp_path):
         r = client.get("/api/catalogs")  # com o cookie da sessao
         assert r.status_code == 200
         cat = r.json()
-        assert [v["key"] for v in cat["vendors"]] == ["check-point", "fortinet"]
-        assert [s["key"] for s in cat["systems"]] == ["gaia", "fortios"]
-        assert len(cat["versions"]) == 8 and len(cat["environments"]) == 10
-        assert len(cat["parameters"]) == 8 and len(cat["prompts"]) == 4 and len(cat["exports"]) == 1
+        # instalacao nova: nenhum catalogo cadastrado
+        for k in ("vendors", "systems", "versions", "environments", "topics", "parameters", "prompts", "exports"):
+            assert cat[k] == [], (k, cat[k])
 
     # bootstrap TLS gerou cert/key nos diretorios temporarios (openssl real)
     assert (tls_dir / "cert.pem").exists() and (tls_dir / "key.pem").exists()

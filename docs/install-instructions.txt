@@ -57,7 +57,7 @@ com este nginx, remova o redirect da porta 80 em frontend-react/nginx.conf
 (senão dá loop) e repasse o cabeçalho X-Forwarded-Proto: https.
 
 Numa instalação NOVA: não precisa fazer mais nada. No primeiro boot o
-backend aplica o schema e semeia sozinho (só onde a tabela está vazia):
+backend aplica o schema. A instalação nasce VAZIA (nenhum dado de exemplo):
 
   - NENHUMA conta é criada: ao abrir https://<ip-do-servidor> pela primeira
     vez, a tela de login pede o e-mail e a senha do administrador (8+
@@ -66,12 +66,12 @@ backend aplica o schema e semeia sozinho (só onde a tabela está vazia):
     ANTIGA que ainda tem o usuário admin / admin, a mesma tela aparece na
     próxima visita e substitui essa conta pelo e-mail informado, mantendo
     todos os dados dela.)
-  - a pasta "Favorites" de cada usuário;
-  - o catálogo base: fornecedores (Check Point, Fortinet), sistemas,
-    versões, ambientes, parâmetros de busca, prompts e templates de export.
+  - única coisa criada por usuário: a pasta "Favorites" (vazia).
 
-NENHUM comando vem pré-cadastrado, e a lista de Tópicos começa vazia: crie os
-tópicos em Configurações → Register → Topics e cadastre os comandos pela
+NENHUM catálogo vem pré-cadastrado (fornecedores, sistemas, versões, ambientes,
+tópicos, parâmetros de busca, prompts e templates de export começam vazios) e
+nenhum comando também: cadastre os catálogos em Configurações → Register e os
+comandos pela
 própria aplicação (editor de comandos) ou importe em lote por CSV
 (Configurações → Database → Commands → Import; o modelo do CSV está na
 própria janela de importação e em import-templates/).
@@ -89,26 +89,8 @@ só existe localmente no servidor.
 
     POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD
         # credenciais do banco (usadas por toolbox45-db E toolbox45-backend
-        # — mudar aqui já reflete nos dois). Se omitida, vale a senha
-        # padrão "toolbox45" (o banco não é exposto, mas troque em
-        # produção). INSTALAÇÃO NOVA: defina no .env ANTES do primeiro
-        # "up" (ex.: POSTGRES_PASSWORD=$(openssl rand -hex 24)). Banco JÁ
-        # EXISTENTE: NÃO basta editar o .env (o Postgres só lê a senha ao
-        # criar o volume) — use o script, que troca no banco, grava o .env
-        # e confere tudo, com rollback automático se algo falhar:
-        #     sudo bash scripts/rotate-db-password.sh
-        # (-y não pergunta; --force repete mesmo se já não for a padrão).
-
-    TOOLBOX45_SECRET_KEY
-        # chave (>= 32 caracteres) que cifra o client secret do OAuth
-        # salvo no banco (AES-256-GCM). Fica só aqui, fora do banco e dos
-        # backups. Gere e aplique com:
-        #     sudo bash scripts/init-secret-key.sh
-        # GUARDE UMA CÓPIA no cofre de senhas: se a chave se perder, o
-        # secret cifrado fica ilegível (basta reconfigurar o OAuth em
-        # Configurações → System → OAuth). Um backup restaurado em outro
-        # servidor precisa da mesma chave. Sem a chave o secret volta a
-        # ser gravado em texto puro (o healthcheck avisa).
+        # — mudar aqui já reflete nos dois). Troque a senha padrão em
+        # produção.
 
     GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI
         # opcional — habilita o botão "Sign in with Google" em login.html
@@ -215,12 +197,6 @@ Dentro da pasta do projeto:
 mexe nos dados (volumes toolbox45-db-data e toolbox45-backups continuam
 intactos entre updates).
 
-Os containers rodam endurecidos (docker-compose.yml): sistema de arquivos
-somente-leitura (com tmpfs só onde precisam escrever), "cap_drop: ALL" e
-"no-new-privileges". Depois de atualizar, rode "sudo bash
-scripts/healthcheck.sh" — ele confere isso, a senha do banco, a chave dos
-secrets e as imagens fixadas. Mais detalhes na seção 13.
-
 
 10) COMANDOS DO DIA A DIA
 ------------------------------
@@ -306,49 +282,3 @@ serviço toolbox45-backend quanto o toolbox45-frontend já usam
       sudo docker compose logs -f toolbox45-backend
       sudo docker compose logs -f toolbox45-db
       sudo docker compose logs -f toolbox45-frontend
-
-
-13) ENDURECIMENTO E MANUTENÇÃO DE SEGURANÇA
-------------------------------------------------
-Scripts em scripts/ (rodar na pasta do projeto, com sudo):
-
-  healthcheck.sh           visão geral: containers, endpoints, logs, senha do
-                           banco, chave dos secrets, endurecimento, digests.
-  rotate-db-password.sh    troca a senha do banco (ver seção 4). Idempotente,
-                           com rollback automático e backup do .env
-                           (.env.bak-<data>, modo 600).
-  init-secret-key.sh       cria TOOLBOX45_SECRET_KEY no .env (se ainda não
-                           existir), recria o backend e confere que nenhum
-                           client secret do OAuth ficou em texto puro.
-  update-image-digests.sh  as imagens base (python, node, nginx, postgres)
-                           estão fixadas por digest nos Dockerfiles e no
-                           compose, para o rebuild ser reprodutível. Sem
-                           argumento só avisa se há digest novo (exit 1);
-                           com --apply reescreve os 3 arquivos. Rode de
-                           tempos em tempos (ex.: 1x por mês), depois
-                           rebuild + testes + commit.
-  scan-images.sh           varre as imagens construídas atrás de
-                           vulnerabilidades HIGH/CRITICAL com correção
-                           disponível (Trivy, rodado em container; não monta
-                           o docker.sock). Exit 1 se achar algo.
-
-IP real dos clientes: o Docker, por padrão, passa as conexões publicadas pelo
-"docker-proxy", e o nginx enxerga o gateway da rede (ex.: 172.18.0.1) em vez
-do IP do cliente. O Toolbox45 já trata isso (o limite de requisições do nginx
-é ignorado para o gateway e o bloqueio de login passa a valer só por
-usuário), mas o registro de acessos mostra "docker-gateway" no lugar do IP.
-Para ter o IP real, desligue o proxy em userland (janela de manutenção,
-reinicia todos os containers):
-
-    # /etc/docker/daemon.json
-    { "userland-proxy": false }
-    sudo systemctl restart docker && sudo docker compose up -d
-
-Depois disso o healthcheck deixa de avisar e o registro de acessos (Settings
-→ Database → View access log, só super_admin) passa a mostrar o IP de cada
-tentativa.
-
-Observações dos containers endurecidos: o backend não escreve em disco fora
-do volume de backups e de /tmp (tmpfs); se um container não subir após o
-update, veja "sudo docker compose logs <serviço>" — um "Read-only file
-system" indica um caminho novo que precisa de tmpfs/volume no compose.
