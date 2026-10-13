@@ -20,12 +20,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { createCatalogItem } from '../../lib/catalogAdmin';
+import { createCatalogItem, createCatalogItemReturningKey, type CatalogKind } from '../../lib/catalogAdmin';
 import type { Catalogs, CatalogEntry } from '../../lib/catalogs';
 import { createCommand, deleteCommand, updateCommand, type Command, type CommandLine, type CommandLinePayload, type CommandPayload } from '../../lib/commands';
 import { useConfirm } from '../../lib/useConfirm';
 import { RichTextEditor, type RichTextEditorHandle } from '../RichTextEditor';
-import { SegMulti, SegSingle, type SegOption } from '../SegControls';
+import { SegMulti, SegSingle, type QuickCreateConfig, type SegOption } from '../SegControls';
 
 export type EditorMode = 'create' | 'edit' | 'duplicate';
 
@@ -281,11 +281,61 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
   );
   // POST /api/parameters exige administrador no backend; quem não é admin
   // só escolhe entre as variáveis já cadastradas.
+  // (admin e super admin — `isAdmin` vale para os dois papéis).
   const canCreateVariable = auth.isAdmin;
   async function handleCreateVariable(key: string, label: string) {
     await createCatalogItem('parameters', { key, label });
     await onCatalogsChanged?.();
   }
+
+  // Cadastro rápido dos demais registros (Vendor/System/Version/Environment/
+  // Topic/Prompt/Export) direto dos seletores do wizard — mesma regra de
+  // permissão do Register (POST /api/<kind> exige admin). Devolve a key
+  // gerada pelo servidor; o seletor a deixa selecionada. O catálogo é
+  // recarregado ANTES de devolver, para a nova opção e a seleção chegarem
+  // juntas (os efeitos de cascata acima descartam seleção fora das opções).
+  async function createEntry(kind: CatalogKind, payload: { label: string; color?: string; vendor?: string; system?: string }): Promise<string> {
+    const row = await createCatalogItemReturningKey(kind, payload);
+    await onCatalogsChanged?.();
+    return row.key;
+  }
+  const canQuickCreate = auth.isAdmin;
+  const qcVendor: QuickCreateConfig | undefined = canQuickCreate
+    ? { noun: 'vendor', withColor: true, onCreate: (label, color) => createEntry('vendors', { label, color }) }
+    : undefined;
+  const qcSystem: QuickCreateConfig | undefined = canQuickCreate
+    ? {
+        noun: 'system',
+        withColor: true,
+        blockedReason: vendor ? undefined : 'Choose a vendor first',
+        onCreate: (label, color) => createEntry('systems', { label, color, vendor }),
+      }
+    : undefined;
+  const qcVersion: QuickCreateConfig | undefined = canQuickCreate
+    ? {
+        noun: 'version',
+        withColor: true,
+        blockedReason: system ? undefined : 'Choose a system first',
+        onCreate: (label, color) => createEntry('versions', { label, color, system }),
+      }
+    : undefined;
+  const qcEnvironment: QuickCreateConfig | undefined = canQuickCreate
+    ? {
+        noun: 'environment',
+        withColor: true,
+        blockedReason: system ? undefined : 'Choose a system first',
+        onCreate: (label, color) => createEntry('environments', { label, color, system }),
+      }
+    : undefined;
+  const qcTopic: QuickCreateConfig | undefined = canQuickCreate
+    ? { noun: 'topic', withColor: true, onCreate: (label, color) => createEntry('topics', { label, color }) }
+    : undefined;
+  const qcPrompt: QuickCreateConfig | undefined = canQuickCreate
+    ? { noun: 'prompt', onCreate: label => createEntry('prompts', { label }) }
+    : undefined;
+  const qcExport: QuickCreateConfig | undefined = canQuickCreate
+    ? { noun: 'export template', onCreate: label => createEntry('exports', { label }) }
+    : undefined;
 
   // ════════════════════════════════════════════════
   // Validação (bloqueante só em modo create — ver comentário no topo) — o
@@ -532,27 +582,27 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
             <div className="set-group">
               <span className="set-label">Vendor</span>
               <span className="set-hint">Choose one — required (a command belongs to a single vendor; "All" is only a filter option, not a value a command can be saved with)</span>
-              <SegSingle label="Vendor" options={vendorOptions} value={vendor} onChange={setVendor} />
+              <SegSingle label="Vendor" options={vendorOptions} value={vendor} onChange={setVendor} quickCreate={qcVendor} />
             </div>
             <div className="set-group">
               <span className="set-label">Systems</span>
               <span className="set-hint">Choose one — required (single-select despite the plural label, same as the original editor; "All" is only a filter option, not a value a command can be saved with)</span>
-              <SegSingle label="Systems" options={systemOptions} value={system} onChange={setSystem} />
+              <SegSingle label="Systems" options={systemOptions} value={system} onChange={setSystem} quickCreate={qcSystem} />
             </div>
             <div className="set-group">
               <span className="set-label">Versions</span>
               <span className="set-hint">Check one or more — required ("All" is only a filter option, not a value a command can be saved with)</span>
-              <SegMulti options={versionOptions} selected={versions} onChange={setVersions} pluralWord="versions" />
+              <SegMulti options={versionOptions} selected={versions} onChange={setVersions} pluralWord="versions" quickCreate={qcVersion} />
             </div>
             <div className="set-group">
               <span className="set-label">Environments</span>
               <span className="set-hint">Check one or more — required ("All" is only a filter option, not a value a command can be saved with)</span>
-              <SegMulti options={environmentOptions} selected={environments} onChange={setEnvironments} pluralWord="environments" />
+              <SegMulti options={environmentOptions} selected={environments} onChange={setEnvironments} pluralWord="environments" quickCreate={qcEnvironment} />
             </div>
             <div className="set-group">
               <span className="set-label">Topic</span>
               <span className="set-hint">Check one or more — a command can appear under several sections</span>
-              <SegMulti options={topicOptions} selected={topics} onChange={setTopics} pluralWord="topics" />
+              <SegMulti options={topicOptions} selected={topics} onChange={setTopics} pluralWord="topics" quickCreate={qcTopic} />
             </div>
           </div>
 
@@ -573,6 +623,8 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
                   parameterOptions={parameterOptions}
                   canCreateVariable={canCreateVariable}
                   onCreateVariable={handleCreateVariable}
+                  quickCreatePrompt={qcPrompt}
+                  quickCreateExport={qcExport}
                   dragging={draggingKey === line._key}
                   onChange={patch => updateLine(line._key, patch)}
                   onRemove={() => removeLine(line._key)}
@@ -661,6 +713,8 @@ function LineRowEditor({
   parameterOptions,
   canCreateVariable,
   onCreateVariable,
+  quickCreatePrompt,
+  quickCreateExport,
   dragging,
   onChange,
   onRemove,
@@ -674,6 +728,8 @@ function LineRowEditor({
   parameterOptions: { key: string; label: string }[];
   canCreateVariable: boolean;
   onCreateVariable: (key: string, label: string) => Promise<void>;
+  quickCreatePrompt?: QuickCreateConfig;
+  quickCreateExport?: QuickCreateConfig;
   dragging: boolean;
   onChange: (patch: Partial<EditorLine>) => void;
   onRemove: () => void;
@@ -835,7 +891,7 @@ function LineRowEditor({
             template. */}
         {uiType === 'cmd' && (
           <>
-            <SegSingle label="Prompt" options={withLegacyOption(promptOptions, line.prompt || '')} value={line.prompt || ''} onChange={v => onChange({ prompt: v || null })} />
+            <SegSingle label="Prompt" options={withLegacyOption(promptOptions, line.prompt || '')} value={line.prompt || ''} onChange={v => onChange({ prompt: v || null })} quickCreate={quickCreatePrompt} />
             <div className="ln-var-dd" ref={varWrapRef}>
               <div className={`dd${varOpen ? ' open' : ''}`}>
                 <button type="button" className="dd-btn" onClick={() => setVarOpen(o => !o)}>
@@ -921,6 +977,7 @@ function LineRowEditor({
               options={withLegacyOption(exportOptions, line.export_template || '')}
               value={line.export_template || ''}
               onChange={v => onChange({ export_template: v || null })}
+              quickCreate={quickCreateExport}
             />
           </>
         )}
