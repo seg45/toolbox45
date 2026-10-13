@@ -42,6 +42,7 @@ import {
 } from '../../lib/csv';
 import { notifyFoldersChanged } from '../../lib/folders';
 import { DEFAULT_RES_COLOR, ImportResolutionPanel, getResItemState, type ResItemState } from './ImportResolutionPanel';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 // Texto que o usuário de fato vê (openImportCommandsModal sobrescreve o
 // texto estático longo do index.html por este, mais curto) — copiado literal
@@ -359,9 +360,7 @@ export function ImportCommandsModal({ onClose, onCatalogsChanged }: { onClose: (
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box">
         <div className="modal-head">

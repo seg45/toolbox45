@@ -13,6 +13,7 @@ import { useConfirm } from '../../lib/useConfirm';
 import { formatAuditDate } from '../../lib/folders';
 import { ApiError, deleteOAuthProvider, fetchOAuthProviders, saveOAuthProvider, type OAuthProviderInfo } from '../../lib/api';
 import { CopyButton } from '../commands/CopyButton';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 export type OAuthProviderKey = 'google' | 'microsoft';
 
@@ -205,9 +206,7 @@ export function OAuthSettingsModal({ provider, onClose }: { provider: OAuthProvi
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box modal-wide">
         <div className="modal-head">

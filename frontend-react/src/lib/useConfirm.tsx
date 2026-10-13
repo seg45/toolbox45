@@ -17,6 +17,7 @@
 // módulo (_confirmResolve) + manipulação direta do DOM.
 // ════════════════════════════════════════════════
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { overlayDismissProps } from './overlayDismiss';
 
 export interface ConfirmOptions {
   danger?: boolean; // default true (mesmo default do original — a maioria das confirmações são destrutivas: fechar sem salvar, excluir)
@@ -86,9 +87,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         // montagem, quebrando esse empate silenciosamente. Um z-index maior
         // aqui resolve isso de forma robusta, sem depender de ordem de DOM.
         style={{ zIndex: 600 }}
-        onClick={ev => {
-          if (ev.target === ev.currentTarget) close(false);
-        }}
+        {...overlayDismissProps(() => close(false))}
       >
         <div className="modal-box modal-confirm">
           <div className="modal-head">

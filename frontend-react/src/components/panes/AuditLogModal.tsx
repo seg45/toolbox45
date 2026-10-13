@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { formatAuditDate } from '../../lib/folders';
 import { fetchAuditLog, type AuditLogRow } from '../../lib/backup';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 const AUDIT_ACTION_LABELS: Record<string, string> = { create: 'Created', update: 'Updated', delete: 'Deleted' };
 // Rótulo amigável do entity_type (ver audit_log em server/schema.sql) —
@@ -62,9 +63,7 @@ export function AuditLogModal({ onClose }: { onClose: () => void }) {
     <div
       className="modal-overlay show"
       id="auditLogOverlay"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box modal-wide">
         <div className="modal-head">

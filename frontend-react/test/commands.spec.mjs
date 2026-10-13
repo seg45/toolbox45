@@ -446,6 +446,18 @@ await withPage(browser, async page => {
   await page.screenshot({ path: `${SHOTS}/14-desc-below-name.png` });
 });
 
+// ── Cenário 15: comando com 2 tópicos aparece UMA vez, numa seção "Status, VPN" (alfabético) ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  const multi = { ...COMMANDS[0], topic: 'vpn', topics: ['vpn', 'status'] };
+  await page.route('**/api/commands', route => route.fulfill({ json: [multi, ...COMMANDS.slice(1)] }));
+  await page.goto(`${BASE}/index.html`);
+  await page.waitForSelector('.card[data-cmd-id="1"]');
+  assert((await page.locator('.card[data-cmd-id="1"]').count()) === 1, 'cenário 15: comando com 2 tópicos aparece uma única vez');
+  const titles = (await page.locator('.sec-title').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
+  assert(titles.some(t => t.toLowerCase().startsWith('status, vpn')), `cenário 15: seção "Status, VPN" (lido: ${JSON.stringify(titles)})`);
+});
+
 await browser.close();
 
 console.log(`\n${failures === 0 ? 'TODOS OS CENÁRIOS PASSARAM' : `${failures} CENÁRIO(S) FALHARAM`}`);

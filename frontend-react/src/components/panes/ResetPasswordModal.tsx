@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError } from '../../lib/api';
 import { resetUserPassword } from '../../lib/users';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 export function ResetPasswordModal({ username, onClose }: { username: string; onClose: () => void }) {
   const [password, setPassword] = useState('');
@@ -46,9 +47,7 @@ export function ResetPasswordModal({ username, onClose }: { username: string; on
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box">
         <div className="modal-head">

@@ -16,6 +16,7 @@
 // manipulação direta do DOM.
 // ════════════════════════════════════════════════
 import React, { createContext, useCallback, useContext, useState } from 'react';
+import { overlayDismissProps } from './overlayDismiss';
 
 type PromptMode = 'create' | 'subfolder';
 
@@ -86,9 +87,7 @@ export function FolderPromptProvider({ children }: { children: React.ReactNode }
         <div
           className="modal-overlay show"
           style={{ zIndex: 600 }}
-          onClick={ev => {
-            if (ev.target === ev.currentTarget) close(null);
-          }}
+          {...overlayDismissProps(() => close(null))}
         >
           <div className="modal-box modal-confirm">
             <div className="modal-head">

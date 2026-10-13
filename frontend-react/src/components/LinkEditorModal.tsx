@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError } from '../lib/api';
 import { createLink, updateLink, type Link } from '../lib/links';
+import { overlayDismissProps } from '../lib/overlayDismiss';
 
 export function LinkEditorModal({
   link,
@@ -53,9 +54,7 @@ export function LinkEditorModal({
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box">
         <div className="modal-head">

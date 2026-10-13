@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { invalidateCommandsCache } from '../../lib/commands';
 import { buildFolderTree, fetchFolders, notifyFoldersChanged, type Folder } from '../../lib/folders';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 interface FolderOption {
   id: number;
@@ -170,9 +171,7 @@ export function FolderImportModal({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box">
         <div className="modal-head">

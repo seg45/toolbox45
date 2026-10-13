@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom';
 import { useConfirm } from '../../lib/useConfirm';
 import { formatAuditDate } from '../../lib/folders';
 import { ApiError, deleteSslCertificate, fetchSslCertificate, saveSslCertificate, type SslCertificateInfo } from '../../lib/api';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 function renderInfo(info: SslCertificateInfo | null, loading: boolean, loadFailed: boolean): ReactNode {
   if (loading) return 'Loading…';
@@ -139,9 +140,7 @@ export function SslCertificateModal({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box modal-wide">
         <div className="modal-head">

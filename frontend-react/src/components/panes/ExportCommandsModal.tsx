@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { fetchCatalogs } from '../../lib/catalogs';
 import { fetchCommands } from '../../lib/commands';
 import { CSV_COLUMNS, buildExportCsv, exportFileName, normalizeExportScope, type ExportScope } from '../../lib/csv';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 const EXPORT_COLUMNS_KEY = 'cpa-export-columns';
 const EXPORT_SCOPE_KEY = 'cpa-export-scope';
@@ -135,9 +136,7 @@ export function ExportCommandsModal({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box">
         <div className="modal-head">

@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { formatAuditDate } from '../../lib/folders';
 import { fetchAuthEvents, type AuthEventRow } from '../../lib/backup';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 export const AUTH_EVENT_LABELS: Record<string, string> = {
   login_success: 'Login',
@@ -72,9 +73,7 @@ export function AccessLogModal({ onClose }: { onClose: () => void }) {
     <div
       className="modal-overlay show"
       id="accessLogOverlay"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box modal-wide">
         <div className="modal-head">

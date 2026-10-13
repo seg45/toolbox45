@@ -151,10 +151,10 @@ export function PreferencesPane({
 
       <Card title="Command cards" desc="What each command card shows. Applied right away.">
       <div className="set-group" id="settingsToggleGroup2">
+        <Toggle label="All commands" on={settings.showSystemCommands} onClick={() => update({ showSystemCommands: !settings.showSystemCommands })} />
         <Toggle label="Details" on={settings.showCardDetails} onClick={() => update({ showCardDetails: !settings.showCardDetails })} />
         <Toggle label="Export" on={settings.exportEnabled} onClick={() => update({ exportEnabled: !settings.exportEnabled })} />
         <Toggle label="Images" on={settings.showImages} onClick={() => update({ showImages: !settings.showImages })} />
-        <Toggle label="All commands" on={settings.showSystemCommands} onClick={() => update({ showSystemCommands: !settings.showSystemCommands })} />
       </div>
       </Card>
     </div>

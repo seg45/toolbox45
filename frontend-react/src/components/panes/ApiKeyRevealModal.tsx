@@ -7,14 +7,13 @@
 // ════════════════════════════════════════════════
 import { createPortal } from 'react-dom';
 import { CopyButton } from '../commands/CopyButton';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 export function ApiKeyRevealModal({ apiKey, onClose }: { apiKey: string; onClose: () => void }) {
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box">
         <div className="modal-head">

@@ -25,6 +25,7 @@ import {
   type BackupFrequency,
   type BackupSchedule,
 } from '../../lib/backup';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 const DEFAULT_SCHEDULE: BackupSchedule = { enabled: false, frequency: 'daily', weeklyDays: [], monthlyDay: 1, time: '02:00' };
 
@@ -199,9 +200,7 @@ export function BackupManagerModal({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box modal-wide">
         <div className="modal-head">

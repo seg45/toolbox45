@@ -17,6 +17,7 @@ import { createPortal } from 'react-dom';
 import { useConfirm } from '../../lib/useConfirm';
 import { formatAuditDate } from '../../lib/folders';
 import { deleteLogo, fetchLogo, putLogo, type LogoResponse } from '../../lib/api';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const LOGO_ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
@@ -203,9 +204,7 @@ export function LogoSettingsModal({ onClose, onLogoChanged }: { onClose: () => v
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box modal-wide">
         <div className="modal-head">

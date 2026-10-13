@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ACCENT_PRESETS } from '../../lib/theme';
 import { fetchAppearance, updateAppearance } from '../../lib/api';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 const ACCENT_TITLES: Record<string, string> = {
   teal: 'Toolbox45 teal (default)',
@@ -110,9 +111,7 @@ export function AppearanceSettingsModal({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box modal-wide">
         <div className="modal-head">

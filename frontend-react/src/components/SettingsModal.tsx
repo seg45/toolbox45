@@ -49,6 +49,7 @@ import { GroupsPane } from './panes/GroupsPane';
 import { PreferencesPane } from './panes/PreferencesPane';
 import { SystemPane } from './panes/SystemPane';
 import { UsersPane } from './panes/UsersPane';
+import { overlayDismissProps } from '../lib/overlayDismiss';
 
 // Rascunho de Home page + filtros PADRÃO da aba User preferences — só viram
 // valor de verdade no Save (ver SettingsModal abaixo e PreferencesPane.tsx).
@@ -275,9 +276,7 @@ export function SettingsModal({
     <div
       className="modal-overlay show"
       id="settingsOverlay"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box settings-modal-box">
         <div className="modal-head">

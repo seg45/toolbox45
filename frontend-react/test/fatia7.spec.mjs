@@ -1013,6 +1013,32 @@ await withPage(browser, async page => {
   await assertEventually(() => state.calls.catalogs === 4, 'cenário 24: excluir um vendor refaz o GET /api/catalogs');
 });
 
+// ── Cenário 25: arrastar seleção de texto para fora do modal NÃO fecha; clique real no fundo fecha ──
+await withPage(browser, async page => {
+  const state = makeCatalogsState(freshCatalogsFixture());
+  await mockBase(page, { isAdmin: true, catalogsJson: EMPTY_CATALOGS });
+  await mockCatalogAdmin(page, state);
+  await goToApp(page);
+
+  await openCatalogModal(page, 'Vendors');
+  const modal = catalogModal(page, 'Manage Vendors');
+  await modal.waitFor();
+  const input = modal.locator('.list-editor .cat-row input.set-input').first();
+  const ib = await input.boundingBox();
+  const mb = await modal.boundingBox();
+  // mousedown dentro do input, mouseup no fundo (fora da caixa do modal)
+  await page.mouse.move(ib.x + ib.width - 4, ib.y + ib.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(Math.max(2, mb.x - 30), ib.y + ib.height / 2, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+  assert(await modal.isVisible(), 'cenário 25: soltar o mouse no fundo após selecionar texto não fecha o modal');
+
+  // clique real no fundo (press + release no overlay) fecha
+  await page.mouse.click(Math.max(2, mb.x - 30), ib.y + ib.height / 2);
+  await assertEventually(async () => !(await modal.isVisible()), 'cenário 25: clique real no fundo fecha o modal');
+});
+
 await browser.close();
 
 console.log(`\n${failures === 0 ? 'TODOS OS CENÁRIOS PASSARAM' : `${failures} CENÁRIO(S) FALHARAM`}`);

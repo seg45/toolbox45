@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError } from '../../lib/api';
 import { createGroup, type Group } from '../../lib/groups';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 export function NewGroupModal({ onClose, onCreated }: { onClose: () => void; onCreated: (group: Group) => void }) {
   const [name, setName] = useState('');
@@ -36,9 +37,7 @@ export function NewGroupModal({ onClose, onCreated }: { onClose: () => void; onC
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box">
         <div className="modal-head">

@@ -29,6 +29,7 @@ import { useConfirm } from '../../lib/useConfirm';
 import { ApiError } from '../../lib/api';
 import type { Catalogs } from '../../lib/catalogs';
 import { createCatalogItem, deleteCatalogItem, updateCatalogItem, type CatalogItemPayload, type CatalogKind } from '../../lib/catalogAdmin';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 // Mesmo SVG de lixeira do original (CAT_TRASH_SVG, js/catalog-admin.js),
 // reproduzido como ícone inline — ver .cat-delete-btn em components.css
@@ -386,9 +387,7 @@ export function CatalogAdminModal({
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box modal-wide">
         <div className="modal-head">

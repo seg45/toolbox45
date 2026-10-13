@@ -294,11 +294,11 @@ function buildEnvCards(rows: Command[], ce: string, values: Values, catalogParam
     .filter((c): c is CardData => !!c);
 }
 
-// Uma seção por Tópico (ícone + título + seus cards), espelhando os blocos
-// por tópico de render.js.
+// Uma seção por COMBINAÇÃO de Tópicos (ícone + título + seus cards). Um
+// comando com mais de um tópico aparece UMA vez só, numa seção cujo título lista
+// os tópicos separados por vírgula, em ordem alfabética ("Diagnóstico, System").
 function buildTopicSection(
   rows: Command[],
-  topic: string,
   icon: string,
   title: string,
   values: Values,
@@ -306,9 +306,7 @@ function buildTopicSection(
   key: string,
   catalogParams: ParameterEntry[]
 ): SectionData {
-  // Um comando pode pertencer a mais de um Tópico (row.topics) — aparece em
-  // cada seção correspondente.
-  const filtered = rows.filter(r => rowTopics(r).includes(topic)).filter(r => rowWillProduceCard(r, values));
+  const filtered = rows.filter(r => rowWillProduceCard(r, values));
   const cards = filtered.map(r => buildCardDataForRow(r, values, hasIPs, catalogParams)).filter((c): c is CardData => !!c);
   return { key, icon, title, count: cards.length, cards };
 }
@@ -342,25 +340,35 @@ function buildSections(
     count += envCards.length;
   }
 
-  // Agrupa `rows` por tópico uma vez (Map<topic, rows[]>) em vez de deixar
-  // buildTopicSection escanear o array inteiro de novo a cada tópico do
-  // catálogo.
-  const rowsByTopic = new Map<string, Command[]>();
+  // Agrupa `rows` pela combinação de tópicos (já ordenados alfabeticamente em
+  // `topicsSorted`): cada comando entra em UM grupo só. Tópicos fora do catálogo
+  // (ou o protegido 'environment') não contam; sem nenhum tópico visível o
+  // comando não aparece aqui (igual a antes).
+  const topicIndex = new Map<string, number>();
+  topicsSorted.forEach((tp, i) => topicIndex.set(tp.key, i));
+  const groups = new Map<string, { idxs: number[]; rows: Command[] }>();
   rows.forEach(r => {
-    rowTopics(r).forEach(tp => {
-      let arr = rowsByTopic.get(tp);
-      if (!arr) {
-        arr = [];
-        rowsByTopic.set(tp, arr);
-      }
-      arr.push(r);
-    });
+    const idxs = Array.from(new Set(rowTopics(r).map(t => topicIndex.get(t)).filter((i): i is number => i !== undefined))).sort((x, y) => x - y);
+    if (!idxs.length) return;
+    // Filtro de tópico: aparece se QUALQUER um dos seus tópicos passar.
+    if (topicFilter.length && !idxs.some(i => topicFilter.includes(topicsSorted[i].key))) return;
+    const gk = idxs.join('+');
+    let g = groups.get(gk);
+    if (!g) {
+      g = { idxs, rows: [] };
+      groups.set(gk, g);
+    }
+    g.rows.push(r);
   });
 
-  const showTopic = (tp: string) => topicFilter.length === 0 || topicFilter.includes(tp);
-  topicsSorted.forEach(tp => {
-    if (!showTopic(tp.key)) return;
-    const sec = buildTopicSection(rowsByTopic.get(tp.key) || [], tp.key, '', tp.label, values, hasIPs, keyPrefix + tp.key, catalogParams);
+  const groupList = Array.from(groups.values()).map(g => ({
+    ...g,
+    title: g.idxs.map(i => topicsSorted[i].label).join(', '),
+    gkey: g.idxs.map(i => topicsSorted[i].key).join('+'),
+  }));
+  groupList.sort((a, b) => stripLeadingSymbols(a.title).localeCompare(stripLeadingSymbols(b.title), undefined, { sensitivity: 'base' }));
+  groupList.forEach(g => {
+    const sec = buildTopicSection(g.rows, '', g.title, values, hasIPs, keyPrefix + g.gkey, catalogParams);
     if (sec.count > 0) {
       sections.push(sec);
       count += sec.count;

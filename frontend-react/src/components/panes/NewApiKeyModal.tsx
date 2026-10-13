@@ -10,6 +10,7 @@
 // ════════════════════════════════════════════════
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { overlayDismissProps } from '../../lib/overlayDismiss';
 
 export function NewApiKeyModal({
   onClose,
@@ -36,9 +37,7 @@ export function NewApiKeyModal({
   return createPortal(
     <div
       className="modal-overlay show"
-      onClick={ev => {
-        if (ev.target === ev.currentTarget) onClose();
-      }}
+      {...overlayDismissProps(onClose)}
     >
       <div className="modal-box">
         <div className="modal-head">
