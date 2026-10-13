@@ -109,7 +109,7 @@ const browser = await chromium.launch();
 // ── Cenário 1c: "System commands" ligado (muito mais comandos) não tira a busca da tela ──
 {
   const { ctx, page } = await openApp(browser, 600);
-  await page.locator('.sidebar').getByText('System commands').click();
+  await page.locator('.sidebar').getByText('All commands').click();
   await page.waitForTimeout(500);
   await page.evaluate(() => { document.querySelector('.main').scrollTop = 3000; });
   await page.waitForTimeout(500);

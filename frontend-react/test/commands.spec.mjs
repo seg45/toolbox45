@@ -274,15 +274,15 @@ await withPage(browser, async page => {
   await page.screenshot({ path: `${SHOTS}/4-requires-ip-port.png` });
 });
 
-// ── Cenário 5: toggle "System commands" mostra/esconde comando de sistema ──
+// ── Cenário 5: toggle "All commands" mostra/esconde comando de sistema ──
 await withPage(browser, async page => {
   await mockLoggedInAdmin(page);
   await page.goto(`${BASE}/index.html`);
   await page.waitForSelector('.card[data-cmd-id="1"]');
   assert(!(await page.isVisible('.card[data-cmd-id="4"]')), 'cenário 5: comando de sistema oculto por padrão');
-  await page.locator('.sb-toggle', { hasText: 'System commands' }).click();
-  await assertEventually(async () => page.isVisible('.card[data-cmd-id="4"]'), 'cenário 5: comando de sistema aparece com o toggle ligado');
-  await page.locator('.sb-toggle', { hasText: 'System commands' }).click();
+  await page.locator('.sb-toggle', { hasText: 'All commands' }).click();
+  await assertEventually(async () => page.isVisible('.card[data-cmd-id="4"]'), 'cenário 5: com "All commands" ligado, aparecem os comandos de todos os usuários, inclusive o de sistema');
+  await page.locator('.sb-toggle', { hasText: 'All commands' }).click();
   await assertEventually(async () => !(await page.isVisible('.card[data-cmd-id="4"]')), 'cenário 5: comando de sistema some de novo com o toggle desligado');
 });
 

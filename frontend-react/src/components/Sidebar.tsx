@@ -114,7 +114,7 @@ export function Sidebar({
           <Toggle label="Details" on={settings.showCardDetails} onClick={() => update({ showCardDetails: !settings.showCardDetails })} />
           <Toggle label="Export" on={settings.exportEnabled} onClick={() => update({ exportEnabled: !settings.exportEnabled })} />
           <Toggle label="Images" on={settings.showImages} onClick={() => update({ showImages: !settings.showImages })} />
-          <Toggle label="System commands" on={settings.showSystemCommands} onClick={() => update({ showSystemCommands: !settings.showSystemCommands })} />
+          <Toggle label="All commands" on={settings.showSystemCommands} onClick={() => update({ showSystemCommands: !settings.showSystemCommands })} />
         </div>
 
         <a className="sb-credit" href="https://seg45.com.br" target="_blank" rel="noopener noreferrer">

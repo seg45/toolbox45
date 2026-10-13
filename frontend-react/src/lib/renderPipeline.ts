@@ -137,7 +137,10 @@ export function buildValues(fieldValues: Record<string, string>, settings: Setti
 // render.js). Nenhuma mudança de comportamento aqui, só a palavra `export`.
 export function filterCommands(commands: Command[], settings: Settings, filters: LiveFilters): Command[] {
   let out = commands;
-  // Preferência "System commands" (sidebar, Options) — quando desligada,
+  // Preferência "All commands" (sidebar, Options; a chave persistida segue
+  // `showSystemCommands`, para não perder a escolha já salva) — ligada, mostra
+  // os comandos de TODOS os usuários (dentro do que o servidor libera para o
+  // papel) e também os de referência (System). Quando desligada,
   // some com os comandos de referência (created_by='System', is_system=true)
   // e mostra só os criados/duplicados por usuários. Exceção: um comando
   // System guardado em alguma pasta continua aparecendo (desde a fatia 5a,
