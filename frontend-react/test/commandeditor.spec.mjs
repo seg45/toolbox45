@@ -373,6 +373,29 @@ await withPage(browser, async page => {
   await page.screenshot({ path: `${SHOTS}/12-resolver-warning.png` });
 });
 
+// ── Cenário 13: painel de Category (tipo Text) mostra o nome inteiro das opções, sem corte nem rolagem lateral ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  await page.goto(`${BASE}/index.html`);
+  await page.waitForSelector('.card[data-cmd-id="1"]');
+  await openAddCommand(page);
+  await page.fill('#cmdName', 'Cat test');
+  await page.locator('#cmdWizNextBtn').click();
+  await fillStep2(page);
+  await page.locator('#cmdWizNextBtn').click();
+  const row = page.locator('.list-editor#cmdLinesDefaultList .line-row').first();
+  await pickSegSingle(row.locator('.row-head .dd').nth(0), 'Text');
+  const cat = row.locator('.row-head .dd').nth(1);
+  await cat.locator('.dd-btn').click();
+  const clipped = await cat.locator('.dd-panel').evaluate(panel => {
+    const bad = [...panel.querySelectorAll('.seg-btn')].filter(b => b.scrollWidth > b.clientWidth + 1).map(b => b.textContent);
+    return { bad, panelOverflow: panel.scrollWidth > panel.clientWidth + 1 };
+  });
+  assert(clipped.bad.length === 0, `cenário 13: nenhuma opção de Category cortada (${clipped.bad.join(',')})`);
+  assert(!clipped.panelOverflow, 'cenário 13: painel de Category sem rolagem horizontal');
+  await page.screenshot({ path: `${SHOTS}/13-category-panel.png` });
+});
+
 await browser.close();
 
 console.log(`\n${failures === 0 ? 'TODOS OS CENÁRIOS PASSARAM' : `${failures} CENÁRIO(S) FALHARAM`}`);

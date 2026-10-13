@@ -702,6 +702,10 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 .qc-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .row-head .dd-panel:has(.qc-form) { min-width: 240px; }
 .row-head .dd-panel:has(.qc-new-btn) { min-width: max-content; }
+/* Os seletores da linha (Type/Category/Prompt/Export) têm botão estreito: sem
+   isto o painel herda a largura do botão e corta o texto das opções
+   ("Warning" -> "Warni…", com barra de rolagem horizontal). */
+.row-head .dd-panel { min-width: max-content; overflow-x: hidden; }
 .var-new-err { font-size: 11px; color: var(--red); white-space: normal; }
 .var-new-actions { display: flex; justify-content: flex-end; gap: 6px; }
 
