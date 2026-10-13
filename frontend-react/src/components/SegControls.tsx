@@ -143,12 +143,14 @@ export function SegSingle({
   value,
   onChange,
   quickCreate,
+  placeholder = '',
 }: {
   label: string;
   options: SegOption[];
   value: string;
   onChange: (val: string) => void;
   quickCreate?: QuickCreateConfig;
+  placeholder?: string; // texto do botão quando nenhum valor está escolhido
 }) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -160,7 +162,7 @@ export function SegSingle({
   return (
     <div className={`dd${open ? ' open' : ''}`} ref={ref}>
       <button type="button" className="dd-btn" onClick={() => setOpen(o => !o)}>
-        <span className="dd-label">{current ? current.label : ''}</span>
+        <span className={`dd-label${!current && placeholder ? ' dd-placeholder' : ''}`}>{current ? current.label : placeholder}</span>
         <span className="dd-arrow">▾</span>
       </button>
       {open && (
@@ -207,12 +209,17 @@ export function SegMulti({
   onChange,
   pluralWord = 'selected',
   quickCreate,
+  emptyLabel = 'All',
 }: {
   options: SegOption[];
   selected: string[];
   onChange: (next: string[]) => void;
   pluralWord?: string;
   quickCreate?: QuickCreateConfig;
+  // O que o botão mostra com NADA marcado. Nos filtros "nada marcado" = todos
+  // ("All"); no editor de comando é só "nada escolhido ainda" e "All" enganava
+  // (parecia uma opção já selecionada).
+  emptyLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -221,7 +228,7 @@ export function SegMulti({
     if (!open) setCreating(false);
   }, [open]);
 
-  let labelText = 'All';
+  let labelText = emptyLabel;
   if (selected.length === 1) {
     labelText = options.find(o => o.val === selected[0])?.label || selected[0];
   } else if (selected.length > 1) {

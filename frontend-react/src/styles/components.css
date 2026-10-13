@@ -692,6 +692,7 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 .var-new-label .set-input { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .var-new-hint { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 4px; font-family: var(--mono); }
 /* Cadastro rápido (SegControls QuickCreate) dentro dos seletores do editor */
+.dd-label.dd-placeholder { color: var(--muted); font-weight: 400; }
 .qc-new-btn { white-space: nowrap; color: var(--teal); font-weight: 600; border-top: 1px solid var(--bdr); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 7px; }
 .qc-blocked { padding: 6px 8px; font-size: 11px; color: var(--muted); white-space: normal; border-top: 1px solid var(--bdr); margin-top: 4px; }
 .qc-form { display: flex; flex-direction: column; gap: 8px; padding: 4px; min-width: 220px; }
@@ -988,8 +989,9 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
   background: var(--surf2); border-bottom: 1px solid var(--bdr); flex-wrap: wrap;
   border-radius: 8px 8px 0 0;
 }
-.card-name { font-size: 12px; font-weight: 700; color: var(--text); flex: 1; min-width: 100px; }
-.card-desc { font-size: 10.5px; color: var(--muted); }
+.card-title { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 100px; }
+.card-name { font-size: 12px; font-weight: 700; color: var(--text); }
+.card-desc { font-size: 10.5px; color: var(--muted); line-height: 1.4; }
 
 /* Tags de escopo (Vendor/Sistema/Versão/Ambiente) — mostradas logo após o nome
    do comando no cabeçalho do card (ver scopeTagsHtml em js/terminal-renderer.js).
@@ -1487,6 +1489,8 @@ body.multi-copy-active .copy-btn:not(.multi-on) { border-style: dashed; border-c
   border-bottom: none;
   border-radius: 0 0 8px 8px;
 }
+/* Agora o bloco de detalhes vem logo abaixo do cabeçalho (nome + descrição),
+   antes das linhas do terminal. */
 /* `details` (ex-Purpose/When to use/Note) agora é um único bloco de rich
    text HTML (mesmo editor de Notes) — não são mais spans separados, então
    as regras abaixo estilizam o conteúdo genérico (parágrafos/negrito) em vez

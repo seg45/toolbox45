@@ -379,16 +379,25 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
   function validateStep1Next(): string {
     return name.trim() ? '' : 'Fill in the command Name before continuing.';
   }
+  // Nomes só dos campos que ainda estão vazios (em vez da lista inteira).
+  function missingStep2(): string[] {
+    const m: string[] = [];
+    if (!vendor) m.push('Vendor');
+    if (!system) m.push('System');
+    if (!versions.length) m.push('Versions');
+    if (!environments.length) m.push('Environments');
+    if (!topics.length) m.push('Topic');
+    return m;
+  }
   function validateStep2Next(): string {
-    return step2Incomplete ? 'Check at least one option in Vendor, Systems, Versions, Environments and Topic before continuing.' : '';
+    return step2Incomplete ? `Choose at least one option in: ${missingStep2().join(', ')} before continuing.` : '';
   }
   function validateAll(): { step: 1 | 2 | 3; message: string } | null {
     if (!name.trim()) return { step: 1, message: 'Fill in the required field: Name.' };
     if (step2Incomplete) {
       return {
         step: 2,
-        message:
-          'Fill in the required fields: Vendor, System, Version, Environment, Topic — each list needs at least one option checked ("All" is only a filter, not a value a command can be saved with).',
+        message: `Fill in the required fields — choose at least one option in: ${missingStep2().join(', ')}.`,
       };
     }
     return null;
@@ -609,28 +618,28 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
           <div className="wiz-panel" data-step="2" style={{ display: step === 2 ? undefined : 'none' }}>
             <div className="set-group">
               <span className="set-label">Vendor</span>
-              <span className="set-hint">Choose one — required (a command belongs to a single vendor; "All" is only a filter option, not a value a command can be saved with)</span>
-              <SegSingle label="Vendor" options={vendorOptions} value={vendor} onChange={setVendor} quickCreate={qcVendor} />
+              <span className="set-hint">Choose one — required (a command belongs to a single vendor)</span>
+              <SegSingle label="Vendor" options={vendorOptions} value={vendor} onChange={setVendor} quickCreate={qcVendor} placeholder="Select a vendor…" />
             </div>
             <div className="set-group">
               <span className="set-label">Systems</span>
-              <span className="set-hint">Choose one — required (single-select despite the plural label, same as the original editor; "All" is only a filter option, not a value a command can be saved with)</span>
-              <SegSingle label="Systems" options={systemOptions} value={system} onChange={setSystem} quickCreate={qcSystem} />
+              <span className="set-hint">Choose one — required (a command belongs to a single system)</span>
+              <SegSingle label="Systems" options={systemOptions} value={system} onChange={setSystem} quickCreate={qcSystem} placeholder="Select a system…" />
             </div>
             <div className="set-group">
               <span className="set-label">Versions</span>
-              <span className="set-hint">Check one or more — required ("All" is only a filter option, not a value a command can be saved with)</span>
-              <SegMulti options={versionOptions} selected={versions} onChange={setVersions} pluralWord="versions" quickCreate={qcVersion} />
+              <span className="set-hint">Check one or more — required</span>
+              <SegMulti options={versionOptions} selected={versions} onChange={setVersions} pluralWord="versions" quickCreate={qcVersion} emptyLabel="Select versions…" />
             </div>
             <div className="set-group">
               <span className="set-label">Environments</span>
-              <span className="set-hint">Check one or more — required ("All" is only a filter option, not a value a command can be saved with)</span>
-              <SegMulti options={environmentOptions} selected={environments} onChange={setEnvironments} pluralWord="environments" quickCreate={qcEnvironment} />
+              <span className="set-hint">Check one or more — required</span>
+              <SegMulti options={environmentOptions} selected={environments} onChange={setEnvironments} pluralWord="environments" quickCreate={qcEnvironment} emptyLabel="Select environments…" />
             </div>
             <div className="set-group">
               <span className="set-label">Topic</span>
               <span className="set-hint">Check one or more — a command can appear under several sections</span>
-              <SegMulti options={topicOptions} selected={topics} onChange={setTopics} pluralWord="topics" quickCreate={qcTopic} />
+              <SegMulti options={topicOptions} selected={topics} onChange={setTopics} pluralWord="topics" quickCreate={qcTopic} emptyLabel="Select topics…" />
             </div>
           </div>
 

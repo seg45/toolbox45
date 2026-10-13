@@ -430,6 +430,22 @@ await withPage(browser, async page => {
   await page.screenshot({ path: `${SHOTS}/11-live-filters-persist.png` });
 });
 
+// ── Cenário 14: a descrição fica ABAIXO do nome, alinhada à esquerda, dentro do cabeçalho do card ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  await page.goto(`${BASE}/index.html`);
+  await page.waitForSelector('.card[data-cmd-id="1"]');
+  // "Details" ligado para a descrição aparecer (modo compacto a esconde)
+  await page.locator('.sb-toggle', { hasText: 'Details' }).click();
+  const name = await page.locator('.card[data-cmd-id="1"] .card-name').boundingBox();
+  const desc = await page.locator('.card[data-cmd-id="1"] .card-desc').boundingBox();
+  assert(desc && name && desc.y >= name.y + name.height - 1, 'cenário 14: descrição abaixo do nome');
+  assert(desc && name && Math.abs(desc.x - name.x) <= 1, 'cenário 14: descrição alinhada à esquerda com o nome');
+  const head = await page.locator('.card[data-cmd-id="1"] .card-head').boundingBox();
+  assert(desc && head && desc.y + desc.height <= head.y + head.height + 1, 'cenário 14: descrição dentro do cabeçalho do card');
+  await page.screenshot({ path: `${SHOTS}/14-desc-below-name.png` });
+});
+
 await browser.close();
 
 console.log(`\n${failures === 0 ? 'TODOS OS CENÁRIOS PASSARAM' : `${failures} CENÁRIO(S) FALHARAM`}`);

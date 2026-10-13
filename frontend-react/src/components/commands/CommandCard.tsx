@@ -9,6 +9,10 @@
 // — o botão de pastas funciona idêntico nos dois lugares (marca/desmarca
 // QUALQUER pasta do usuário, não só "remover desta pasta").
 //
+// Layout: o cabeçalho tem o nome com a descrição logo ABAIXO dele; os
+// detalhes (.card-about) vêm logo depois do cabeçalho, antes das linhas do
+// terminal — ou seja, descrição e detalhes ficam sempre sob o nome.
+//
 // A preferência "Details" (settings.showCardDetails) não é um `if` aqui —
 // no original ela liga/desliga a classe `.compact-cards` no <body>, que via
 // CSS esconde `.card-desc`/`.card-about` (ver src/styles/components.css).
@@ -58,9 +62,12 @@ export function CommandCard({
   return (
     <div className="card" data-cmd-id={card.id}>
       <div className="card-head">
-        <span className="card-name">{card.name}</span>
+        {/* Nome e descrição empilhados (a descrição fica ABAIXO do nome). */}
+        <div className="card-title">
+          <span className="card-name">{card.name}</span>
+          {card.desc ? <span className="card-desc">{card.desc}</span> : null}
+        </div>
         <ScopeTags vendors={card.vendors} systems={card.systems} versions={card.versions} environments={card.environments} catalogs={catalogs} />
-        <span className="card-desc">{card.desc || ''}</span>
         <FolderButton commandId={card.id} folderIds={card.folderIds} createdBy={card.createdBy} modifiedBy={card.modifiedBy} updatedAt={card.updatedAt} />
         <span className="card-actions">
           <button type="button" className="edit-btn" title="Duplicate command" onClick={() => onDuplicate(card.id)}>
@@ -73,7 +80,6 @@ export function CommandCard({
           )}
         </span>
       </div>
-      <TerminalLines lines={card.lines} showImages={showImages} cmdId={card.id} />
       {hasDetails && (
         <div className="card-about">
           <div className="about-body">
@@ -82,6 +88,7 @@ export function CommandCard({
           </div>
         </div>
       )}
+      <TerminalLines lines={card.lines} showImages={showImages} cmdId={card.id} />
     </div>
   );
 }

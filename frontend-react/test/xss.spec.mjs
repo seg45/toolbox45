@@ -99,6 +99,7 @@ for (const withCsp of [false, true]) {
   assert(okLink === 1, `link https legítimo continua nos detalhes ${tag}`);
   assert((await page.locator('.about-body a[href="https://example.com/ok"]').first().getAttribute('rel')) === 'noopener noreferrer', `link legítimo ganha rel=noopener ${tag}`);
   assert((await page.locator('.about-body b').count()) >= 1, `formatação legítima (<b>) preservada ${tag}`);
+  assert((await page.locator('.card > .card-head + .card-about').count()) >= 1, `detalhes vêm logo abaixo do cabeçalho (nome/descrição) do card ${tag}`);
   await ctx.close();
 }
 

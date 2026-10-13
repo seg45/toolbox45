@@ -396,6 +396,25 @@ await withPage(browser, async page => {
   await page.screenshot({ path: `${SHOTS}/13-category-panel.png` });
 });
 
+// ── Cenário 14: Versions/Environments vazios mostram "Select …" (não "All") e o erro cita só o que falta ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  await page.goto(`${BASE}/index.html`);
+  await page.waitForSelector('.card[data-cmd-id="1"]');
+  await openAddCommand(page);
+  await page.fill('#cmdName', 'Empty scope');
+  await page.locator('#cmdWizNextBtn').click();
+  const groups = page.locator('.wiz-panel[data-step="2"] .set-group');
+  assert((await groups.nth(0).locator('.dd-label').innerText()) === 'Select a vendor…', 'cenário 14: Vendor vazio mostra "Select a vendor…"');
+  assert((await groups.nth(2).locator('.dd-label').innerText()) === 'Select versions…', 'cenário 14: Versions vazio mostra "Select versions…" (não "All")');
+  assert((await groups.nth(3).locator('.dd-label').innerText()) === 'Select environments…', 'cenário 14: Environments vazio mostra "Select environments…"');
+  await pickSegSingle(groups.nth(0), 'Check Point');
+  await pickSegSingle(groups.nth(1), 'Gaia');
+  await page.locator('#cmdWizNextBtn').click();
+  const err = await page.locator('.cmd-editor-error').innerText();
+  assert(err.includes('Versions') && err.includes('Environments') && !err.includes('Vendor') && !err.includes('System'), `cenário 14: erro cita só o que falta ("${err}")`);
+});
+
 await browser.close();
 
 console.log(`\n${failures === 0 ? 'TODOS OS CENÁRIOS PASSARAM' : `${failures} CENÁRIO(S) FALHARAM`}`);
