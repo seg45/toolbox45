@@ -190,7 +190,7 @@ async def create_command(
     # created_by === username sempre aqui (comando recem-criado pelo
     # proprio usuario) -- mask_username_for_viewer nunca mascara a propria
     # criacao, entao is_admin nao importa neste caso.
-    return await cmds.shape_command(row, username, _viewer_ctx(username, False))
+    return await cmds.shape_command(row, username, _viewer_ctx(username, role_rank(user["role"]) >= 1))
 
 
 @router.put("/{command_id}")
@@ -264,7 +264,7 @@ async def update_command(
     )
     await log_audit(current_user, "update", "command", command_id, cols["name"], change_details)
     row = await cmds.find_command(command_id)
-    return await cmds.shape_command(row, current_user, _viewer_ctx(current_user, False, None))
+    return await cmds.shape_command(row, current_user, _viewer_ctx(current_user, role_rank(user["role"]) >= 1))
 
 
 @router.delete("/{command_id}", status_code=204)

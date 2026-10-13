@@ -204,6 +204,39 @@ def _criar_topico(admin):
 
 
 # ════════════════════════════════════════════════
+# 1b) Editar um comando (PUT) responde 200 e grava as linhas — regressao:
+# a resposta do PUT chamava _viewer_ctx com argumento a mais (sobra da remocao
+# do handle) e dava 500 DEPOIS de gravar, mostrando "Failed to save the command".
+# ════════════════════════════════════════════════
+def test_editar_comando_responde_200_e_troca_categoria_da_linha(client, app_env):
+    banco, _ = app_env
+    admin = _admin(client)
+    topico = _criar_topico(admin)
+    linhas = [{"line_type": "info", "content": "Status"},
+              {"line_type": "cmd", "prompt": "[Expert@SMS]#", "content": "show cluster members mvc"}]
+    r = admin.post("/api/commands", json=_cmd_payload(topics=[topico], lines=linhas))
+    assert r.status_code == 201, r.text
+    cid = r.json()["id"]
+
+    editadas = [{"line_type": "ok", "content": "Status"}, linhas[1]]
+    r = admin.put(f"/api/commands/{cid}", json=_cmd_payload(topics=[topico], lines=editadas))
+    assert r.status_code == 200, r.text
+    tipos = [ln["line_type"] for ln in r.json()["lines"]["default"]]
+    assert tipos == ["ok", "cmd"], tipos
+    gravado = sql(banco, "SELECT line_type FROM command_lines WHERE command_id = $1 ORDER BY sort_order", cid, fetch="all")
+    assert [g["line_type"] for g in gravado] == ["ok", "cmd"]
+
+    # usuario comum editando o PROPRIO comando tambem recebe 200
+    _criar_usuario(admin, "u1@teste.com")
+    _as(client, _token(client, "u1@teste.com", "senha-forte-1"))
+    r = admin.post("/api/commands", json=_cmd_payload(name="Meu", topics=[topico], lines=linhas))
+    assert r.status_code == 201, r.text
+    mine = r.json()["id"]
+    r = admin.put(f"/api/commands/{mine}", json=_cmd_payload(name="Meu", topics=[topico], lines=editadas))
+    assert r.status_code == 200, r.text
+
+
+# ════════════════════════════════════════════════
 # 2) XSS armazenado: HTML malicioso enviado pela API nao fica no banco
 # ════════════════════════════════════════════════
 def test_details_de_comando_e_notas_sao_sanitizados_pela_api(client, app_env):
