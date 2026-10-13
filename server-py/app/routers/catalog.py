@@ -577,9 +577,19 @@ async def update_prompt(key: str, body: dict = Body(default_factory=dict), user:
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": '"label" is required'})
 
     # `key` nunca e alteravel por esta API (mesma regra de parameters/vendors/etc.).
-    await pool.execute("UPDATE prompts SET label = $1, sort_order = $2 WHERE key = $3", label, sort_order, key)
+    # command_lines.prompt guarda o TEXTO (nao a key): renomear o prompt no
+    # catalogo propaga o novo texto para as linhas que usavam o antigo.
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("UPDATE prompts SET label = $1, sort_order = $2 WHERE key = $3", label, sort_order, key)
+            updated_lines = 0
+            if label != existing["label"]:
+                tag = await conn.execute("UPDATE command_lines SET prompt = $1 WHERE prompt = $2", label, existing["label"])
+                updated_lines = int(tag.split()[-1])
     row = await pool.fetchrow("SELECT * FROM prompts WHERE key = $1", key)
     details = summarize_changed_fields(existing, {"label": label, "sort_order": sort_order}, {"label": "label", "sort_order": "order"})
+    if updated_lines:
+        details = f"{details}; {updated_lines} command line(s) updated" if details else f"{updated_lines} command line(s) updated"
     await log_audit(user["username"], "update", "prompt", key, label, details)
     return dict(row)
 
@@ -627,9 +637,20 @@ async def update_export(key: str, body: dict = Body(default_factory=dict), user:
     if not label or not isinstance(label, str):
         raise HTTPException(status_code=400, detail={"error": "validation_error", "message": '"label" is required'})
 
-    await pool.execute("UPDATE exports SET label = $1, sort_order = $2 WHERE key = $3", label, sort_order, key)
+    # command_lines.export_template guarda o TEXTO (nao a key): editar o template
+    # no catalogo propaga o novo texto para as linhas que usavam o antigo — sem
+    # isso o comando continuaria mostrando o valor velho.
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("UPDATE exports SET label = $1, sort_order = $2 WHERE key = $3", label, sort_order, key)
+            updated_lines = 0
+            if label != existing["label"]:
+                tag = await conn.execute("UPDATE command_lines SET export_template = $1 WHERE export_template = $2", label, existing["label"])
+                updated_lines = int(tag.split()[-1])
     row = await pool.fetchrow("SELECT * FROM exports WHERE key = $1", key)
     details = summarize_changed_fields(existing, {"label": label, "sort_order": sort_order}, {"label": "label", "sort_order": "order"})
+    if updated_lines:
+        details = f"{details}; {updated_lines} command line(s) updated" if details else f"{updated_lines} command line(s) updated"
     await log_audit(user["username"], "update", "export", key, label, details)
     return dict(row)
 

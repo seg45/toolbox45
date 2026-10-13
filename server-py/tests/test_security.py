@@ -237,6 +237,41 @@ def test_editar_comando_responde_200_e_troca_categoria_da_linha(client, app_env)
 
 
 # ════════════════════════════════════════════════
+# 1c) Editar um Export/Prompt do catalogo atualiza as linhas de comando que
+# usavam o texto antigo (command_lines guarda o TEXTO, nao a key).
+# ════════════════════════════════════════════════
+def test_editar_export_e_prompt_do_catalogo_propaga_para_as_linhas(client, app_env):
+    banco, _ = app_env
+    admin = _admin(client)
+    topico = _criar_topico(admin)
+    ex = admin.post("/api/exports", json={"label": "-o /var/log/x-$(hostname)"})
+    pr = admin.post("/api/prompts", json={"label": "[Expert@FW]#"})
+    assert ex.status_code == 201 and pr.status_code == 201
+    linhas = [
+        {"line_type": "cmd", "prompt": "[Expert@FW]#", "content": "cpinfo -d", "export_template": "-o /var/log/x-$(hostname)"},
+        {"line_type": "cmd", "prompt": "[Clish]>", "content": "outro", "export_template": "> {{logFile}}"},
+    ]
+    cid = admin.post("/api/commands", json=_cmd_payload(topics=[topico], lines=linhas)).json()["id"]
+
+    r = admin.put(f"/api/exports/{ex.json()['key']}", json={"label": "-o /var/tmp/x-$(hostname)"})
+    assert r.status_code == 200, r.text
+    r = admin.put(f"/api/prompts/{pr.json()['key']}", json={"label": "[Expert@SMS]#"})
+    assert r.status_code == 200, r.text
+
+    got = admin.get(f"/api/commands/{cid}").json()["lines"]["default"]
+    assert got[0]["export_template"] == "-o /var/tmp/x-$(hostname)", got[0]
+    assert got[0]["prompt"] == "[Expert@SMS]#", got[0]
+    # linhas que usavam OUTROS valores ficam intactas
+    assert got[1]["export_template"] == "> {{logFile}}" and got[1]["prompt"] == "[Clish]>", got[1]
+
+    # mudar so a ordem (label igual) nao mexe em linha nenhuma
+    r = admin.put(f"/api/exports/{ex.json()['key']}", json={"label": "-o /var/tmp/x-$(hostname)", "sort_order": 5})
+    assert r.status_code == 200, r.text
+    got = admin.get(f"/api/commands/{cid}").json()["lines"]["default"]
+    assert got[0]["export_template"] == "-o /var/tmp/x-$(hostname)"
+
+
+# ════════════════════════════════════════════════
 # 2) XSS armazenado: HTML malicioso enviado pela API nao fica no banco
 # ════════════════════════════════════════════════
 def test_details_de_comando_e_notas_sao_sanitizados_pela_api(client, app_env):
