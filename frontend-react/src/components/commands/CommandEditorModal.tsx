@@ -185,7 +185,11 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
   const [versions, setVersions] = useState<string[]>(sourceRow ? [...sourceRow.versions] : []);
   const [environments, setEnvironments] = useState<string[]>(sourceRow ? [...sourceRow.environments] : []);
   const [topics, setTopics] = useState<string[]>(() => {
-    if (!sourceRow) return ['capture']; // create/duplicate começam com 'capture' pré-marcado
+    // create começa com 'capture' pré-marcado — mas só se esse tópico existir
+    // no catálogo (instalação nova nasce sem nenhum): uma chave inexistente
+    // contaria como selecionada sem aparecer na lista ("2 topics" com 1 visível)
+    // e seria enviada ao salvar.
+    if (!sourceRow) return catalogs?.topics?.some(t => t.key === 'capture') ? ['capture'] : [];
     return sourceRow.topics && sourceRow.topics.length ? [...sourceRow.topics] : [sourceRow.topic];
   });
 
@@ -268,6 +272,15 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
 
   const vendorOptions = useMemo<SegOption[]>(() => sortedCatalog(catalogs?.vendors), [catalogs]);
   const topicOptions = useMemo<SegOption[]>(() => sortedCatalog(catalogs?.topics), [catalogs]);
+  // Descarta seleção de tópico que não existe mais no catálogo (mesma regra
+  // de versions/environments acima).
+  useEffect(() => {
+    if (!catalogs) return;
+    setTopics(prev => {
+      const next = prev.filter(t => topicOptions.some(o => o.val === t));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [catalogs, topicOptions]);
   // Sem opção vazia "— No prompt —": o original (_ceBuildPromptOptions)
   // nunca oferece uma — uma linha 'cmd' sempre carrega algum prompt (o
   // padrão "[Expert@FW]#" ou um valor do catálogo); só Export tem uma opção

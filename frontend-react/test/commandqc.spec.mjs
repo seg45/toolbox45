@@ -162,8 +162,9 @@ async function fillStep2(page) {
 const KINDS = { vendors: 'vendors', systems: 'systems', versions: 'versions', environments: 'environments', topics: 'topics', prompts: 'prompts', exports: 'exports' };
 
 // Catálogo mutável: cada POST /api/<kind> acrescenta a linha e o próximo GET /api/catalogs a devolve.
-async function mockCatalogWrites(page, { role = 'admin', failWith = null } = {}) {
+async function mockCatalogWrites(page, { role = 'admin', failWith = null, topics = null } = {}) {
   const cat = JSON.parse(JSON.stringify(CATALOGS));
+  if (topics) cat.topics = topics;
   const st = { posts: [], gets: 0, cat };
   const isAdmin = role === 'admin' || role === 'super_admin';
   await page.route('**/api/me', route =>
@@ -192,7 +193,7 @@ async function mockCatalogWrites(page, { role = 'admin', failWith = null } = {})
 
 async function gotoStep2(page) {
   await page.goto(`${BASE}/index.html`);
-  await page.waitForSelector('.card[data-cmd-id="1"]');
+  await page.waitForSelector('.ctb-cmd-btn');
   await openAddCommand(page);
   await page.fill('#cmdName', 'QC test');
   await page.locator('#cmdWizNextBtn').click();
@@ -314,6 +315,22 @@ await withPage(browser, async page => {
     assert((await g.nth(i).locator('.qc-new-btn, .qc-blocked').count()) === 0, `cenário 5: usuário comum não vê cadastro rápido no seletor ${i + 1}`);
     await g.nth(i).locator('.dd-btn').click();
   }
+});
+
+// ── Cenário 6: catálogo sem o tópico 'capture' (instalação nova) — nada de seleção fantasma ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  const st = await mockCatalogWrites(page, { topics: [] });
+  const g = await gotoStep2(page);
+  assert((await g.nth(4).locator('.dd-label').innerText()) !== '1 topics', 'cenário 6: sem "capture" no catálogo, nenhum tópico fantasma pré-marcado');
+  await g.nth(4).locator('.dd-btn').click();
+  await g.nth(4).locator('.qc-new-btn').click();
+  await g.nth(4).locator('.qc-form input.set-input').fill('HA');
+  await g.nth(4).locator('.qc-actions .btn-primary').click();
+  await g.nth(4).locator('.qc-form').waitFor({ state: 'detached' });
+  await g.nth(4).locator('.dd-panel-foot .btn', { hasText: 'Close' }).click();
+  await assertEventually(async () => (await g.nth(4).locator('.dd-label').innerText()) === 'HA', 'cenário 6: só o tópico criado aparece selecionado (não "2 topics")');
+  assert(st.posts.length === 1 && st.posts[0].kind === 'topics', 'cenário 6: um único POST de tópico');
 });
 
 await browser.close();
