@@ -168,7 +168,7 @@ async function mockCatalogWrites(page, { role = 'admin', failWith = null, topics
   const st = { posts: [], gets: 0, cat };
   const isAdmin = role === 'admin' || role === 'super_admin';
   await page.route('**/api/me', route =>
-    route.fulfill({ json: { username: 'u@example.com', upn: 'u@example.com', role, isAdmin, isSuperAdmin: role === 'super_admin', authMethod: 'local' } })
+    route.fulfill({ json: { username: 'admin', upn: 'admin', role, isAdmin, isSuperAdmin: role === 'super_admin', authMethod: 'local' } })
   );
   await page.route('**/api/catalogs', route => {
     st.gets++;

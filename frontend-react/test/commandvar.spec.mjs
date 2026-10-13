@@ -164,7 +164,7 @@ async function mockParams(page, { admin = true, params = CATALOGS.parameters.sli
   const state = { params: params.slice(), posts: [], catalogGets: 0 };
   await page.route('**/api/me', route =>
     route.fulfill({
-      json: { username: 'u@example.com', upn: 'u@example.com', role: admin ? 'super_admin' : 'user', isAdmin: admin, isSuperAdmin: admin, authMethod: 'local' },
+      json: { username: 'admin', upn: 'admin', role: admin ? 'super_admin' : 'user', isAdmin: admin, isSuperAdmin: admin, authMethod: 'local' },
     })
   );
   await page.route('**/api/catalogs', route => {

@@ -153,14 +153,17 @@ const COMMANDS = [
   },
 ];
 
-async function mockLoggedInAdmin(page) {
-  await page.addInitScript(() => {
+// `allCommands`: liga "All commands" de saída (sem isso o app só mostra os
+// comandos do próprio usuário — ver cenário 5). `username`: quem está logado.
+async function mockLoggedInAdmin(page, { allCommands = true, username = 'admin' } = {}) {
+  await page.addInitScript(on => {
     localStorage.setItem('cpa-authenticated', '1');
-  });
+    if (on && !localStorage.getItem('cpa-settings')) localStorage.setItem('cpa-settings', JSON.stringify({ showSystemCommands: true }));
+  }, allCommands);
   await page.route('**/api/me', route =>
     route.fulfill({
       json: {
-        username: 'admin', upn: 'admin', role: 'super_admin',
+        username, upn: username, role: 'super_admin',
         isAdmin: true, isSuperAdmin: true, authMethod: 'local',
       },
     })
@@ -274,16 +277,20 @@ await withPage(browser, async page => {
   await page.screenshot({ path: `${SHOTS}/4-requires-ip-port.png` });
 });
 
-// ── Cenário 5: toggle "All commands" mostra/esconde comando de sistema ──
+// ── Cenário 5: toggle "All commands" — desligado só os meus; ligado, de todos os usuários + System ──
 await withPage(browser, async page => {
-  await mockLoggedInAdmin(page);
+  await mockLoggedInAdmin(page, { allCommands: false, username: 'alice' });
   await page.goto(`${BASE}/index.html`);
   await page.waitForSelector('.card[data-cmd-id="1"]');
-  assert(!(await page.isVisible('.card[data-cmd-id="4"]')), 'cenário 5: comando de sistema oculto por padrão');
+  const vis = id => page.isVisible(`.card[data-cmd-id="${id}"]`);
+  assert((await vis(1)) && (await vis(3)) && (await vis(5)), 'cenário 5: desligado, aparecem os comandos criados por mim (alice: 1, 3, 5)');
+  assert(!(await vis(2)) && !(await vis(6)), 'cenário 5: desligado, comandos de outro usuário (bob: 2, 6) ficam ocultos');
+  assert(!(await vis(4)), 'cenário 5: desligado, comando de sistema oculto');
   await page.locator('.sb-toggle', { hasText: 'All commands' }).click();
-  await assertEventually(async () => page.isVisible('.card[data-cmd-id="4"]'), 'cenário 5: com "All commands" ligado, aparecem os comandos de todos os usuários, inclusive o de sistema');
+  await assertEventually(async () => (await vis(2)) && (await vis(6)) && (await vis(4)), 'cenário 5: ligado, aparecem os de outros usuários (bob) e o de sistema');
+  assert((await vis(1)) && (await vis(3)) && (await vis(5)), 'cenário 5: ligado, os meus continuam aparecendo');
   await page.locator('.sb-toggle', { hasText: 'All commands' }).click();
-  await assertEventually(async () => !(await page.isVisible('.card[data-cmd-id="4"]')), 'cenário 5: comando de sistema some de novo com o toggle desligado');
+  await assertEventually(async () => !(await vis(2)) && !(await vis(4)) && !(await vis(6)), 'cenário 5: desligar de novo volta a mostrar só os meus');
 });
 
 // ── Cenário 6: filtro de Vendor esconde comandos que não batem; sem vendor cadastrado sempre aparece ──
@@ -339,9 +346,8 @@ await withPage(browser, async page => {
   await assertEventually(async () => page.isVisible('text=No commands found'), 'cenário 8: "No commands found" aparece quando nada bate');
 
   await page.click('.cmd-search-clear');
-  // 5, não 6: o comando 4 (is_system) fica oculto por padrão (settings.showSystemCommands=false) —
-  // ver cenário 5. Os outros 5 (ids 1,2,3,5,6) devem voltar a aparecer.
-  await assertEventually(async () => (await page.locator('.card').count()) === 5, 'cenário 8: limpar a busca restaura todos os cards visíveis (5, com o comando de sistema ainda oculto por padrão)');
+  // 6: esta suíte roda com "All commands" ligado (mockLoggedInAdmin) — ids 1..6.
+  await assertEventually(async () => (await page.locator('.card').count()) === 6, 'cenário 8: limpar a busca restaura todos os cards visíveis (6, com "All commands" ligado)');
   await page.screenshot({ path: `${SHOTS}/8-search-filter.png` });
 });
 

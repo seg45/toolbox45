@@ -722,8 +722,8 @@ export function CommandsContent({
 
   const renderResult = useMemo(() => {
     if (!commands) return null;
-    return buildRenderTree({ commands, filters: liveFilters.filters, settings, catalogs, fieldValues });
-  }, [commands, liveFilters.filters, settings, catalogs, fieldValues]);
+    return buildRenderTree({ commands, filters: liveFilters.filters, settings, catalogs, fieldValues, currentUser: me?.username });
+  }, [commands, liveFilters.filters, settings, catalogs, fieldValues, me?.username]);
 
   // Árvore de Pastas (visão "Folders", escopo "My folders") — porta do ramo
   // VIEW_FOLDERS_HOME/scope==='mine' de render() (js/render.js). Só
@@ -745,7 +745,10 @@ export function CommandsContent({
   // dentro de cada grupo do escopo "all".
   const folderScopeData = useMemo<FolderScopeRenderData | null>(() => {
     if (!foldersView.active || !commands) return null;
-    const filtered = filterCommands(commands, settings, liveFilters.filters);
+    // "All commands" desligado = só os meus — vale para as MINHAS pastas; ao
+    // navegar pelas pastas de outros usuários ('all'/'user:x') o escopo escolhido
+    // é explícito, então não restringe por dono (só esconde os de sistema).
+    const filtered = filterCommands(commands, settings, liveFilters.filters, folderScopeState.scope === 'mine' ? me?.username : undefined);
     const values = buildValues(fieldValues, settings, catalogs);
     const hasIPs = !!(values.src_ip && values.dst_ip);
     const catalogParams = catalogs?.parameters || [];

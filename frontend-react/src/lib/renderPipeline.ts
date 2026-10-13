@@ -135,19 +135,23 @@ export function buildValues(fieldValues: Record<string, string>, settings: Setti
 // render.js aplica esse filtro uma única vez, antes de se ramificar em
 // VIEW_FOLDERS_HOME ou nos modos de Group By (ver comentário no topo de
 // render.js). Nenhuma mudança de comportamento aqui, só a palavra `export`.
-export function filterCommands(commands: Command[], settings: Settings, filters: LiveFilters): Command[] {
+export function filterCommands(commands: Command[], settings: Settings, filters: LiveFilters, currentUser?: string | null): Command[] {
   let out = commands;
   // Preferência "All commands" (sidebar, Options; a chave persistida segue
-  // `showSystemCommands`, para não perder a escolha já salva) — ligada, mostra
-  // os comandos de TODOS os usuários (dentro do que o servidor libera para o
-  // papel) e também os de referência (System). Quando desligada,
-  // some com os comandos de referência (created_by='System', is_system=true)
-  // e mostra só os criados/duplicados por usuários. Exceção: um comando
-  // System guardado em alguma pasta continua aparecendo (desde a fatia 5a,
-  // Pastas, folder_ids pode de fato vir preenchido — antes disso a exceção
-  // nunca disparava na prática, já que Folders não existia ainda).
+  // `showSystemCommands`, para não perder a escolha já salva):
+  //   - ligada: comandos de TODOS os usuários (dentro do que o servidor libera
+  //     para o papel) e também os de referência (System);
+  //   - desligada: SÓ os comandos do próprio usuário (created_by = ele).
+  // Exceção: um comando guardado em alguma pasta do usuário continua
+  // aparecendo (ele o guardou de propósito). Sem o usuário carregado ainda
+  // (currentUser vazio) cai na regra antiga — só esconde os de sistema —
+  // para não piscar a lista vazia no primeiro render.
   if (!settings.showSystemCommands) {
-    out = out.filter(c => !c.is_system || (c.folder_ids && c.folder_ids.length));
+    const me = (currentUser || '').toLowerCase();
+    out = out.filter(c => {
+      if (c.folder_ids && c.folder_ids.length) return true;
+      return me ? (c.created_by || '').toLowerCase() === me : !c.is_system;
+    });
   }
   // Vendor/System — topo da hierarquia multi-fabricante ESTRITA: seleção
   // vazia não restringe nada; um comando sem vendor/system cadastrado
@@ -455,13 +459,14 @@ export function buildRenderTree(params: {
   settings: Settings;
   catalogs: Catalogs | null;
   fieldValues: Record<string, string>;
+  currentUser?: string | null;
 }): RenderResult {
   const { commands: commandsRaw, filters, settings, catalogs } = params;
   const catalogParams = catalogs?.parameters || [];
   const values = buildValues(params.fieldValues, settings, catalogs);
   const hasIPs = !!(values.src_ip && values.dst_ip);
 
-  const commands = filterCommands(commandsRaw, settings, filters);
+  const commands = filterCommands(commandsRaw, settings, filters, params.currentUser);
 
   // Resolve a seleção de Versão/Ambiente numa lista de valores concretos a
   // gerar. "Group by: Version" com nada marcado trata "nada marcado" como

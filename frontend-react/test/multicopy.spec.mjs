@@ -28,7 +28,7 @@ function cmd(id, name, contents) {
     name, name_empty: null, desc: name, desc_empty: null, details: null,
     vendors: [], systems: [], versions: [], environments: [],
     lines: { default: contents.map(c => ({ line_type: 'cmd', prompt: '[Expert@FW]#', content: c, export_template: null, image_data: null })), empty: [] },
-    created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', created_by: 'alice', modified_by: 'alice', is_system: false,
+    created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', created_by: 'admin', modified_by: 'admin', is_system: false,
   };
 }
 const COMMANDS = [
