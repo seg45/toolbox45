@@ -122,12 +122,14 @@ export function CommandsContent({
   settings,
   updateSettings,
   catalogs,
+  onCatalogsChanged,
   liveFilters,
   foldersView,
 }: {
   settings: Settings;
   updateSettings: (patch: Partial<Settings>) => void;
   catalogs: Catalogs | null;
+  onCatalogsChanged?: () => void | Promise<void>;
   liveFilters: ReturnType<typeof useLiveFilters>;
   foldersView: ReturnType<typeof useFoldersView>;
 }) {
@@ -1162,6 +1164,7 @@ export function CommandsContent({
             catalogs={catalogs}
             onClose={() => setEditor(null)}
             onSaved={refreshCommands}
+            onCatalogsChanged={onCatalogsChanged}
           />,
           document.body
         )}

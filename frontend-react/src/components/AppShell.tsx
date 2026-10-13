@@ -128,6 +128,7 @@ export function AppShell() {
               settings={settings}
               updateSettings={update}
               catalogs={catalogs}
+              onCatalogsChanged={refreshCatalogs}
               liveFilters={liveFilters}
               foldersView={foldersView}
             />

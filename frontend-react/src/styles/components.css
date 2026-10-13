@@ -683,6 +683,16 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
   font-family: var(--mono); gap: 8px;
 }
 .ln-var-dd .dd-panel { left: 0; right: auto; min-width: 200px; width: max-content; max-width: 280px; }
+/* "+ New variable…" e mini-formulário de criação dentro do seletor */
+.ln-var-dd .var-new-btn { color: var(--teal); font-weight: 600; border-top: 1px solid var(--bdr); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 7px; }
+.ln-var-dd .var-empty { padding: 6px 8px; font-size: 11px; color: var(--muted); white-space: normal; }
+.ln-var-dd .dd-panel:has(.var-new-form) { width: 260px; max-width: 260px; }
+.var-new-form { display: flex; flex-direction: column; gap: 8px; padding: 4px; }
+.var-new-label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.var-new-label .set-input { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.var-new-hint { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 4px; font-family: var(--mono); }
+.var-new-err { font-size: 11px; color: var(--red); white-space: normal; }
+.var-new-actions { display: flex; justify-content: flex-end; gap: 6px; }
 
 /* flag toggles */
 .sb-toggle {

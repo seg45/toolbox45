@@ -20,6 +20,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { createCatalogItem } from '../../lib/catalogAdmin';
 import type { Catalogs, CatalogEntry } from '../../lib/catalogs';
 import { createCommand, deleteCommand, updateCommand, type Command, type CommandLine, type CommandLinePayload, type CommandPayload } from '../../lib/commands';
 import { useConfirm } from '../../lib/useConfirm';
@@ -123,9 +124,13 @@ interface Props {
   catalogs: Catalogs | null;
   onClose: () => void;
   onSaved: () => void; // invalida cache + refetch + setCommands, ver CommandsContent.tsx
+  // Recarrega o catálogo (AppShell.refreshCatalogs) depois de criar uma
+  // variável pelo próprio editor, para ela já aparecer no seletor e no
+  // campo de busca sem precisar fechar o editor.
+  onCatalogsChanged?: () => void | Promise<void>;
 }
 
-export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved }: Props) {
+export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved, onCatalogsChanged }: Props) {
   const auth = useAuth();
   const confirm = useConfirm();
 
@@ -274,6 +279,13 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
     () => (catalogs?.parameters || []).slice().sort((a, b) => a.sort_order - b.sort_order),
     [catalogs]
   );
+  // POST /api/parameters exige administrador no backend; quem não é admin
+  // só escolhe entre as variáveis já cadastradas.
+  const canCreateVariable = auth.isAdmin;
+  async function handleCreateVariable(key: string, label: string) {
+    await createCatalogItem('parameters', { key, label });
+    await onCatalogsChanged?.();
+  }
 
   // ════════════════════════════════════════════════
   // Validação (bloqueante só em modo create — ver comentário no topo) — o
@@ -559,6 +571,8 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
                   promptOptions={promptOptions}
                   exportOptions={exportOptions}
                   parameterOptions={parameterOptions}
+                  canCreateVariable={canCreateVariable}
+                  onCreateVariable={handleCreateVariable}
                   dragging={draggingKey === line._key}
                   onChange={patch => updateLine(line._key, patch)}
                   onRemove={() => removeLine(line._key)}
@@ -622,6 +636,20 @@ const CATEGORY_OPTIONS: SegOption[] = [
   { val: 'ok', label: 'OK' },
 ];
 
+// Mesma regra de chave do backend (CATALOG_KEY_RE em server-py/app/catalog.py).
+const VARIABLE_KEY_RE = /^[A-Za-z0-9._-]{1,40}$/;
+
+// "Source IP" -> "source_ip" (sem acentos, só caracteres aceitos pela chave).
+function slugifyVariableKey(label: string): string {
+  return label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+}
+
 function uiTypeOf(lineType: CommandLine['line_type']): 'cmd' | 'image' | 'text' {
   return lineType === 'cmd' || lineType === 'image' ? lineType : 'text';
 }
@@ -631,6 +659,8 @@ function LineRowEditor({
   promptOptions,
   exportOptions,
   parameterOptions,
+  canCreateVariable,
+  onCreateVariable,
   dragging,
   onChange,
   onRemove,
@@ -642,6 +672,8 @@ function LineRowEditor({
   promptOptions: SegOption[];
   exportOptions: SegOption[];
   parameterOptions: { key: string; label: string }[];
+  canCreateVariable: boolean;
+  onCreateVariable: (key: string, label: string) => Promise<void>;
   dragging: boolean;
   onChange: (patch: Partial<EditorLine>) => void;
   onRemove: () => void;
@@ -655,11 +687,72 @@ function LineRowEditor({
   const [dragOverImg, setDragOverImg] = useState(false);
   const [varOpen, setVarOpen] = useState(false);
   const varWrapRef = useRef<HTMLDivElement>(null);
+  // Mini-formulário "Nova variável" dentro do próprio seletor.
+  const [varCreating, setVarCreating] = useState(false);
+  const [newVarKey, setNewVarKey] = useState('');
+  const [newVarLabel, setNewVarLabel] = useState('');
+  const [newVarKeyTouched, setNewVarKeyTouched] = useState(false);
+  const [newVarBusy, setNewVarBusy] = useState(false);
+  const [newVarErr, setNewVarErr] = useState('');
+
+  // Fechar o seletor descarta o formulário em andamento.
+  useEffect(() => {
+    if (varOpen) return;
+    setVarCreating(false);
+    setNewVarKey('');
+    setNewVarLabel('');
+    setNewVarKeyTouched(false);
+    setNewVarErr('');
+  }, [varOpen]);
+
+  function startCreateVariable() {
+    setVarCreating(true);
+    setNewVarErr('');
+  }
+
+  // A chave sugerida acompanha a descrição até o usuário editar a chave.
+  function handleNewVarLabel(v: string) {
+    setNewVarLabel(v);
+    if (!newVarKeyTouched) setNewVarKey(slugifyVariableKey(v));
+  }
+
+  async function submitNewVariable() {
+    if (newVarBusy) return;
+    const key = newVarKey.trim();
+    const label = newVarLabel.trim();
+    if (!VARIABLE_KEY_RE.test(key)) {
+      setNewVarErr('Key: letters, numbers, dot, underscore or hyphen (max 40).');
+      return;
+    }
+    if (!label) {
+      setNewVarErr('Fill in the description.');
+      return;
+    }
+    if (parameterOptions.some(p => p.key === key)) {
+      setNewVarErr('A variable with this key already exists.');
+      return;
+    }
+    setNewVarBusy(true);
+    setNewVarErr('');
+    try {
+      await onCreateVariable(key, label);
+      insertVariable(key);
+    } catch (e) {
+      setNewVarErr(e instanceof ApiError ? e.message : 'Failed to create variable.');
+    } finally {
+      setNewVarBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!varOpen) return;
     function onDocClick(ev: MouseEvent) {
-      if (varWrapRef.current && !varWrapRef.current.contains(ev.target as Node)) setVarOpen(false);
+      // composedPath() em vez de contains(target): clicar em "New variable…"
+      // troca o conteúdo do painel e o alvo do clique já saiu do DOM quando
+      // este listener (no document) roda — contains() daria falso e fecharia
+      // o seletor.
+      const wrap = varWrapRef.current;
+      if (wrap && !ev.composedPath().includes(wrap)) setVarOpen(false);
     }
     document.addEventListener('click', onDocClick);
     return () => document.removeEventListener('click', onDocClick);
@@ -690,9 +783,10 @@ function LineRowEditor({
       setVarOpen(false);
       return;
     }
-    const start = ta.selectionStart ?? line.content.length;
-    const end = ta.selectionEnd ?? line.content.length;
-    const next = line.content.slice(0, start) + token + line.content.slice(end);
+    const cur = ta.value;
+    const start = ta.selectionStart ?? cur.length;
+    const end = ta.selectionEnd ?? cur.length;
+    const next = cur.slice(0, start) + token + cur.slice(end);
     onChange({ content: next });
     setVarOpen(false);
     requestAnimationFrame(() => {
@@ -750,11 +844,74 @@ function LineRowEditor({
                 </button>
                 {varOpen && (
                   <div className="dd-panel seg">
-                    {parameterOptions.map(p => (
-                      <button key={p.key} type="button" className="seg-btn" onClick={() => insertVariable(p.key)}>
-                        {p.label}
-                      </button>
-                    ))}
+                    {!varCreating && (
+                      <>
+                        {parameterOptions.map(p => (
+                          <button key={p.key} type="button" className="seg-btn" onClick={() => insertVariable(p.key)}>
+                            {p.label}
+                          </button>
+                        ))}
+                        {parameterOptions.length === 0 && (
+                          <div className="var-empty">
+                            {canCreateVariable ? 'No variables yet.' : 'No variables registered. Ask an administrator to add them.'}
+                          </div>
+                        )}
+                        {canCreateVariable && (
+                          <button type="button" className="seg-btn var-new-btn" onClick={startCreateVariable}>
+                            ＋ New variable…
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {varCreating && (
+                      <div
+                        className="var-new-form"
+                        onKeyDown={ev => {
+                          if (ev.key === 'Enter') {
+                            ev.preventDefault();
+                            void submitNewVariable();
+                          } else if (ev.key === 'Escape') {
+                            ev.stopPropagation();
+                            setVarCreating(false);
+                          }
+                        }}
+                      >
+                        <label className="var-new-label">
+                          Description
+                          <input
+                            className="set-input"
+                            autoFocus
+                            placeholder="e.g. Source IP"
+                            value={newVarLabel}
+                            onChange={e => handleNewVarLabel(e.target.value)}
+                          />
+                        </label>
+                        <label className="var-new-label">
+                          <span>
+                            Key <span className="var-new-hint">used as {'{{key}}'}</span>
+                          </span>
+                          <input
+                            className="set-input"
+                            placeholder="e.g. src_ip"
+                            maxLength={40}
+                            value={newVarKey}
+                            onChange={e => {
+                              setNewVarKeyTouched(true);
+                              setNewVarKey(e.target.value);
+                            }}
+                          />
+                        </label>
+                        {newVarErr && <div className="var-new-err">{newVarErr}</div>}
+                        <div className="var-new-actions">
+                          <button type="button" className="btn btn-ghost btn-sm" disabled={newVarBusy} onClick={() => setVarCreating(false)}>
+                            Cancel
+                          </button>
+                          <button type="button" className="btn btn-primary btn-sm" disabled={newVarBusy} onClick={() => void submitNewVariable()}>
+                            {newVarBusy ? 'Creating…' : 'Create & insert'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
