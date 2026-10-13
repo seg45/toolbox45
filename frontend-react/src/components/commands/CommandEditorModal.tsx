@@ -50,10 +50,15 @@ function toEditorLine(l: CommandLine): EditorLine {
 
 // Mesmo valor-padrão de _ceBuildLineRow(data) no original quando chamado
 // sem argumento (create novo / botão "+ Add line" — cmdEditorAddLine('cmdLinesDefaultList')
-// sem `data`, ver anexo A): prompt já vem preenchido com "[Expert@FW]#", não
-// vazio — o usuário troca se quiser, mas o campo nunca nasce em branco.
-function newEditorLine(): EditorLine {
-  return { _key: nextLineKey(), line_type: 'cmd', prompt: '[Expert@FW]#', content: '', export_template: null, image_data: null };
+// sem `data`, ver anexo A): prompt já vem preenchido com "[Expert@FW]#" — mas
+// SÓ se esse prompt estiver cadastrado no catálogo. Numa instalação nova o
+// catálogo nasce vazio e o campo começa sem prompt (nada "fantasma").
+const DEFAULT_PROMPT_TEXT = '[Expert@FW]#';
+function defaultPromptFor(catalogs: Catalogs | null): string | null {
+  return catalogs?.prompts?.some(p => p.label === DEFAULT_PROMPT_TEXT) ? DEFAULT_PROMPT_TEXT : null;
+}
+function newEditorLine(defaultPrompt: string | null): EditorLine {
+  return { _key: nextLineKey(), line_type: 'cmd', prompt: defaultPrompt, content: '', export_template: null, image_data: null };
 }
 
 // Sanitiza os campos irrelevantes ao tipo da linha — mesma filtragem que
@@ -199,7 +204,7 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
   // _ceResetForm() chamar cmdEditorAddLine() incondicionalmente antes de
   // (opcionalmente) _cePopulateForm() sobrescrever tudo a partir da row.
   const [lines, setLines] = useState<EditorLine[]>(() =>
-    sourceRow ? sourceRow.lines.default.map(toEditorLine) : [newEditorLine()]
+    sourceRow ? sourceRow.lines.default.map(toEditorLine) : [newEditorLine(defaultPromptFor(catalogs))]
   );
   // Variante 'empty' (requires_ip_port) — sem UI própria nesta fatia, só
   // precisa não ser perdida ao salvar uma edição/duplicação. Guardada como
@@ -286,8 +291,18 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
   // padrão "[Expert@FW]#" ou um valor do catálogo); só Export tem uma opção
   // "nenhum" de verdade (_ceBuildExportOptions começa com essa option vazia
   // explícita).
-  const promptOptions = useMemo<SegOption[]>(() => sortedCatalog(catalogs?.prompts), [catalogs]);
-  const exportOptions = useMemo<SegOption[]>(() => [{ val: '', label: '— No export —' }, ...sortedCatalog(catalogs?.exports)], [catalogs]);
+  // Prompt e Export guardam o TEXTO escolhido em command_lines.prompt /
+  // export_template (texto solto, não FK — ver schema.sql), não a key do
+  // catálogo: por isso o valor de cada opção é o próprio label. Prompt também
+  // ganha "— No prompt —" (sem nenhum cadastrado, a linha fica sem prompt).
+  const promptOptions = useMemo<SegOption[]>(
+    () => [{ val: '', label: '— No prompt —' }, ...sortedCatalog(catalogs?.prompts).map(o => ({ val: o.label, label: o.label }))],
+    [catalogs]
+  );
+  const exportOptions = useMemo<SegOption[]>(
+    () => [{ val: '', label: '— No export —' }, ...sortedCatalog(catalogs?.exports).map(o => ({ val: o.label, label: o.label }))],
+    [catalogs]
+  );
   const parameterOptions = useMemo(
     () => (catalogs?.parameters || []).slice().sort((a, b) => a.sort_order - b.sort_order),
     [catalogs]
@@ -344,10 +359,10 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
     ? { noun: 'topic', withColor: true, onCreate: (label, color) => createEntry('topics', { label, color }) }
     : undefined;
   const qcPrompt: QuickCreateConfig | undefined = canQuickCreate
-    ? { noun: 'prompt', onCreate: label => createEntry('prompts', { label }) }
+    ? { noun: 'prompt', onCreate: async label => (await createEntry('prompts', { label }), label) }
     : undefined;
   const qcExport: QuickCreateConfig | undefined = canQuickCreate
-    ? { noun: 'export template', onCreate: label => createEntry('exports', { label }) }
+    ? { noun: 'export template', onCreate: async label => (await createEntry('exports', { label }), label) }
     : undefined;
 
   // ════════════════════════════════════════════════
@@ -510,7 +525,7 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
     setLines(prev => prev.filter(l => l._key !== key));
   }
   function addLine() {
-    setLines(prev => [...prev, newEditorLine()]);
+    setLines(prev => [...prev, newEditorLine(defaultPromptFor(catalogs))]);
   }
   function reorderTo(overKey: string) {
     if (!draggingKey || draggingKey === overKey) return;

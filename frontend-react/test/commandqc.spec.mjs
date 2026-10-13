@@ -162,9 +162,10 @@ async function fillStep2(page) {
 const KINDS = { vendors: 'vendors', systems: 'systems', versions: 'versions', environments: 'environments', topics: 'topics', prompts: 'prompts', exports: 'exports' };
 
 // Catálogo mutável: cada POST /api/<kind> acrescenta a linha e o próximo GET /api/catalogs a devolve.
-async function mockCatalogWrites(page, { role = 'admin', failWith = null, topics = null } = {}) {
+async function mockCatalogWrites(page, { role = 'admin', failWith = null, topics = null, prompts = null } = {}) {
   const cat = JSON.parse(JSON.stringify(CATALOGS));
   if (topics) cat.topics = topics;
+  if (prompts) cat.prompts = prompts;
   const st = { posts: [], gets: 0, cat };
   const isAdmin = role === 'admin' || role === 'super_admin';
   await page.route('**/api/me', route =>
@@ -331,6 +332,53 @@ await withPage(browser, async page => {
   await g.nth(4).locator('.dd-panel-foot .btn', { hasText: 'Close' }).click();
   await assertEventually(async () => (await g.nth(4).locator('.dd-label').innerText()) === 'HA', 'cenário 6: só o tópico criado aparece selecionado (não "2 topics")');
   assert(st.posts.length === 1 && st.posts[0].kind === 'topics', 'cenário 6: um único POST de tópico');
+});
+
+// ── Cenário 7: sem prompts cadastrados (instalação nova) a linha nasce sem prompt; "New prompt…" cabe numa linha ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  await mockCatalogWrites(page, { prompts: [] });
+  const g = await gotoStep2(page);
+  await pickSegSingle(g.nth(0), 'Check Point');
+  await pickSegSingle(g.nth(1), 'Gaia');
+  await pickSegMulti(g.nth(2), 'R81.10');
+  await pickSegMulti(g.nth(3), 'Standalone');
+  await page.locator('#cmdWizNextBtn').click();
+  const row = page.locator('.list-editor#cmdLinesDefaultList .line-row').first();
+  const dd = row.locator('.row-head .dd').nth(1);
+  assert((await dd.locator('.dd-label').innerText()) === '— No prompt —', 'cenário 7: sem prompt cadastrado, a linha nasce sem prompt (nada de "[Expert@FW]#" fantasma)');
+  await dd.locator('.dd-btn').click();
+  const box = await dd.locator('.qc-new-btn').boundingBox();
+  assert(box && box.height < 34, `cenário 7: "＋ New prompt…" numa linha só (altura ${box && Math.round(box.height)}px)`);
+  await page.screenshot({ path: `${SHOTS}/qc7-prompt.png` });
+});
+
+// ── Cenário 8: o prompt/export escolhido grava o TEXTO (não a key do catálogo) no comando ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  await mockCatalogWrites(page);
+  let saved = null;
+  await page.route('**/api/commands', route => {
+    if (route.request().method() === 'POST') { saved = route.request().postDataJSON(); return route.fulfill({ status: 201, json: { ...COMMANDS[0], id: 999 } }); }
+    return route.fulfill({ json: COMMANDS });
+  });
+  const g = await gotoStep2(page);
+  await pickSegSingle(g.nth(0), 'Check Point');
+  await pickSegSingle(g.nth(1), 'Gaia');
+  await pickSegMulti(g.nth(2), 'R81.10');
+  await pickSegMulti(g.nth(3), 'Standalone');
+  await page.locator('#cmdWizNextBtn').click();
+  const row = page.locator('.list-editor#cmdLinesDefaultList .line-row').first();
+  const dds = row.locator('.row-head .dd');
+  await dds.nth(1).locator('.dd-btn').click();
+  await dds.nth(1).locator('.qc-new-btn').click();
+  await dds.nth(1).locator('.qc-form input.set-input').fill('Gaia-Prompt>');
+  await dds.nth(1).locator('.qc-actions .btn-primary').click();
+  await row.locator('textarea.set-input').fill('show version all');
+  await page.locator('#cmdSaveBtn, button:has-text("Save")').last().click();
+  await assertEventually(async () => !!saved, 'cenário 8: comando enviado ao salvar');
+  const ln = saved?.lines?.default?.[0] || saved?.lines?.[0];
+  assert(ln && ln.prompt === 'Gaia-Prompt>', `cenário 8: prompt gravado como texto ("${ln && ln.prompt}"), não como key`);
 });
 
 await browser.close();

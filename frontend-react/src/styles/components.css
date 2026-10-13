@@ -692,7 +692,7 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 .var-new-label .set-input { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .var-new-hint { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 4px; font-family: var(--mono); }
 /* Cadastro rápido (SegControls QuickCreate) dentro dos seletores do editor */
-.qc-new-btn { color: var(--teal); font-weight: 600; border-top: 1px solid var(--bdr); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 7px; }
+.qc-new-btn { white-space: nowrap; color: var(--teal); font-weight: 600; border-top: 1px solid var(--bdr); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 7px; }
 .qc-blocked { padding: 6px 8px; font-size: 11px; color: var(--muted); white-space: normal; border-top: 1px solid var(--bdr); margin-top: 4px; }
 .qc-form { display: flex; flex-direction: column; gap: 8px; padding: 4px; min-width: 220px; }
 .qc-label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
@@ -701,6 +701,7 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 .qc-err { font-size: 11px; color: var(--red); white-space: normal; }
 .qc-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .row-head .dd-panel:has(.qc-form) { min-width: 240px; }
+.row-head .dd-panel:has(.qc-new-btn) { min-width: max-content; }
 .var-new-err { font-size: 11px; color: var(--red); white-space: normal; }
 .var-new-actions { display: flex; justify-content: flex-end; gap: 6px; }
 
