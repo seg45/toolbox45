@@ -8,7 +8,10 @@ retencao propria de 180 dias, e so o super admin consulta (GET /api/auth-events)
 Eventos gravados (coluna `event`):
   login_success | login_failed | login_blocked | setup_completed | register |
   password_changed | password_change_failed | password_change_blocked |
-  password_reset_by_admin | oauth_login | oauth_pending | oauth_failed
+  password_reset_by_admin | password_reset_requested | password_reset_done |
+  password_reset_failed | mfa_code_sent | mfa_failed | mfa_enabled | mfa_disabled |
+  mfa_skipped | converted_to_sso | converted_to_local | oauth_login | oauth_pending |
+  oauth_failed
 
 Cuidados:
   * NUNCA grava senha, hash, token ou cookie -- so quem (usuario), de onde (IP),
@@ -39,7 +42,9 @@ _BLOCKED_DEDUPE_SECONDS = 60
 EVENTS = (
     "login_success", "login_failed", "login_blocked", "setup_completed", "register",
     "password_changed", "password_change_failed", "password_change_blocked",
-    "password_reset_by_admin", "oauth_login", "oauth_pending", "oauth_failed",
+    "password_reset_by_admin", "password_reset_requested", "password_reset_done",
+    "password_reset_failed", "mfa_code_sent", "mfa_failed", "mfa_enabled", "mfa_disabled",
+    "mfa_skipped", "converted_to_sso", "converted_to_local", "oauth_login", "oauth_pending", "oauth_failed",
 )
 
 _EMAIL_LIKE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")

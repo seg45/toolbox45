@@ -21,7 +21,8 @@ from fastapi.responses import PlainTextResponse, RedirectResponse
 from .. import oauth
 from ..db import get_pool
 from ..auth_events import log_auth_event
-from ..session import create_session, request_is_https, set_session_cookie
+from ..deps import get_optional_user
+from ..session import SESSION_COOKIE_NAME, create_session, delete_user_sessions, request_is_https, set_session_cookie
 
 router = APIRouter(prefix="/api/auth", tags=["oauth"])
 
@@ -134,6 +135,54 @@ async def _provision_or_login(email: str, provider: str, created_by: str):
     return ("pending", None)
 
 
+
+# ──────────── Converter a PROPRIA conta de login local para SSO ────────────
+# O usuario logado (conta local) abre /api/auth/google?link=1 (ou /microsoft?link=1).
+# O `state` ganha o prefixo "link." so para o callback saber o MODO -- quem autoriza a
+# troca NAO e esse prefixo: e a sessao atual + o e-mail verificado pelo provedor ser
+# IGUAL ao usuario da sessao. Assim ninguem converte (nem sequestra) a conta de outro.
+LINK_PREFIX = "link."
+
+
+def _link_failure_url(reason: str) -> str:
+    return f"/index.html?convert=error&reason={reason}"
+
+
+async def _convert_to_sso(request: Request, email: str, provider: str):
+    """(None, None) em sucesso; ("erro", motivo) caso contrario."""
+    user = await get_optional_user(request)
+    if not user or user["api_key"]:
+        return ("failure", "login_required")
+    username = user["username"]
+    if username != email:
+        return ("failure", "email_mismatch")
+    pool = get_pool()
+    row = await pool.fetchrow("SELECT * FROM users WHERE username = $1", username)
+    if not row or row["disabled"]:
+        return ("failure", "login_required")
+    if not row["is_local"]:
+        return ("failure", "already_sso")
+    if row["role"] == "super_admin":
+        others = await pool.fetchval(
+            "SELECT COUNT(*) FROM users WHERE role = 'super_admin' AND is_local = 1 AND disabled = 0 "
+            "AND password_hash IS NOT NULL AND username <> $1", username)
+        if not others:
+            # nao deixa o servidor sem nenhum login de emergencia (se o OAuth quebrar)
+            return ("failure", "last_local_super_admin")
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "UPDATE users SET auth_provider = $1, is_local = 0, password_hash = NULL, mfa_enabled = 0, mfa_required = 0 "
+                "WHERE username = $2", provider, username)
+            await conn.execute("DELETE FROM password_reset_tokens WHERE username = $1", username)
+            await conn.execute("DELETE FROM mfa_challenges WHERE username = $1", username)
+    await delete_user_sessions(username, except_token=request.cookies.get(SESSION_COOKIE_NAME))
+    await log_auth_event("converted_to_sso", request=request, username=username, detail=provider)
+    from ..audit import log_audit
+    await log_audit(username, "update", "user", username, username, f"Changed: sign-in method local → {provider} (self-service)")
+    return (None, None)
+
+
 # ──────────────────────────── Google ────────────────────────────
 
 @router.get("/google")
@@ -142,6 +191,12 @@ async def google_login(request: Request):
     if not cfg.enabled:
         return PlainTextResponse("Google login is not configured on this server.", status_code=503)
     state = secrets.token_hex(24)
+    if request.query_params.get("link") == "1":
+        # converter a propria conta para SSO: precisa estar logado com conta local
+        who = await get_optional_user(request)
+        if not who or who["api_key"]:
+            return RedirectResponse("/login.html", status_code=302)
+        state = LINK_PREFIX + state
     query = urlencode({
         "client_id": cfg.client_id,
         "redirect_uri": cfg.redirect_uri,
@@ -158,9 +213,12 @@ async def google_login(request: Request):
 @router.get("/google/callback")
 async def google_callback(request: Request):
     _sec = request_is_https(request)
+    link_mode = (request.cookies.get(OAUTH_STATE_COOKIE) or "").startswith(LINK_PREFIX)
 
     def failure(reason: str) -> RedirectResponse:
-        r = RedirectResponse(f"/login.html?google=error&reason={reason}", status_code=302)
+        r = RedirectResponse(
+            _link_failure_url(reason) if link_mode else f"/login.html?google=error&reason={reason}", status_code=302
+        )
         _clear_state_cookie(r, OAUTH_STATE_COOKIE, secure=_sec)
         return r
 
@@ -217,6 +275,14 @@ async def google_callback(request: Request):
     email = str(profile["email"]).lower()
     ctx["email"] = email
 
+    if link_mode:
+        err, why = await _convert_to_sso(request, email, "google")
+        if err:
+            return await fail(why)
+        r = RedirectResponse("/index.html?converted=google", status_code=302)
+        _clear_state_cookie(r, OAUTH_STATE_COOKIE, secure=_sec)
+        return r
+
     outcome, payload = await _provision_or_login(email, "google", "google-oauth")
     if outcome == "failure":
         return await fail(payload)
@@ -242,6 +308,12 @@ async def microsoft_login(request: Request):
     if not cfg.enabled:
         return PlainTextResponse("Microsoft login is not configured on this server.", status_code=503)
     state = secrets.token_hex(24)
+    if request.query_params.get("link") == "1":
+        # converter a propria conta para SSO: precisa estar logado com conta local
+        who = await get_optional_user(request)
+        if not who or who["api_key"]:
+            return RedirectResponse("/login.html", status_code=302)
+        state = LINK_PREFIX + state
     query = urlencode({
         "client_id": cfg.client_id,
         "redirect_uri": cfg.redirect_uri,
@@ -262,9 +334,12 @@ async def microsoft_login(request: Request):
 @router.get("/microsoft/callback")
 async def microsoft_callback(request: Request):
     _sec = request_is_https(request)
+    link_mode = (request.cookies.get(OAUTH_STATE_COOKIE_MS) or "").startswith(LINK_PREFIX)
 
     def failure(reason: str) -> RedirectResponse:
-        r = RedirectResponse(f"/login.html?microsoft=error&reason={reason}", status_code=302)
+        r = RedirectResponse(
+            _link_failure_url(reason) if link_mode else f"/login.html?microsoft=error&reason={reason}", status_code=302
+        )
         _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS, secure=_sec)
         return r
 
@@ -330,6 +405,14 @@ async def microsoft_callback(request: Request):
     )
     if problem:
         return await fail(problem)
+
+    if link_mode:
+        err, why = await _convert_to_sso(request, email, "microsoft")
+        if err:
+            return await fail(why)
+        r = RedirectResponse("/index.html?converted=microsoft", status_code=302)
+        _clear_state_cookie(r, OAUTH_STATE_COOKIE_MS, secure=_sec)
+        return r
 
     outcome, payload = await _provision_or_login(email, "microsoft", "microsoft-oauth")
     if outcome == "failure":

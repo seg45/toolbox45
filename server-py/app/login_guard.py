@@ -110,6 +110,13 @@ class FailureLimiter:
 login_limiter = FailureLimiter(per_user_ip=5, per_user=20, per_ip=30)
 # Troca de senha logado (adivinhar a senha atual com uma sessao roubada).
 password_change_limiter = FailureLimiter(per_user_ip=5, per_user=10, per_ip=30)
+# "Esqueci a senha": conta TODO pedido (nao so falhas) -- 3 por (IP, e-mail), 5 por
+# e-mail e 20 por IP em 15 min. Evita encher a caixa de alguem e martelar o SMTP.
+forgot_limiter = FailureLimiter(per_user_ip=3, per_user=5, per_ip=20)
+# Redefinicao com token invalido/vencido (adivinhar token).
+reset_limiter = FailureLimiter(per_user_ip=10, per_user=10, per_ip=30)
+# Codigo MFA errado / reenvio de codigo (por IP + desafio).
+mfa_limiter = FailureLimiter(per_user_ip=10, per_user=10, per_ip=40)
 
 
 def _docker_internal(real: str, peer: str) -> bool:

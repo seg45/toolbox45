@@ -8,16 +8,21 @@ OAuth (Google/Microsoft) fica pra fatia 3 do roadmap -- GET
 variavel de ambiente (ver app/config.py), mas os endpoints
 /api/auth/google*/microsoft* em si ainda nao existem neste backend.
 """
+import asyncio
+import hashlib
+import logging
 import re
+import secrets
+from html import escape
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
-from .. import oauth, setup
+from .. import mailer, mfa, oauth, setup
 from ..auth_events import log_auth_event
 from ..db import get_pool
-from ..login_guard import client_ip, login_limiter
+from ..login_guard import client_ip, forgot_limiter, login_limiter, mfa_limiter, reset_limiter
 from ..security import burn_verify, hash_password_async, verify_password_async
 from ..password_policy import password_problem
 from ..session import (
@@ -25,11 +30,13 @@ from ..session import (
     clear_session_cookie,
     create_session,
     delete_session,
+    delete_user_sessions,
     request_is_https,
     set_session_cookie,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+logger = logging.getLogger("toolbox45")
 
 # Mesma regex de server/index.js (EMAIL_RE) -- validacao simples de formato,
 # nao de existencia real do dominio/caixa postal.
@@ -62,7 +69,12 @@ async def get_providers() -> dict:
     # Le a config JA com a prioridade banco > ambiente (ver app/oauth.py) --
     # mesmo GOOGLE_ENABLED/MICROSOFT_ENABLED que o Node calcula depois de
     # reloadOAuthConfig().
-    return {"google": oauth.google_config.enabled, "microsoft": oauth.microsoft_config.enabled}
+    return {
+        "google": oauth.google_config.enabled,
+        "microsoft": oauth.microsoft_config.enabled,
+        # "Esqueci a senha" so aparece se ha SMTP configurado (Settings -> System).
+        "passwordReset": await mailer.is_configured(),
+    }
 
 
 @router.get("/setup-status")
@@ -173,10 +185,84 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
         )
     login_limiter.record_success(ip, username)
 
+    # MFA por e-mail (ver app/mfa.py): senha certa, mas ainda falta o codigo.
+    needs_code, enrolling = await mfa.login_requirement(user)
+    if needs_code:
+        try:
+            challenge = await mfa.start_challenge(user["username"], "login")
+        except mailer.MailError as err:
+            logger.error("MFA code e-mail failed for %s: %s", user["username"], err)
+            raise HTTPException(
+                status_code=502,
+                detail={"error": "mfa_send_failed", "message": "Could not send the verification code by e-mail. Try again or contact an administrator."},
+            )
+        await log_auth_event("mfa_code_sent", request=request, ip=ip, username=user["username"], require_email=True,
+                             detail="enrolling" if enrolling else "login")
+        return {"mfaRequired": True, "challenge": challenge, "maskedEmail": mfa.mask_email(user["username"]), "enrolling": enrolling}
+    if (user["mfa_enabled"] or await mfa.is_required_for(user)):
+        await log_auth_event("mfa_skipped", request=request, ip=ip, username=user["username"], require_email=True,
+                             detail="smtp_not_configured")
+
     token = await create_session(user["username"])
     set_session_cookie(response, token, secure=request_is_https(request))
     await log_auth_event("login_success", request=request, ip=ip, username=user["username"])
     return {"username": user["username"], "role": user["role"]}
+
+
+class MfaVerifyRequest(BaseModel):
+    challenge: Optional[str] = None
+    code: Optional[str] = None
+
+
+@router.post("/mfa/verify")
+async def mfa_verify(payload: MfaVerifyRequest, request: Request, response: Response) -> dict:
+    challenge = payload.challenge or ""
+    key = mfa._h(challenge)[:24]
+    ip = client_ip(request)
+    wait = mfa_limiter.retry_after(ip, key)
+    if wait:
+        raise HTTPException(
+            status_code=429,
+            detail={"error": "too_many_attempts", "message": f"Too many attempts. Try again in {max(1, -(-wait // 60))} minute(s)."},
+            headers={"Retry-After": str(wait)},
+        )
+    try:
+        username = await mfa.check(challenge, payload.code or "", "login")
+    except mfa.MfaError as err:
+        mfa_limiter.record_failure(ip, key)
+        await log_auth_event("mfa_failed", request=request, ip=ip, detail=err.code)
+        raise HTTPException(status_code=err.status, detail={"error": err.code, "message": err.message})
+    pool = get_pool()
+    user = await pool.fetchrow("SELECT * FROM users WHERE username = $1 AND is_local = 1", username)
+    if not user or user["disabled"]:
+        raise HTTPException(status_code=400, detail={"error": "invalid_challenge", "message": "This verification expired. Sign in again."})
+    if not user["mfa_enabled"]:
+        # ativacao: quem foi EXIGIDO e acertou o codigo prova que o e-mail recebe -> MFA ligado
+        await pool.execute("UPDATE users SET mfa_enabled = 1 WHERE username = $1", username)
+        await log_auth_event("mfa_enabled", request=request, ip=ip, username=username, require_email=True, detail="on_login")
+    token = await create_session(username)
+    set_session_cookie(response, token, secure=request_is_https(request))
+    await log_auth_event("login_success", request=request, ip=ip, username=username, require_email=True, detail="mfa")
+    return {"username": username, "role": user["role"]}
+
+
+class MfaResendRequest(BaseModel):
+    challenge: Optional[str] = None
+
+
+@router.post("/mfa/resend")
+async def mfa_resend(payload: MfaResendRequest, request: Request) -> dict:
+    ip = client_ip(request)
+    wait = mfa_limiter.retry_after(ip, "resend")
+    if wait:
+        raise HTTPException(status_code=429, detail={"error": "too_many_attempts", "message": "Too many requests. Try again later."},
+                            headers={"Retry-After": str(wait)})
+    mfa_limiter.record_failure(ip, "resend")
+    try:
+        username = await mfa.resend(payload.challenge or "", "login")
+    except mfa.MfaError as err:
+        raise HTTPException(status_code=err.status, detail={"error": err.code, "message": err.message})
+    return {"ok": True, "maskedEmail": mfa.mask_email(username)}
 
 
 @router.post("/logout")
@@ -256,3 +342,178 @@ async def register(payload: RegisterRequest, request: Request) -> dict:
         "status": "pending_approval",
         "message": "Your account was created and is pending administrator approval.",
     }
+
+
+# ════════════════════════════════════════════════
+# "Esqueci a senha" (contas locais) -- precisa do SMTP configurado.
+#
+#   POST /api/auth/forgot-password {email}  -> SEMPRE 200 com a mesma mensagem (nao
+#        revela se a conta existe); manda um e-mail com um link de uso unico.
+#   POST /api/auth/reset-password {token, password} -> troca a senha, encerra as
+#        sessoes da conta e invalida os outros links pendentes.
+#
+# Seguranca: token aleatorio de 256 bits, so o SHA-256 vai para o banco, validade de
+# 30 min, uso unico, limite de pedidos por IP/e-mail, link montado com a "Public URL"
+# do SMTP (nunca com o cabecalho Host), token no fragmento (#) do link para nao ir a
+# logs/Referer, e e-mail so para conta local ativa cujo usuario e um e-mail.
+# ════════════════════════════════════════════════
+RESET_TOKEN_TTL_MINUTES = 30
+FORGOT_GENERIC_MESSAGE = (
+    "If an account with that e-mail exists and can be reset, we sent a message with a link to choose a new password."
+)
+_TOKEN_RE = re.compile(r"^[A-Za-z0-9_\-]{20,128}$")
+
+
+class ForgotRequest(BaseModel):
+    email: Optional[str] = None
+
+
+class ResetRequest(BaseModel):
+    token: Optional[str] = None
+    password: Optional[str] = None
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _reset_email(link: str, minutes: int) -> tuple:
+    text = (
+        "Someone asked to reset the password of your Toolbox45 account.\n\n"
+        f"To choose a new password, open this link (valid for {minutes} minutes, one use only):\n{link}\n\n"
+        "If you did not ask for this, ignore this message -- your password stays the same."
+    )
+    safe = escape(link, quote=True)
+    html = (
+        "<p>Someone asked to reset the password of your Toolbox45 account.</p>"
+        f'<p><a href="{safe}">Choose a new password</a><br>'
+        f"<small>The link is valid for {minutes} minutes and works only once.</small></p>"
+        "<p><small>If you did not ask for this, ignore this message &mdash; your password stays the same.</small></p>"
+    )
+    return text, html
+
+
+async def _send_reset_email(email: str, link: str, cfg: dict) -> None:
+    try:
+        text, html = _reset_email(link, RESET_TOKEN_TTL_MINUTES)
+        await mailer.send_mail(email, "Toolbox45 — reset your password", text, html, cfg=cfg)
+    except Exception as err:  # noqa: BLE001  (segundo plano: so registra, sem expor ao cliente)
+        logger.error("password reset e-mail failed: %s", err)
+
+
+_background: set = set()
+
+
+@router.post("/forgot-password")
+async def forgot_password(payload: ForgotRequest, request: Request) -> dict:
+    email = (payload.email or "").strip()
+    if not email or len(email) > 254 or not EMAIL_RE.match(email):
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": "A valid e-mail address is required"},
+        )
+    username = email.lower()
+    ip = client_ip(request)
+    wait = forgot_limiter.retry_after(ip, username)
+    if wait:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "too_many_attempts",
+                "message": f"Too many requests. Try again in {max(1, -(-wait // 60))} minute(s).",
+            },
+            headers={"Retry-After": str(wait)},
+        )
+    forgot_limiter.record_failure(ip, username)   # conta o pedido (tenha a conta existido ou nao)
+
+    cfg = await mailer.load_config()
+    if not cfg:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "smtp_not_configured", "message": "Password reset by e-mail is not available. Ask an administrator."},
+        )
+
+    pool = get_pool()
+    user = await pool.fetchrow(
+        "SELECT username, disabled FROM users WHERE username = $1 AND is_local = 1 AND password_hash IS NOT NULL", username
+    )
+    skip = (
+        not user
+        or user["disabled"]
+        or (username == setup.DEFAULT_ADMIN_USERNAME and setup.default_admin_pending())
+    )
+    await log_auth_event(
+        "password_reset_requested", request=request, ip=ip, username=username, require_email=True,
+        detail="sent" if not skip else "ignored",
+    )
+    if not skip:
+        token = secrets.token_urlsafe(32)
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("DELETE FROM password_reset_tokens WHERE username = $1 OR expires_at < NOW()", username)
+                await conn.execute(
+                    "INSERT INTO password_reset_tokens (token_hash, username, expires_at) "
+                    "VALUES ($1, $2, NOW() + make_interval(mins => $3))",
+                    _token_hash(token), username, RESET_TOKEN_TTL_MINUTES,
+                )
+        link = f"{cfg['app_url']}/login.html#reset={token}"
+        # Em segundo plano: o tempo de resposta nao revela se a conta existe.
+        task = asyncio.create_task(_send_reset_email(username, link, cfg))
+        _background.add(task)
+        task.add_done_callback(_background.discard)
+    return {"ok": True, "message": FORGOT_GENERIC_MESSAGE}
+
+
+@router.post("/reset-password")
+async def reset_password(payload: ResetRequest, request: Request) -> dict:
+    token = (payload.token or "").strip()
+    ip = client_ip(request)
+    wait = reset_limiter.retry_after(ip, "")
+    if wait:
+        raise HTTPException(
+            status_code=429,
+            detail={"error": "too_many_attempts", "message": f"Too many attempts. Try again in {max(1, -(-wait // 60))} minute(s)."},
+            headers={"Retry-After": str(wait)},
+        )
+    invalid = HTTPException(
+        status_code=400,
+        detail={"error": "invalid_token", "message": "This reset link is invalid or has expired. Ask for a new one."},
+    )
+    if not _TOKEN_RE.match(token):
+        reset_limiter.record_failure(ip, "")
+        raise invalid
+
+    pool = get_pool()
+    row = await pool.fetchrow(
+        """SELECT t.username, u.disabled FROM password_reset_tokens t JOIN users u ON u.username = t.username
+           WHERE t.token_hash = $1 AND t.used_at IS NULL AND t.expires_at > NOW() AND u.is_local = 1""",
+        _token_hash(token),
+    )
+    if not row or row["disabled"]:
+        reset_limiter.record_failure(ip, "")
+        await log_auth_event("password_reset_failed", request=request, ip=ip, detail="invalid_or_expired_token")
+        raise invalid
+
+    username = row["username"]
+    problem = password_problem(payload.password, username)
+    if problem:
+        raise HTTPException(status_code=400, detail={"error": "validation_error", "message": problem})
+
+    new_hash = await hash_password_async(payload.password)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # uso unico: so uma requisicao "consome" o token (corrida entre duas abas)
+            consumed = await conn.fetchval(
+                "UPDATE password_reset_tokens SET used_at = NOW() WHERE token_hash = $1 AND used_at IS NULL RETURNING 1",
+                _token_hash(token),
+            )
+            if not consumed:
+                raise invalid
+            await conn.execute("UPDATE users SET password_hash = $1 WHERE username = $2", new_hash, username)
+            await conn.execute("DELETE FROM password_reset_tokens WHERE username = $1", username)
+    revoked = await delete_user_sessions(username)
+    await log_auth_event(
+        "password_reset_done", request=request, ip=ip, username=username, require_email=True,
+        detail=f"{revoked} session(s) revoked",
+    )
+    return {"ok": True, "message": "Your password was changed. You can log in now."}

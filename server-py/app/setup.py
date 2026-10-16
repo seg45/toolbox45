@@ -41,8 +41,11 @@ USERNAME_REFERENCES = [
     ("api_keys", "created_by"), ("users", "created_by"),
     ("shares", "grantor_username"), ("shares", "grantee_username"),
     ("groups", "created_by"), ("group_members", "username"), ("links", "username"),
-    ("sessions", "username"),
+    ("sessions", "username"), ("password_reset_tokens", "username"), ("mfa_challenges", "username"),
+    ("smtp_settings", "updated_by"), ("security_settings", "updated_by"),
 ]
+# Tabelas efemeras: no setup as linhas do `admin` simplesmente caem (nao migram).
+EPHEMERAL_USER_TABLES = ("sessions", "password_reset_tokens", "mfa_challenges")
 
 # Cache: a conta `admin` ainda tem a senha padrao? Calcular exige um scrypt, e o
 # status e publico -- por isso so e recalculado no boot e quando a senha do
@@ -120,9 +123,10 @@ async def _run_setup(pool, email: str, password_hash: str) -> str:
                 email, password_hash,
             )
             if mode == "migrate":
-                await conn.execute("DELETE FROM sessions WHERE username = $1", DEFAULT_ADMIN_USERNAME)
+                for table in EPHEMERAL_USER_TABLES:
+                    await conn.execute(f"DELETE FROM {table} WHERE username = $1", DEFAULT_ADMIN_USERNAME)
                 for table, column in USERNAME_REFERENCES:
-                    if (table, column) == ("sessions", "username"):
+                    if table in EPHEMERAL_USER_TABLES:
                         continue
                     # nomes de tabela/coluna vem da constante acima, nunca de entrada externa
                     await conn.execute(

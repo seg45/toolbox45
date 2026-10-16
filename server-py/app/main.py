@@ -113,9 +113,11 @@ from .routers import folders as folders_router
 from .routers import groups as groups_router
 from .routers import links as links_router
 from .routers import me as me_router
+from .routers import mfa_policy as mfa_policy_router
 from .routers import notes as notes_router
 from .routers import oauth as oauth_router
 from .routers import shares as shares_router
+from .routers import smtp as smtp_router
 from .routers import system as system_router
 from .routers import users as users_router
 
@@ -217,6 +219,8 @@ app.include_router(groups_router.router)
 app.include_router(users_router.router)
 app.include_router(catalog_router.router)
 app.include_router(system_router.router)
+app.include_router(smtp_router.router)
+app.include_router(mfa_policy_router.router)
 app.include_router(api_keys_router.router)
 app.include_router(backup_router.router)
 app.include_router(auth_events_router.router)

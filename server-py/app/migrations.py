@@ -189,6 +189,9 @@ async def run_migrations(pool) -> None:
         await pool.execute("UPDATE users SET auth_provider = 'local' WHERE is_local = 1 AND auth_provider = 'ntlm'")
         # api_keys.role (admin|user). DEFAULT 'admin' preserva o acesso total
         # das keys criadas antes deste campo existir.
+        # MFA por e-mail (ver schema.sql): colunas novas em users.
+        await pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled INTEGER NOT NULL DEFAULT 0")
+        await pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_required INTEGER NOT NULL DEFAULT 0")
         await pool.execute("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'admin'")
         # api_keys.expires_at -- sem DEFAULT (NULL = nunca expira).
         await pool.execute("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ")

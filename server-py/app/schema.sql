@@ -640,7 +640,9 @@ CREATE TABLE IF NOT EXISTS users (
   -- pendente de aprovação; coluna adicionada via ALTER TABLE em
   -- runMigrations() (server/db.js) para instalações existentes — mesmo
   -- padrão (CREATE TABLE IF NOT EXISTS é no-op numa instalação já existente).
-  approved_at   TIMESTAMPTZ
+  approved_at   TIMESTAMPTZ,
+  mfa_enabled   INTEGER NOT NULL DEFAULT 0,      -- 1 = pede o codigo por e-mail no login (so contas locais)
+  mfa_required  INTEGER NOT NULL DEFAULT 0       -- 1 = super admin exigiu MFA para esta conta
 );
 
 -- ════════════════════════════════════════════════
@@ -742,6 +744,71 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TIMESTAMPTZ NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+
+-- ════════════════════════════════════════════════
+-- Servidor SMTP (Settings → System → E-mail (SMTP), super admin) -- usado pelo
+-- "Esqueci a senha" das contas locais. Uma unica linha (id = 1). A senha fica
+-- cifrada (AES-256-GCM, ver app/secrets_box.py, contexto "smtp:password") e NUNCA
+-- e devolvida pela API. `app_url` e o endereco publico do Toolbox45 usado para
+-- montar o link do e-mail (NAO vem do cabecalho Host da requisicao: evita
+-- envenenamento do link de redefinicao).
+-- ════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS smtp_settings (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  host         TEXT NOT NULL,
+  port         INTEGER NOT NULL DEFAULT 587,
+  security     TEXT NOT NULL DEFAULT 'starttls',   -- 'starttls' | 'ssl' | 'none'
+  auth_user    TEXT,
+  password     TEXT,
+  from_address TEXT NOT NULL,
+  from_name    TEXT,
+  app_url      TEXT NOT NULL,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by   TEXT
+);
+
+-- Tokens de "Esqueci a senha": so o SHA-256 do token e gravado (quem le o banco/backup
+-- nao consegue redefinir senha de ninguem). Uso unico (used_at) e validade curta.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  token_hash   TEXT PRIMARY KEY,
+  username     TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at   TIMESTAMPTZ NOT NULL,
+  used_at      TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_pwreset_user ON password_reset_tokens(username);
+CREATE INDEX IF NOT EXISTS idx_pwreset_expires ON password_reset_tokens(expires_at);
+
+-- ════════════════════════════════════════════════
+-- MFA por e-mail (contas locais). users.mfa_enabled = a conta pede o codigo no login;
+-- users.mfa_required = um super admin EXIGIU MFA para esta conta (ela nao consegue
+-- desligar; se ainda nao ativou, o primeiro login ja faz a ativacao).
+-- `security_settings` guarda a politica global (chave 'mfa_require_all' = '1'/'0').
+-- `mfa_challenges`: um desafio por tentativa -- so o SHA-256 do codigo (6 digitos) e do
+-- id do desafio ficam no banco; validade curta e no maximo 5 tentativas.
+--   purpose 'login'  = segundo fator do login (apos a senha)
+--   purpose 'enable' = o proprio usuario ligando o MFA (prova que o e-mail recebe)
+-- ════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS security_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS mfa_challenges (
+  challenge_hash TEXT PRIMARY KEY,
+  username       TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+  purpose        TEXT NOT NULL,
+  code_hash      TEXT NOT NULL,
+  attempts       INTEGER NOT NULL DEFAULT 0,
+  resends        INTEGER NOT NULL DEFAULT 0,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  sent_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at     TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mfa_user ON mfa_challenges(username);
+CREATE INDEX IF NOT EXISTS idx_mfa_expires ON mfa_challenges(expires_at);
 
 CREATE INDEX IF NOT EXISTS idx_commands_topic ON commands(topic);
 CREATE INDEX IF NOT EXISTS idx_command_lines_command ON command_lines(command_id);

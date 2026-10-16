@@ -17,6 +17,7 @@ from ..audit import log_audit
 from ..auth_events import log_auth_event
 from ..db import get_pool
 from ..deps import CurrentUser, require_super_admin, role_rank
+from .. import mailer, mfa as mfa_mod
 from ..password_policy import password_problem
 from ..security import hash_password_async
 from ..session import delete_user_sessions
@@ -27,7 +28,7 @@ logger = logging.getLogger("toolbox45")
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
-USERS_PUBLIC_COLUMNS = "username, role, is_local, disabled, created_at, created_by, auth_provider, approved_at"
+USERS_PUBLIC_COLUMNS = "username, role, is_local, disabled, created_at, created_by, auth_provider, approved_at, mfa_enabled, mfa_required"
 PROTECTED_ADMIN_USERNAME = "admin"
 USER_ROLES = ["user", "admin", "super_admin"]
 
@@ -139,10 +140,25 @@ async def update_user(username: str, request: Request, body: dict = Body(default
     approving_now = was_disabled and not new_disabled and not existing["approved_at"]
     new_approved_at = datetime.now(timezone.utc) if approving_now else existing["approved_at"]
 
+    # MFA por e-mail (ver app/mfa.py): `mfaRequired` exige o MFA para esta conta;
+    # `resetMfa` desliga o MFA dela (quem perdeu acesso ao e-mail) e cancela codigos pendentes.
+    body_mfa_required = body.get("mfaRequired")
+    new_mfa_required = bool(existing["mfa_required"])
+    if body_mfa_required is not None:
+        if not existing["is_local"]:
+            raise HTTPException(status_code=400, detail={"error": "validation_error", "message": "MFA applies only to local (password) accounts. SSO accounts use the provider's MFA."})
+        new_mfa_required = bool(body_mfa_required)
+        if new_mfa_required and not await mailer.is_configured():
+            raise HTTPException(status_code=409, detail={"error": "smtp_not_configured", "message": "Configure the SMTP server (Settings → System → E-mail) before requiring MFA."})
+    reset_mfa = bool(body.get("resetMfa")) and bool(existing["mfa_enabled"])
+
     await pool.execute(
-        "UPDATE users SET role = $1, disabled = $2, password_hash = $3, approved_at = $4 WHERE username = $5",
-        new_role, 1 if new_disabled else 0, password_hash, new_approved_at, username,
+        "UPDATE users SET role = $1, disabled = $2, password_hash = $3, approved_at = $4, mfa_required = $5, mfa_enabled = $6 WHERE username = $7",
+        new_role, 1 if new_disabled else 0, password_hash, new_approved_at,
+        1 if new_mfa_required else 0, 0 if reset_mfa else existing["mfa_enabled"], username,
     )
+    if reset_mfa:
+        await mfa_mod.clear_user(username)
     row = await pool.fetchrow(f"SELECT {USERS_PUBLIC_COLUMNS} FROM users WHERE username = $1", username)
 
     # Senha redefinida ou conta desativada: as sessoes abertas dessa conta caem
@@ -162,10 +178,16 @@ async def update_user(username: str, request: Request, body: dict = Body(default
         changed.append("disabled")
     if password:
         changed.append("password")
+    if bool(existing["mfa_required"]) != new_mfa_required:
+        changed.append("mfa_required" if new_mfa_required else "mfa_not_required")
+    if reset_mfa:
+        changed.append("mfa_reset")
     detail = f"Changed: {', '.join(changed)}" if changed else None
     if sessions_revoked:
         detail = f"{detail}; {sessions_revoked} session(s) revoked"
     await log_audit(user["username"], "update", "user", username, username, detail)
+    if reset_mfa:
+        await log_auth_event("mfa_disabled", request=request, username=username, detail=f"reset_by={user['username']}")
     if password:
         await log_auth_event(
             "password_reset_by_admin", request=request, username=username,
