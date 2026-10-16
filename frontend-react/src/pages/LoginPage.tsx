@@ -6,6 +6,7 @@
 // ════════════════════════════════════════════════
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, fetchAuthProviders, fetchMe, fetchSetupStatus, initialSetup, login, register } from '../lib/api';
+import { forgotPassword, resendMfa, resetPassword, verifyMfa } from '../lib/accountSecurity';
 import type { SetupStatus } from '../lib/api';
 import { bootLoginAppearance } from '../lib/appearanceBoot';
 import { useLogo } from '../lib/useLogo';
@@ -18,7 +19,7 @@ const LOGIN_FLAG_KEY = 'cpa-authenticated';
 // de cache dos boots de tema ('cpa-org-theme'). Sem cache (primeira visita) ou
 // com localStorage indisponível, o estado fica "desconhecido" (undefined).
 const PROVIDERS_CACHE_KEY = 'tb45-login-providers';
-type ProviderState = { google?: boolean; microsoft?: boolean };
+type ProviderState = { google?: boolean; microsoft?: boolean; passwordReset?: boolean };
 
 function readProvidersCache(): ProviderState {
   try {
@@ -26,13 +27,14 @@ function readProvidersCache(): ProviderState {
     return {
       google: typeof raw.google === 'boolean' ? raw.google : undefined,
       microsoft: typeof raw.microsoft === 'boolean' ? raw.microsoft : undefined,
+      passwordReset: typeof raw.passwordReset === 'boolean' ? raw.passwordReset : undefined,
     };
   } catch {
     return {};
   }
 }
 
-type View = 'login' | 'register' | 'pending' | 'setup';
+type View = 'login' | 'register' | 'pending' | 'setup' | 'forgot' | 'reset' | 'mfa';
 
 const GOOGLE_REASONS: Record<string, string> = {
   access_denied: 'Google sign-in was cancelled.',
@@ -99,6 +101,28 @@ export default function LoginPage() {
 
   const [pendingMessage, setPendingMessage] = useState('');
 
+  // "Esqueci a senha" (pede o link por e-mail) e redefinição (abre pelo link do e-mail:
+  // login.html#reset=TOKEN — o token fica no fragmento, que não vai ao servidor).
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotMsg, setForgotMsg] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [resetToken, setResetToken] = useState('');
+  const [resetPw, setResetPw] = useState('');
+  const [resetPw2, setResetPw2] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
+
+  // 2º fator (código por e-mail) depois de acertar a senha.
+  const [mfaChallenge, setMfaChallenge] = useState('');
+  const [mfaMasked, setMfaMasked] = useState('');
+  const [mfaEnrolling, setMfaEnrolling] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaError, setMfaError] = useState('');
+  const [mfaInfo, setMfaInfo] = useState('');
+  const [mfaBusy, setMfaBusy] = useState(false);
+
   // Primeiro acesso (sem nenhum administrador — ou instalação antiga que ainda
   // tem o admin/admin padrão): em vez do login, pede e-mail e senha do admin.
   const [setupMode, setSetupMode] = useState<SetupStatus['mode']>(null);
@@ -117,7 +141,7 @@ export default function LoginPage() {
 
     fetchAuthProviders().then(data => {
       if (!data) return; // consulta falhou — mantém o último estado conhecido
-      const next = { google: !!data.google, microsoft: !!data.microsoft };
+      const next = { google: !!data.google, microsoft: !!data.microsoft, passwordReset: !!data.passwordReset };
       setProviders(next);
       try {
         localStorage.setItem(PROVIDERS_CACHE_KEY, JSON.stringify(next));
@@ -132,6 +156,14 @@ export default function LoginPage() {
         setView('setup');
       }
     });
+
+    // Link do e-mail de "Esqueci a senha": login.html#reset=TOKEN
+    const resetMatch = /(?:^|[#&])reset=([A-Za-z0-9_-]{20,128})/.exec(location.hash);
+    if (resetMatch) {
+      history.replaceState(null, '', location.pathname + location.search);
+      setResetToken(resetMatch[1]);
+      setView('reset');
+    }
 
     // Resultado do redirect OAuth (volta pra esta MESMA página) — ver
     // GET /api/auth/google[/microsoft]/callback em server-py/app/routers/oauth.py.
@@ -163,6 +195,11 @@ export default function LoginPage() {
     setLoginError('');
     setRegisterError('');
     setSetupError('');
+    setForgotError('');
+    setForgotMsg('');
+    setResetError('');
+    setMfaError('');
+    setMfaInfo('');
   }
 
   function startGoogleLogin() {
@@ -180,7 +217,19 @@ export default function LoginPage() {
     }
     setLoginSubmitting(true);
     try {
-      await login(username.trim(), password);
+      const result = await login(username.trim(), password);
+      if ('mfaRequired' in result) {
+        // senha certa, falta o código enviado por e-mail (ainda NÃO há sessão)
+        setMfaChallenge(result.challenge);
+        setMfaMasked(result.maskedEmail);
+        setMfaEnrolling(result.enrolling);
+        setMfaCode('');
+        setMfaError('');
+        setMfaInfo('');
+        setPassword('');
+        setView('mfa');
+        return;
+      }
       await waitForSessionConfirmed();
       markAuthenticatedAndEnter();
     } catch (err) {
@@ -233,6 +282,88 @@ export default function LoginPage() {
       }
     } finally {
       setSetupSubmitting(false);
+    }
+  }
+
+  async function submitMfaCode() {
+    setMfaError('');
+    setMfaInfo('');
+    const code = mfaCode.replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(code)) {
+      setMfaError('Enter the 6-digit code from the e-mail.');
+      return;
+    }
+    setMfaBusy(true);
+    try {
+      await verifyMfa(mfaChallenge, code);
+      await waitForSessionConfirmed();
+      markAuthenticatedAndEnter();
+    } catch (err) {
+      setMfaError(err instanceof ApiError ? err.message : 'Could not verify the code. Please try again.');
+      // desafio vencido/esgotado: volta para a senha
+      if (err instanceof ApiError && err.code === 'invalid_challenge') setMfaChallenge('');
+    } finally {
+      setMfaBusy(false);
+    }
+  }
+
+  async function resendMfaCode() {
+    setMfaError('');
+    setMfaInfo('');
+    setMfaBusy(true);
+    try {
+      const r = await resendMfa(mfaChallenge);
+      setMfaInfo(`A new code was sent to ${r.maskedEmail}.`);
+    } catch (err) {
+      setMfaError(err instanceof ApiError ? err.message : 'Could not send a new code.');
+    } finally {
+      setMfaBusy(false);
+    }
+  }
+
+  async function submitForgot() {
+    setForgotError('');
+    setForgotMsg('');
+    const email = forgotEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setForgotError('Enter the e-mail address of your account.');
+      return;
+    }
+    setForgotBusy(true);
+    try {
+      const r = await forgotPassword(email);
+      setForgotMsg(r.message);
+    } catch (err) {
+      setForgotError(err instanceof ApiError ? err.message : 'Could not send the reset e-mail. Please try again.');
+    } finally {
+      setForgotBusy(false);
+    }
+  }
+
+  async function submitReset() {
+    setResetError('');
+    if (resetPw.length < 8) {
+      setResetError('Password must be at least 8 characters.');
+      return;
+    }
+    if (resetPw !== resetPw2) {
+      setResetError('The two passwords do not match.');
+      return;
+    }
+    setResetBusy(true);
+    try {
+      await resetPassword(resetToken, resetPw);
+      setResetPw('');
+      setResetPw2('');
+      setResetToken('');
+      setPassword('');
+      setView('login');
+      setLoginError('');
+      setResetDone(true);
+    } catch (err) {
+      setResetError(err instanceof ApiError ? err.message : 'Could not reset the password. Please try again.');
+    } finally {
+      setResetBusy(false);
     }
   }
 
@@ -294,6 +425,12 @@ export default function LoginPage() {
         </div>
       )}
 
+      {view === 'login' && resetDone && (
+        <div className="set-hint login-success" id="resetDoneMsg" style={{ color: 'var(--green)' }}>
+          Your password was changed. Log in with the new password.
+        </div>
+      )}
+
       {view === 'login' && (
         <div>
           <div className="set-group" style={{ marginTop: 14 }}>
@@ -328,10 +465,145 @@ export default function LoginPage() {
           >
             Log in
           </button>
+          {providers.passwordReset && (
+            <div className="login-toggle-mode">
+              <a href="javascript:void(0)" id="forgotLink" onClick={() => { setForgotEmail(username.trim()); showView('forgot'); }}>
+                Forgot password?
+              </a>
+            </div>
+          )}
           <div className="login-toggle-mode">
             Don&apos;t have an account?{' '}
             <a href="javascript:void(0)" onClick={() => showView('register')}>
               Register
+            </a>
+          </div>
+        </div>
+      )}
+
+      {view === 'mfa' && (
+        <div id="mfaView">
+          <div className="set-hint" style={{ marginTop: 14 }}>
+            {mfaEnrolling
+              ? `Your administrator requires a verification code. We sent a 6-digit code to ${mfaMasked}; enter it to finish signing in and turn MFA on for your account.`
+              : `We sent a 6-digit verification code to ${mfaMasked}. It is valid for 10 minutes.`}
+          </div>
+          {mfaError && (
+            <div className="set-hint login-error" id="mfaError" style={{ color: 'var(--red)' }}>
+              {mfaError}
+            </div>
+          )}
+          {mfaInfo && (
+            <div className="set-hint" id="mfaInfo" style={{ color: 'var(--green)' }}>
+              {mfaInfo}
+            </div>
+          )}
+          <div className="set-group" style={{ marginTop: 10 }}>
+            <span className="set-label">Verification code</span>
+            <input
+              className="set-input"
+              id="mfaCodeInput"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={7}
+              autoFocus
+              value={mfaCode}
+              onChange={e => setMfaCode(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitMfaCode();
+              }}
+            />
+          </div>
+          <button type="button" className="btn btn-primary login-submit-btn" id="mfaVerifyBtn" disabled={mfaBusy || !mfaChallenge} onClick={submitMfaCode}>
+            Verify
+          </button>
+          <div className="login-toggle-mode">
+            <a href="javascript:void(0)" id="mfaResend" onClick={() => { if (!mfaBusy && mfaChallenge) resendMfaCode(); }}>
+              Send a new code
+            </a>
+            {' · '}
+            <a href="javascript:void(0)" onClick={() => showView('login')}>
+              Back to log in
+            </a>
+          </div>
+        </div>
+      )}
+
+      {view === 'forgot' && (
+        <div id="forgotView">
+          <div className="set-hint" style={{ marginTop: 14 }}>
+            Enter the e-mail of your account (local sign-in). We will send you a link to choose a new password.
+          </div>
+          {forgotError && (
+            <div className="set-hint login-error" id="forgotError" style={{ color: 'var(--red)' }}>
+              {forgotError}
+            </div>
+          )}
+          {forgotMsg && (
+            <div className="set-hint" id="forgotMsg" style={{ color: 'var(--green)' }}>
+              {forgotMsg}
+            </div>
+          )}
+          <div className="set-group" style={{ marginTop: 10 }}>
+            <span className="set-label">E-mail</span>
+            <input
+              className="set-input"
+              id="forgotEmail"
+              type="email"
+              autoComplete="email"
+              autoFocus
+              value={forgotEmail}
+              onChange={e => setForgotEmail(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitForgot();
+              }}
+            />
+          </div>
+          <button type="button" className="btn btn-primary login-submit-btn" id="forgotSendBtn" disabled={forgotBusy} onClick={submitForgot}>
+            Send reset link
+          </button>
+          <div className="login-toggle-mode">
+            <a href="javascript:void(0)" onClick={() => showView('login')}>
+              Back to log in
+            </a>
+          </div>
+        </div>
+      )}
+
+      {view === 'reset' && (
+        <div id="resetView">
+          <div className="set-hint" style={{ marginTop: 14 }}>Choose a new password for your account.</div>
+          {resetError && (
+            <div className="set-hint login-error" id="resetError" style={{ color: 'var(--red)' }}>
+              {resetError}
+            </div>
+          )}
+          <div className="set-group" style={{ marginTop: 10 }}>
+            <span className="set-label">New password</span>
+            <input className="set-input" id="resetPw" type="password" autoComplete="new-password" autoFocus value={resetPw} onChange={e => setResetPw(e.target.value)} />
+            <span className="set-hint">At least 8 characters.</span>
+          </div>
+          <div className="set-group">
+            <span className="set-label">Confirm new password</span>
+            <input
+              className="set-input"
+              id="resetPw2"
+              type="password"
+              autoComplete="new-password"
+              value={resetPw2}
+              onChange={e => setResetPw2(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitReset();
+              }}
+            />
+          </div>
+          <button type="button" className="btn btn-primary login-submit-btn" id="resetSubmitBtn" disabled={resetBusy} onClick={submitReset}>
+            Change password
+          </button>
+          <div className="login-toggle-mode">
+            <a href="javascript:void(0)" onClick={() => showView('login')}>
+              Back to log in
             </a>
           </div>
         </div>

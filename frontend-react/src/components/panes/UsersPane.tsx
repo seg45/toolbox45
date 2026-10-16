@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react';
 import { useConfirm } from '../../lib/useConfirm';
 import { ApiError } from '../../lib/api';
-import { deleteUser, listUsers, updateUserDisabled, updateUserRole, type User } from '../../lib/users';
+import { deleteUser, listUsers, resetUserMfa, updateUserDisabled, updateUserMfaRequired, updateUserRole, type User } from '../../lib/users';
 import { Avatar } from '../Avatar';
 import { RowMenu, type RowMenuItem } from '../RowMenu';
 import { NewUserModal } from './NewUserModal';
@@ -77,6 +77,29 @@ export function UsersPane() {
       await load();
     } catch (e) {
       alert(e instanceof ApiError ? e.message : 'Failed to update user.');
+    }
+  }
+
+  async function toggleMfaRequired(username: string, required: boolean) {
+    try {
+      await updateUserMfaRequired(username, required);
+      await load();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Failed to update MFA.');
+    }
+  }
+
+  async function resetMfa(username: string) {
+    const ok = await confirm(
+      `Turn off MFA for "${username}"? Use this when they lost access to their e-mail. They will sign in with the password only (or be asked to set MFA up again if it is required).`,
+      { danger: true }
+    );
+    if (!ok) return;
+    try {
+      await resetUserMfa(username);
+      await load();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : 'Failed to reset MFA.');
     }
   }
 
@@ -170,6 +193,8 @@ export function UsersPane() {
                   const menu: RowMenuItem[] = [];
                   if (!isProtected && !isPending) menu.push({ label: isDisabled ? 'Enable' : 'Disable', onClick: () => toggleUserDisabled(u.username, isDisabled) });
                   if (u.is_local) menu.push({ label: 'Reset password', onClick: () => setResetPasswordUser(u.username) });
+                  if (u.is_local) menu.push({ label: u.mfa_required ? 'Don’t require MFA' : 'Require MFA', onClick: () => toggleMfaRequired(u.username, !u.mfa_required) });
+                  if (u.is_local && u.mfa_enabled) menu.push({ label: 'Reset MFA', onClick: () => resetMfa(u.username) });
                   if (!isProtected) menu.push({ label: 'Delete', danger: true, onClick: () => deleteUserConfirm(u.username) });
                   return (
                     <tr key={u.username} className={status === 'disabled' ? 'is-disabled' : undefined}>
@@ -183,6 +208,15 @@ export function UsersPane() {
                       </td>
                       <td>
                         <span className={`chip chip-type chip-${type.toLowerCase()}`}>{type}</span>
+                        {u.is_local && (u.mfa_enabled || u.mfa_required) ? (
+                          <span
+                            className="chip chip-type"
+                            style={{ marginLeft: 6 }}
+                            title={u.mfa_required ? (u.mfa_enabled ? 'MFA required by an administrator and active' : 'MFA required by an administrator — set up at the next sign-in') : 'MFA enabled by the user'}
+                          >
+                            {u.mfa_required ? (u.mfa_enabled ? 'MFA · required' : 'MFA · required, not set up') : 'MFA'}
+                          </span>
+                        ) : null}
                       </td>
                       <td>
                         {isProtected ? (

@@ -24,6 +24,9 @@ export interface User {
   created_by?: string;
   auth_provider?: string;
   approved_at?: string | null;
+  // MFA por e-mail (só contas locais): ligado pelo usuário / exigido por um super admin.
+  mfa_enabled?: boolean | number;
+  mfa_required?: boolean | number;
 }
 
 export async function listUsers(): Promise<User[]> {
@@ -49,7 +52,7 @@ export async function createUser(username: string, password: string, role: strin
 // são só chamadas diferentes do mesmo endpoint — mesma ideia do original
 // (changeUserRole/toggleUserDisabled/submitResetPassword todas fazendo um
 // fetch PUT equivalente).
-async function updateUser(username: string, body: Partial<{ role: string; disabled: boolean; password: string }>): Promise<void> {
+async function updateUser(username: string, body: Partial<{ role: string; disabled: boolean; password: string; mfaRequired: boolean; resetMfa: boolean }>): Promise<void> {
   const res = await fetch(`/api/users/${encodeURIComponent(username)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -67,6 +70,16 @@ export function updateUserRole(username: string, role: string): Promise<void> {
 
 export function updateUserDisabled(username: string, disabled: boolean): Promise<void> {
   return updateUser(username, { disabled });
+}
+
+export function updateUserMfaRequired(username: string, mfaRequired: boolean): Promise<void> {
+  return updateUser(username, { mfaRequired });
+}
+
+// Desliga o MFA de quem perdeu o acesso ao e-mail (ele volta a entrar só com a senha —
+// ou pede o código de novo se o MFA for exigido).
+export function resetUserMfa(username: string): Promise<void> {
+  return updateUser(username, { resetMfa: true });
 }
 
 export function resetUserPassword(username: string, password: string): Promise<void> {

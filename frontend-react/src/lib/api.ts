@@ -8,11 +8,22 @@
 export interface AuthProviders {
   google: boolean;
   microsoft: boolean;
+  // "Forgot password?" só aparece quando há SMTP configurado (Settings → System).
+  passwordReset?: boolean;
 }
 
 export interface LoginResponse {
   username: string;
   role: string;
+}
+
+// Senha certa, mas a conta pede o 2º fator: o servidor devolve um desafio (e NÃO abre
+// sessão) — a tela de login mostra o campo do código (POST /api/auth/mfa/verify).
+export interface MfaChallengeResponse {
+  mfaRequired: true;
+  challenge: string;
+  maskedEmail: string;
+  enrolling: boolean;
 }
 
 export interface SetupStatus {
@@ -27,6 +38,9 @@ export interface MeResponse {
   isAdmin?: boolean;
   isSuperAdmin?: boolean;
   authMethod?: 'local' | 'api_key' | 'google' | 'microsoft' | 'anonymous';
+  isLocal?: boolean;
+  authProvider?: string;
+  mfa?: { enabled: boolean; required: boolean; available: boolean };
 }
 
 export interface RegisterResponse {
@@ -114,7 +128,7 @@ export async function initialSetup(email: string, password: string): Promise<Log
   return res.json();
 }
 
-export async function login(username: string, password: string): Promise<LoginResponse> {
+export async function login(username: string, password: string): Promise<LoginResponse | MfaChallengeResponse> {
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

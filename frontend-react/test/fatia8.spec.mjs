@@ -338,7 +338,7 @@ await withPage(browser, async page => {
   await page.screenshot({ path: `${SHOTS}/2-system-admin.png` });
 });
 
-// ── Cenário 3: super admin vê os 5 widgets ──
+// ── Cenário 3: super admin vê os 7 widgets ──
 await withPage(browser, async page => {
   await mockBase(page, { isAdmin: true, isSuperAdmin: true });
   const state = makeSystemState();
@@ -348,8 +348,8 @@ await withPage(browser, async page => {
 
   const labels = await labelsTextLower(systemWidgetLabels(page));
   assert(
-    JSON.stringify(labels) === JSON.stringify(['logo', 'default theme & colors', 'ssl certificate', 'oauth integrations', 'api access']),
-    `cenário 3: super admin vê os 5 widgets (lido: ${JSON.stringify(labels)})`
+    JSON.stringify(labels) === JSON.stringify(['logo', 'default theme & colors', 'ssl certificate', 'oauth integrations', 'e-mail (smtp)', 'multi-factor authentication', 'api access']),
+    `cenário 3: super admin vê os 7 widgets (lido: ${JSON.stringify(labels)})`
   );
 });
 

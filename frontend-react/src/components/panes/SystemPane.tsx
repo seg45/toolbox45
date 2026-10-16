@@ -35,6 +35,8 @@ import { LogoSettingsModal } from './LogoSettingsModal';
 import { AppearanceSettingsModal } from './AppearanceSettingsModal';
 import { SslCertificateModal } from './SslCertificateModal';
 import { OAuthSettingsModal, OAUTH_PROVIDER_META, type OAuthProviderKey } from './OAuthSettingsModal';
+import { SmtpSettingsModal } from './SmtpSettingsModal';
+import { fetchMfaPolicy, fetchSmtp, saveMfaPolicy, type MfaPolicy, type SmtpSettings } from '../../lib/accountSecurity';
 import { NewApiKeyModal } from './NewApiKeyModal';
 import { ApiKeyRevealModal } from './ApiKeyRevealModal';
 
@@ -65,6 +67,10 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [sslOpen, setSslOpen] = useState(false);
   const [oauthProvider, setOauthProvider] = useState<OAuthProviderKey | null>(null);
+  const [smtpOpen, setSmtpOpen] = useState(false);
+  const [smtpInfo, setSmtpInfo] = useState<SmtpSettings | null>(null);
+  const [mfaPolicy, setMfaPolicy] = useState<MfaPolicy | null>(null);
+  const [mfaMsg, setMfaMsg] = useState('');
 
   const [oauthStatus, setOauthStatus] = useState<Record<OAuthProviderKey, OAuthProviderInfo> | null>(null);
   const [oauthStatusFailed, setOauthStatusFailed] = useState(false);
@@ -92,10 +98,41 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
     }
   }, []);
 
+  const loadSecurity = useCallback(async () => {
+    try {
+      setSmtpInfo(await fetchSmtp());
+    } catch {
+      setSmtpInfo(null);
+    }
+    try {
+      setMfaPolicy(await fetchMfaPolicy());
+    } catch {
+      setMfaPolicy(null);
+    }
+  }, []);
+
+  async function toggleRequireAll(next: boolean) {
+    setMfaMsg('');
+    if (next) {
+      const ok = await confirm(
+        'Require MFA for ALL local (password) accounts, including yours? Everyone will be asked for an e-mail code at the next sign-in, and accounts that have not set MFA up yet will set it up then. Single sign-in (Google/Microsoft) accounts are not affected.'
+      );
+      if (!ok) return;
+    }
+    try {
+      setMfaPolicy(await saveMfaPolicy(next));
+    } catch (e) {
+      setMfaMsg(e instanceof ApiError ? e.message : 'Failed to save the MFA policy.');
+    }
+  }
+
   useEffect(() => {
-    if (auth.isSuperAdmin) loadOauthStatus();
+    if (auth.isSuperAdmin) {
+      loadOauthStatus();
+      loadSecurity();
+    }
     if (auth.isAdmin) loadApiKeys();
-  }, [auth.isAdmin, auth.isSuperAdmin, loadOauthStatus, loadApiKeys]);
+  }, [auth.isAdmin, auth.isSuperAdmin, loadOauthStatus, loadSecurity, loadApiKeys]);
 
   // createApiKey() do original: a mutação de rede em si (POST + refresh da
   // lista + abrir o reveal) mora aqui, não dentro de NewApiKeyModal — ver
@@ -194,6 +231,57 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
         </div>
       )}
 
+      {auth.isSuperAdmin && (
+        <div className="set-group" id="sysGroupSmtp">
+          <span className="set-label">E-mail (SMTP)</span>
+          <span className="set-hint">
+            The mail server Toolbox45 uses to send "Forgot password?" links and MFA codes. Optional — without it those two features stay off.
+          </span>
+          <div className="audit-log-wrap" style={{ padding: 2 }}>
+            <div className="oauth-provider-row" id="smtpRow">
+              <span className="oauth-provider-name">SMTP server</span>
+              <span className={`oauth-provider-status${smtpInfo?.configured ? ' is-on' : ''}`} id="smtpStatus">
+                {smtpInfo === null ? 'Loading…' : smtpInfo.configured ? `Configured (${smtpInfo.host}:${smtpInfo.port})` : 'Not configured'}
+              </span>
+              <button type="button" className="btn btn-ghost btn-sm" id="smtpConfigureBtn" onClick={() => setSmtpOpen(true)}>
+                Configure
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {auth.isSuperAdmin && (
+        <div className="set-group" id="sysGroupMfa">
+          <span className="set-label">Multi-factor authentication</span>
+          <span className="set-hint">
+            Local (password) accounts can turn on a sign-in code sent by e-mail from their own account page. Here you can require it for everyone;
+            to require it for one person, use "Require MFA" in the Users tab. Google/Microsoft accounts use their provider's MFA.
+          </span>
+          <label className="set-check-row" style={{ marginTop: 4 }}>
+            <input
+              type="checkbox"
+              id="mfaRequireAll"
+              checked={!!mfaPolicy?.requireAll}
+              disabled={!mfaPolicy || (!mfaPolicy.smtpAvailable && !mfaPolicy.requireAll)}
+              onChange={ev => toggleRequireAll(ev.target.checked)}
+            />
+            <span>Require MFA for all local users</span>
+          </label>
+          {mfaPolicy && !mfaPolicy.smtpAvailable && (
+            <span className="set-hint" id="mfaSmtpWarn" style={{ color: 'var(--red)' }}>
+              Configure the SMTP server above first — without it the codes cannot be sent, so MFA is not enforced at sign-in.
+            </span>
+          )}
+          {mfaPolicy && (
+            <span className="set-hint" id="mfaCounts">
+              {mfaPolicy.enabledUsers} account(s) with MFA on · {mfaPolicy.requiredUsers} required individually
+            </span>
+          )}
+          {mfaMsg && <span className="set-hint" style={{ color: 'var(--red)' }}>{mfaMsg}</span>}
+        </div>
+      )}
+
       {auth.isAdmin && (
         <div className="set-group">
           <span className="set-label">API access</span>
@@ -280,6 +368,14 @@ export function SystemPane({ onLogoChanged }: { onLogoChanged: () => Promise<voi
           onClose={() => {
             setOauthProvider(null);
             loadOauthStatus();
+          }}
+        />
+      )}
+      {smtpOpen && (
+        <SmtpSettingsModal
+          onClose={() => {
+            setSmtpOpen(false);
+            loadSecurity();
           }}
         />
       )}

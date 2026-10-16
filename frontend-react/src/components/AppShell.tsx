@@ -32,6 +32,7 @@
 // ════════════════════════════════════════════════
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
+import { consumeConvertResult } from '../lib/accountSecurity';
 import { useSettings } from '../lib/settingsStore';
 import { fetchCatalogs, type Catalogs } from '../lib/catalogs';
 import { useFoldersView } from '../lib/foldersView';
@@ -98,6 +99,13 @@ export function AppShell() {
   useEffect(() => {
     refreshCatalogs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Voltou do provedor depois de "Switch to Google/Microsoft sign-in" (Settings → User
+  // account): mostra o resultado uma vez e limpa a query da URL.
+  useEffect(() => {
+    const msg = consumeConvertResult();
+    if (msg) alert(msg);
   }, []);
 
   // Enquanto /api/me não confirma a sessão, não renderiza nada do app —
