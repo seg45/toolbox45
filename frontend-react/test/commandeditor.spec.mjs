@@ -415,6 +415,52 @@ await withPage(browser, async page => {
   assert(err.includes('Versions') && err.includes('Environments') && !err.includes('Vendor') && !err.includes('System'), `cenário 14: erro cita só o que falta ("${err}")`);
 });
 
+
+// ── Cenário extra: Prompt e Export em ordem alfabética (não na ordem de cadastro) ──
+await withPage(browser, async page => {
+  const savedPrompts = CATALOGS.prompts, savedExports = CATALOGS.exports;
+  CATALOGS.prompts = [
+    { key: 'p1', label: '[Expert@SMS]#', color: '#8B949E', sort_order: 0 },
+    { key: 'p2', label: '[Expert@MHO]#', color: '#8B949E', sort_order: 1 },
+    { key: 'p3', label: '[Global] gclish>', color: '#8B949E', sort_order: 2 },
+    { key: 'p4', label: '[Expert@FW]#', color: '#8B949E', sort_order: 3 },
+    { key: 'p5', label: '[Expert@MHO-SG]#', color: '#8B949E', sort_order: 4 },
+  ];
+  CATALOGS.exports = [
+    { key: 'e1', label: 'Zeta export', color: '#8B949E', sort_order: 0 },
+    { key: 'e2', label: 'Alpha export', color: '#8B949E', sort_order: 1 },
+  ];
+  try {
+    await mockLoggedInAdmin(page);
+    await page.goto(`${BASE}/index.html`);
+    await page.waitForSelector('.card[data-cmd-id="1"]');
+    await page.locator('.card[data-cmd-id="1"] .edit-btn[title="Edit command"]').click();
+    await page.waitForSelector('#cmdEditorOverlay.show');
+    await page.locator('.wiz-step[data-step="3"]').click();
+    const row = page.locator('.list-editor#cmdLinesDefaultList .line-row').first();
+    const openAndRead = async which => {
+      const grp = which === 'Prompt' ? row.locator('.dd', { has: page.locator('.dd-label', { hasText: 'Expert@FW' }) }).first() : row.locator('.dd', { has: page.locator('.dd-label', { hasText: 'No export' }) }).first();
+      await grp.locator('.dd-btn').click();
+      const labels = (await grp.locator('.dd-panel .seg-btn').allInnerTexts()).map(t => t.trim()).filter(t => !/^[+＋]/.test(t));
+      await grp.locator('.dd-btn').click();
+      return labels;
+    };
+    const prompts = await openAndRead('Prompt');
+    assert(
+      JSON.stringify(prompts) === JSON.stringify(['— No prompt —', '[Expert@FW]#', '[Expert@MHO]#', '[Expert@MHO-SG]#', '[Expert@SMS]#', '[Global] gclish>']),
+      `cenário extra: prompts em ordem alfabética (lido: ${JSON.stringify(prompts)})`
+    );
+    const exportsL = await openAndRead('Export');
+    assert(
+      JSON.stringify(exportsL) === JSON.stringify(['— No export —', 'Alpha export', 'Zeta export']),
+      `cenário extra: exports em ordem alfabética (lido: ${JSON.stringify(exportsL)})`
+    );
+  } finally {
+    CATALOGS.prompts = savedPrompts;
+    CATALOGS.exports = savedExports;
+  }
+});
+
 await browser.close();
 
 console.log(`\n${failures === 0 ? 'TODOS OS CENÁRIOS PASSARAM' : `${failures} CENÁRIO(S) FALHARAM`}`);

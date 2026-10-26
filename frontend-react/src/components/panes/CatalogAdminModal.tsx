@@ -209,14 +209,14 @@ function buildRows(kind: CatalogKind, catalogs: Catalogs): Row[] {
         });
     case 'prompts':
       return [...catalogs.prompts]
-        .sort((a, b) => localeCmp(a.label, b.label))
+        .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base', ignorePunctuation: true }))
         .map(p => {
           const fields: RowFields = { ...emptyFields(), label: p.label };
           return { id: p.key, key: p.key, searchText: `${p.key} ${p.label}`.toLowerCase(), fields, original: { ...fields } };
         });
     case 'exports':
       return [...catalogs.exports]
-        .sort((a, b) => localeCmp(a.label, b.label))
+        .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base', ignorePunctuation: true }))
         .map(x => {
           const fields: RowFields = { ...emptyFields(), label: x.label };
           return { id: x.key, key: x.key, searchText: `${x.key} ${x.label}`.toLowerCase(), fields, original: { ...fields } };

@@ -96,6 +96,16 @@ function sortedCatalog(entries: CatalogEntry[] | undefined): SegOption[] {
     .map(e => ({ val: e.key, label: e.label }));
 }
 
+// Prompt e Export aparecem em ordem alfabética (sem caixa/acentos e ignorando
+// pontuação, p.ex. "[Expert@MHO]#" vem antes de "[Expert@MHO-SG]#"), igual ao
+// cadastro em Settings — não na ordem de criação (sort_order).
+function sortedByLabel(entries: CatalogEntry[] | undefined): SegOption[] {
+  return (entries || [])
+    .slice()
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base', ignorePunctuation: true }))
+    .map(e => ({ val: e.key, label: e.label }));
+}
+
 // ════════════════════════════════════════════════
 // Payload de salvar — POST /api/commands / PUT /api/commands/:id
 // ════════════════════════════════════════════════
@@ -296,11 +306,11 @@ export function CommandEditorModal({ mode, sourceRow, catalogs, onClose, onSaved
   // catálogo: por isso o valor de cada opção é o próprio label. Prompt também
   // ganha "— No prompt —" (sem nenhum cadastrado, a linha fica sem prompt).
   const promptOptions = useMemo<SegOption[]>(
-    () => [{ val: '', label: '— No prompt —' }, ...sortedCatalog(catalogs?.prompts).map(o => ({ val: o.label, label: o.label }))],
+    () => [{ val: '', label: '— No prompt —' }, ...sortedByLabel(catalogs?.prompts).map(o => ({ val: o.label, label: o.label }))],
     [catalogs]
   );
   const exportOptions = useMemo<SegOption[]>(
-    () => [{ val: '', label: '— No export —' }, ...sortedCatalog(catalogs?.exports).map(o => ({ val: o.label, label: o.label }))],
+    () => [{ val: '', label: '— No export —' }, ...sortedByLabel(catalogs?.exports).map(o => ({ val: o.label, label: o.label }))],
     [catalogs]
   );
   const parameterOptions = useMemo(
