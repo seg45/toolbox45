@@ -163,7 +163,29 @@ export function filterCommands(commands: Command[], settings: Settings, filters:
   if (filters.system.length) {
     out = out.filter(c => !c.systems || !c.systems.length || c.systems.some(s => filters.system.includes(s)));
   }
+  // Version/Environment — mesma regra de Vendor/System: seleção vazia ("All")
+  // não restringe nada; comando sem versão/ambiente cadastrado "aplica a
+  // todos"; caso contrário precisa bater com pelo menos um item marcado.
+  if (filters.version.length) {
+    out = out.filter(c => scopeMatches(c.versions, filters.version));
+  }
+  if (filters.environment.length) {
+    out = out.filter(c => scopeMatches(c.environments, filters.environment));
+  }
+  // Topic — mesma regra: vazio ("All") não restringe; o comando aparece se
+  // QUALQUER um dos seus tópicos estiver marcado. Os cartões do tópico
+  // protegido 'environment' (notas do ambiente) ficam de fora do filtro.
+  if (filters.topic.length) {
+    out = out.filter(c => {
+      const tps = rowTopics(c);
+      return tps.includes('environment') || tps.some(t => filters.topic.includes(t));
+    });
+  }
   return out;
+}
+
+function scopeMatches(scope: string[] | null | undefined, selected: string[]): boolean {
+  return !scope || !scope.length || scope.some(x => selected.includes(x));
 }
 
 function resolveMultiSelection(sel: string[], allKeysOrdered: string[], defaultVal: string): { values: string[]; isAllMode: boolean } {
@@ -474,7 +496,7 @@ export function buildRenderTree(params: {
   const values = buildValues(params.fieldValues, settings, catalogs);
   const hasIPs = !!(values.src_ip && values.dst_ip);
 
-  const commands = filterCommands(commandsRaw, settings, filters, params.currentUser);
+  const commandsFiltered = filterCommands(commandsRaw, settings, filters, params.currentUser);
 
   // Resolve a seleção de Versão/Ambiente numa lista de valores concretos a
   // gerar. "Group by: Version" com nada marcado trata "nada marcado" como
@@ -509,6 +531,14 @@ export function buildRenderTree(params: {
 
   combos.forEach(combo => {
     const { v: cv, e: ce } = combo;
+    // Cada combinação mostra só os comandos que valem para ela (o filtro
+    // global acima já tirou o que não bate com NENHUMA das marcadas). Sem
+    // seleção ("All") e fora de "Group by: Version" nada é restringido.
+    const commands = commandsFiltered.filter(
+      c =>
+        (versionSel.isAllMode || scopeMatches(c.versions, [cv])) &&
+        (envSel.isAllMode || scopeMatches(c.environments, [ce]))
+    );
     const kp = `${cv}__${ce}__`;
     const envNoteHtml = envNoteHtmlFor(ce, values.vsid);
     // Quando Versão/Ambiente = All, a combinação usada pra gerar os
