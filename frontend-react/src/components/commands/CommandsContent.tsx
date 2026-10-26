@@ -902,16 +902,12 @@ export function CommandsContent({
           🔀 <strong>{block.versionLabel}</strong> / <strong>{block.envLabel}</strong>
         </div>
       ) : null;
-    const envNote = block.envNoteHtml ? (
-      <div className="env-note" dangerouslySetInnerHTML={{ __html: `ℹ️ <span>${block.envNoteHtml}</span>` }} />
-    ) : null;
 
     if (block.groupBy === 'creator') {
       if (!block.creatorGroups || !block.creatorGroups.length) return null;
       return (
         <Fragment key={block.key}>
           {comboHeader}
-          {envNote}
           {block.creatorGroups.map(g => {
             const collapsed = collapsedSections.isCollapsed(g.key);
             return (
@@ -951,8 +947,7 @@ export function CommandsContent({
           onToggleChevron={() => collapsedSections.toggle(block.key)}
           renderBody={() => (
             <>
-              {envNote}
-              {(block.sections || []).map(renderSection)}
+                  {(block.sections || []).map(renderSection)}
             </>
           )}
         />
@@ -963,7 +958,6 @@ export function CommandsContent({
     return (
       <Fragment key={block.key}>
         {comboHeader}
-        {envNote}
         {(block.sections || []).map(renderSection)}
       </Fragment>
     );

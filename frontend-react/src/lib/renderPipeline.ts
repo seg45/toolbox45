@@ -27,7 +27,6 @@ import { dbLinesToTerm, resolveTokens, type TermLine, type Values } from './comm
 import type { LiveFilters } from './liveFilters';
 import { RESOLVERS } from './resolvers';
 import { stripVarMarkers } from './syntaxHighlight';
-import { escapeHtml } from './safeHtml';
 import type { Settings } from './settingsStore';
 
 // ── Constantes de Versão/Ambiente — porta de js/state.js ──────────────────
@@ -78,7 +77,6 @@ export interface ComboBlockData {
   showHeader: boolean; // combos.length > 1 (comboHeader "🔀 Versão / Ambiente")
   versionLabel: string;
   envLabel: string;
-  envNoteHtml: string; // já em HTML (<strong>/<code> — ver envNoteHtmlFor abaixo), sem o wrapper <div class="env-note">
   sections?: SectionData[]; // groupBy 'topic' | 'version'
   creatorGroups?: CreatorGroupData[]; // groupBy 'creator'
   cardCount: number;
@@ -202,26 +200,6 @@ function stripLeadingSymbols(str: string): string {
 function envLabel(key: string, catalogs: Catalogs | null): string {
   const env = (catalogs?.environments || []).find(x => x.key === key);
   return env ? env.label : key;
-}
-
-// Texto (com <strong>/<code>) de cada nota de ambiente — porta do objeto
-// envNotesText em render.js. 'vsx' interpola values.vsid, então vira função
-// em vez de mapa estático.
-function envNoteHtmlFor(ce: string, vsid: string): string {
-  switch (ce) {
-    case 'cluster':
-      return 'Cluster: run on <strong>both members</strong>. Check the active member with <code>cphaprob stat</code>.';
-    case 'vsx':
-      return `VSX: enter the VS with <code>vsenv ${escapeHtml(vsid)}</code> before running any command. <code>vsx stat -v</code> lists all IDs.`;
-    case 'maestro':
-      return 'Maestro: use <code>asg_cmd "..."</code> to broadcast to all SGMs. The <code>g_*</code> prefix aggregates output from all of them.';
-    case 'mds':
-      return 'MDS: use <code>mdsenv &lt;CMA-NAME&gt;</code> to enter the domain. <code>mdsstat</code> lists all CMAs.';
-    case 'gaia':
-      return 'Gaia Clish: commands run directly in the Gaia restricted shell (prompt <code>[Gaia]&gt;</code>), without entering Expert mode. Categories with no Clish equivalent (capture, kernel debug, SecureXL, tables, licensing, policy fetch) show a note indicating you need to type <code>expert</code> to access bash.';
-    default:
-      return ''; // 'standalone' (e qualquer chave desconhecida) — sem nota
-  }
 }
 
 // ════════════════════════════════════════════════
@@ -540,7 +518,6 @@ export function buildRenderTree(params: {
         (envSel.isAllMode || scopeMatches(c.environments, [ce]))
     );
     const kp = `${cv}__${ce}__`;
-    const envNoteHtml = envNoteHtmlFor(ce, values.vsid);
     // Quando Versão/Ambiente = All, a combinação usada pra gerar os
     // comandos é só um valor padrão de referência — o rótulo deve dizer
     // "All", não o valor concreto escolhido internamente.
@@ -581,7 +558,7 @@ export function buildRenderTree(params: {
       });
       if (!creatorGroups.length) return; // combo sem nenhum comando pra nenhum autor
       comboBlocks.push({
-        key: kp, groupBy: 'creator', showHeader, versionLabel: cvLabel, envLabel: ceLabel, envNoteHtml,
+        key: kp, groupBy: 'creator', showHeader, versionLabel: cvLabel, envLabel: ceLabel,
         creatorGroups, cardCount: comboCardCount,
       });
       return;
@@ -597,14 +574,14 @@ export function buildRenderTree(params: {
       if (!count) return;
       comboBlocks.push({
         key: `${cv}__${ce}`, groupBy: 'version', showHeader: true, versionLabel: cvLabel, envLabel: ceLabel,
-        envNoteHtml, sections, cardCount: count,
+        sections, cardCount: count,
       });
       return;
     }
 
     // "topic" (padrão)
     comboBlocks.push({
-      key: kp, groupBy: 'topic', showHeader, versionLabel: cvLabel, envLabel: ceLabel, envNoteHtml,
+      key: kp, groupBy: 'topic', showHeader, versionLabel: cvLabel, envLabel: ceLabel,
       sections, cardCount: count,
     });
   });
