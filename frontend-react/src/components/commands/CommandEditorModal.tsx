@@ -25,7 +25,7 @@ import type { Catalogs, CatalogEntry } from '../../lib/catalogs';
 import { createCommand, deleteCommand, updateCommand, type Command, type CommandLine, type CommandLinePayload, type CommandPayload } from '../../lib/commands';
 import { useConfirm } from '../../lib/useConfirm';
 import { RichTextEditor, type RichTextEditorHandle } from '../RichTextEditor';
-import { SegMulti, SegSingle, type QuickCreateConfig, type SegOption } from '../SegControls';
+import { NoMatches, OptionSearch, SEARCH_MIN_OPTIONS, SegMulti, SegSingle, filterOptionsByQuery, type QuickCreateConfig, type SegOption } from '../SegControls';
 
 export type EditorMode = 'create' | 'edit' | 'duplicate';
 
@@ -792,6 +792,7 @@ function LineRowEditor({
   const varWrapRef = useRef<HTMLDivElement>(null);
   // Mini-formulário "Nova variável" dentro do próprio seletor.
   const [varCreating, setVarCreating] = useState(false);
+  const [varQuery, setVarQuery] = useState('');
   const [newVarKey, setNewVarKey] = useState('');
   const [newVarLabel, setNewVarLabel] = useState('');
   const [newVarKeyTouched, setNewVarKeyTouched] = useState(false);
@@ -801,6 +802,7 @@ function LineRowEditor({
   // Fechar o seletor descarta o formulário em andamento.
   useEffect(() => {
     if (varOpen) return;
+    setVarQuery('');
     setVarCreating(false);
     setNewVarKey('');
     setNewVarLabel('');
@@ -846,6 +848,9 @@ function LineRowEditor({
       setNewVarBusy(false);
     }
   }
+
+  const varMatches =
+    parameterOptions.length >= SEARCH_MIN_OPTIONS ? filterOptionsByQuery(parameterOptions, varQuery) : parameterOptions;
 
   useEffect(() => {
     if (!varOpen) return;
@@ -949,7 +954,17 @@ function LineRowEditor({
                   <div className="dd-panel seg">
                     {!varCreating && (
                       <>
-                        {parameterOptions.map(p => (
+                        {parameterOptions.length >= SEARCH_MIN_OPTIONS && (
+                          <OptionSearch
+                            query={varQuery}
+                            onChange={setVarQuery}
+                            onEnter={() => {
+                              if (varMatches.length) insertVariable(varMatches[0].key);
+                            }}
+                          />
+                        )}
+                        {parameterOptions.length >= SEARCH_MIN_OPTIONS && varMatches.length === 0 && <NoMatches />}
+                        {varMatches.map(p => (
                           <button key={p.key} type="button" className="seg-btn" onClick={() => insertVariable(p.key)}>
                             {p.label}
                           </button>

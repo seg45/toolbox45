@@ -673,6 +673,7 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
   outline: none; width: calc(100% + 10px);
 }
 .dd-search-input:focus { border-color: var(--teal); }
+.dd-empty { padding: 8px; font-size: 11.5px; color: var(--muted); text-align: center; white-space: normal; }
 .dd-search-input::placeholder { color: var(--muted); }
 
 /* ─── Editor de comandos: dropdown "Inserir variável" (na linha de cabeçalho, entre Prompt e Export) ─── */

@@ -315,6 +315,62 @@ await withPage(browser, async page => {
   assert(await panel.locator('.var-new-form').isVisible(), 'cenário 7: clicar abre o formulário de cadastro');
 });
 
+// ── Cenário 8: pesquisa no "Insert variable" (muitas variáveis) ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  const many = Array.from({ length: 30 }, (_, i) => ({ key: `var_${i}`, label: i === 7 ? 'Serial Number' : `Variable ${i}`, sort_order: i }));
+  await mockParams(page, { params: many });
+  const row = await gotoStep3(page);
+  const panel = row.locator('.ln-var-dd .dd-panel');
+  const search = panel.locator('.dd-search-input');
+  await page.screenshot({ path: `${SHOTS}/v8-search.png` });
+  assert(await search.isVisible(), 'cenário 8: caixa de pesquisa aparece com 30 variáveis');
+  assert(await search.evaluate(el => el === document.activeElement), 'cenário 8: pesquisa já nasce focada');
+  await search.fill('serial');
+  await assertEventually(async () => (await panel.locator('.seg-btn:not(.var-new-btn)').count()) === 1, 'cenário 8: "serial" deixa só "Serial Number"');
+  await search.fill('variable 1');
+  await assertEventually(async () => (await panel.locator('.seg-btn:not(.var-new-btn)').count()) === 12, 'cenário 8: cada palavra precisa casar — "variable 1" traz 1, 10–19 e 21 (12 itens)');
+  await search.fill('zzz');
+  await assertEventually(async () => await panel.locator('.dd-empty').isVisible(), 'cenário 8: sem resultado mostra "No matches"');
+  assert(await panel.locator('.var-new-btn').isVisible(), 'cenário 8: "New variable…" continua disponível sem resultado');
+  await search.fill('SERIAL');
+  await search.press('Enter');
+  const ta = row.locator('textarea.set-input');
+  await assertEventually(async () => (await ta.inputValue()).includes('{{var_7}}'), 'cenário 8: Enter insere o primeiro resultado ({{var_7}})');
+  await row.locator('.ln-var-dd .dd-btn').click();
+  assert((await row.locator('.ln-var-dd .dd-search-input').inputValue()) === '', 'cenário 8: reabrir limpa a pesquisa');
+});
+
+// ── Cenário 9: pesquisa nos seletores do passo "Scope" só quando a lista é grande ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  await mockParams(page);
+  const topics = ['Capture', 'Status', 'VPN', 'Routing', 'NAT', 'Logs', 'Policy', 'Cluster'].map((l, i) => ({ key: l.toLowerCase(), label: l, color: '#60A5FA', sort_order: i, is_protected: 0 }));
+  await page.route('**/api/catalogs', r => r.fulfill({ json: { ...CATALOGS, topics } }));
+  await page.goto(`${BASE}/index.html`);
+  await page.waitForSelector('.card[data-cmd-id="1"]');
+  await openAddCommand(page);
+  await page.fill('#cmdName', 'Search test');
+  await page.locator('#cmdWizNextBtn').click();
+  const groups = page.locator('.wiz-panel[data-step="2"] .set-group');
+  await groups.nth(0).locator('.dd-btn').click();
+  assert((await groups.nth(0).locator('.dd-search-input').count()) === 0, 'cenário 9: Vendor (2 opções) não mostra pesquisa');
+  await groups.nth(0).locator('.dd-btn').click();
+  await groups.nth(4).locator('.dd-btn').click();
+  const ts = groups.nth(4).locator('.dd-search-input');
+  await page.screenshot({ path: `${SHOTS}/v9-topic-search.png` });
+  assert(await ts.isVisible(), 'cenário 9: Topic (8 opções) mostra pesquisa');
+  await ts.fill('rout');
+  await assertEventually(async () => (await groups.nth(4).locator('.dd-panel .seg-btn:not(.qc-new-btn)').allInnerTexts()).map(t => t.trim()).join('|') === 'Routing', 'cenário 9: "rout" filtra para Routing');
+  await groups.nth(4).locator('.dd-panel .seg-btn', { hasText: 'Routing' }).click();
+  await ts.fill('');
+  await ts.fill('vp');
+  await assertEventually(async () => (await groups.nth(4).locator('.dd-panel .seg-btn:not(.qc-new-btn)').count()) === 1, 'cenário 9: pesquisa continua após marcar um item (multi-seleção)');
+  await groups.nth(4).locator('.dd-panel .seg-btn', { hasText: 'VPN' }).click();
+  await groups.nth(4).locator('.dd-panel .dd-panel-foot .btn', { hasText: 'Close' }).click();
+  assert((await groups.nth(4).locator('.dd-label').innerText()).includes('3'), 'cenário 9: Capture (padrão) + Routing + VPN marcados via pesquisa');
+});
+
 await browser.close();
 console.log(`\n${failures === 0 ? 'TODOS OS CENÁRIOS PASSARAM' : `${failures} CENÁRIO(S) FALHARAM`}`);
 process.exit(failures === 0 ? 0 : 1);

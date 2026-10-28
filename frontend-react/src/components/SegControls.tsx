@@ -29,6 +29,60 @@ function useCloseOnOutsideClick(open: boolean, close: () => void) {
 }
 
 // ════════════════════════════════════════════════
+// Pesquisa dentro do painel — listas grandes (variáveis, sistemas, tópicos…)
+// ganham uma caixa de busca no topo (sticky, mesmo `.dd-search-input` do
+// seletor de pastas). Só aparece a partir de SEARCH_MIN_OPTIONS opções: em
+// listas curtas (Type/Category, Home page…) seria ruído.
+// ════════════════════════════════════════════════
+export const SEARCH_MIN_OPTIONS = 6;
+
+function normalizeSearch(text: string): string {
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+// Sem caixa/acentos; cada palavra digitada precisa aparecer no rótulo.
+export function filterOptionsByQuery<T extends { label: string }>(options: T[], query: string): T[] {
+  const words = normalizeSearch(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return options;
+  return options.filter(o => {
+    const hay = normalizeSearch(o.label);
+    return words.every(w => hay.includes(w));
+  });
+}
+
+export function OptionSearch({
+  query,
+  onChange,
+  onEnter,
+}: {
+  query: string;
+  onChange: (q: string) => void;
+  onEnter?: () => void;
+}) {
+  return (
+    <input
+      type="text"
+      className="dd-search-input"
+      placeholder="Search…"
+      autoComplete="off"
+      autoFocus
+      value={query}
+      onChange={ev => onChange(ev.target.value)}
+      onKeyDown={ev => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          onEnter?.();
+        }
+      }}
+    />
+  );
+}
+
+export function NoMatches() {
+  return <div className="dd-empty">No matches</div>;
+}
+
+// ════════════════════════════════════════════════
 // Cadastro rápido ("＋ New vendor…") dentro do próprio seletor — usado pelo
 // editor de comandos para o admin criar Vendor/System/Version/Environment/
 // Topic/Prompt/Export sem sair do wizard. `onCreate` cria o item (POST) e
@@ -154,11 +208,17 @@ export function SegSingle({
 }) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState('');
   const ref = useCloseOnOutsideClick(open, () => setOpen(false));
   useEffect(() => {
-    if (!open) setCreating(false);
+    if (!open) {
+      setCreating(false);
+      setQuery('');
+    }
   }, [open]);
   const current = options.find(o => o.val === value);
+  const showSearch = !creating && options.length >= SEARCH_MIN_OPTIONS;
+  const visible = showSearch ? filterOptionsByQuery(options, query) : options;
   return (
     <div className={`dd${open ? ' open' : ''}`} ref={ref}>
       <button type="button" className="dd-btn" onClick={() => setOpen(o => !o)}>
@@ -167,8 +227,21 @@ export function SegSingle({
       </button>
       {open && (
         <div className="dd-panel seg">
+          {showSearch && (
+            <OptionSearch
+              query={query}
+              onChange={setQuery}
+              onEnter={() => {
+                if (visible.length) {
+                  onChange(visible[0].val);
+                  setOpen(false);
+                }
+              }}
+            />
+          )}
+          {showSearch && visible.length === 0 && <NoMatches />}
           {!creating &&
-            options.map(opt => (
+            visible.map(opt => (
               <button
                 key={opt.val}
                 type="button"
@@ -223,10 +296,16 @@ export function SegMulti({
 }) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [query, setQuery] = useState('');
   const ref = useCloseOnOutsideClick(open, () => setOpen(false));
   useEffect(() => {
-    if (!open) setCreating(false);
+    if (!open) {
+      setCreating(false);
+      setQuery('');
+    }
   }, [open]);
+  const showSearch = !creating && options.length >= SEARCH_MIN_OPTIONS;
+  const visible = showSearch ? filterOptionsByQuery(options, query) : options;
 
   let labelText = emptyLabel;
   if (selected.length === 1) {
@@ -247,8 +326,18 @@ export function SegMulti({
       </button>
       {open && (
         <div className="dd-panel seg">
+          {showSearch && (
+            <OptionSearch
+              query={query}
+              onChange={setQuery}
+              onEnter={() => {
+                if (visible.length === 1) toggleValue(visible[0].val);
+              }}
+            />
+          )}
+          {showSearch && visible.length === 0 && <NoMatches />}
           {!creating &&
-            options.map(opt => (
+            visible.map(opt => (
               <button
                 key={opt.val}
                 type="button"
