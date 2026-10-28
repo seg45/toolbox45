@@ -293,6 +293,28 @@ await withPage(browser, async page => {
   assert(await panel.locator('.var-empty').isVisible() && await panel.locator('.var-new-btn').isVisible(), 'cenário 6: sem variáveis, admin ainda vê "New variable…"');
 });
 
+// ── Cenário 7 (admin, muitas variáveis): "New variable…" fica visível sem precisar rolar o painel ──
+await withPage(browser, async page => {
+  await mockLoggedInAdmin(page);
+  const many = Array.from({ length: 30 }, (_, i) => ({ key: `var_${i}`, label: `Variable ${i}`, sort_order: i }));
+  await mockParams(page, { params: many });
+  const row = await gotoStep3(page);
+  const panel = row.locator('.ln-var-dd .dd-panel');
+  const inside = async () => {
+    const p = await panel.boundingBox();
+    const b = await panel.locator('.var-new-btn').boundingBox();
+    return !!p && !!b && b.x >= p.x - 1 && b.x + b.width <= p.x + p.width + 1 && b.y >= p.y - 1 && b.y + b.height <= p.y + p.height + 1;
+  };
+  await page.screenshot({ path: `${SHOTS}/v7-many-vars.png` });
+  assert(await inside(), 'cenário 7: com 30 variáveis, "New variable…" aparece dentro da área visível do painel (sem rolar)');
+  await panel.evaluate(el => { el.scrollTop = el.scrollHeight; });
+  assert(await inside(), 'cenário 7: continua visível com o painel rolado até o fim');
+  await panel.evaluate(el => { el.scrollTop = 0; });
+  assert(await inside(), 'cenário 7: continua visível com o painel rolado para o topo');
+  await panel.locator('.var-new-btn').click();
+  assert(await panel.locator('.var-new-form').isVisible(), 'cenário 7: clicar abre o formulário de cadastro');
+});
+
 await browser.close();
 console.log(`\n${failures === 0 ? 'TODOS OS CENÁRIOS PASSARAM' : `${failures} CENÁRIO(S) FALHARAM`}`);
 process.exit(failures === 0 ? 0 : 1);

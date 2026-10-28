@@ -148,6 +148,12 @@
 .seg-btn:hover { border-color: var(--teal); color: var(--text); }
 .seg-btn.on { border-color: var(--teal); background: var(--teal-bg); color: var(--teal); }
 .dd-panel.seg .seg-btn { width: 100%; text-align: left; }
+/* Painel de dropdown = UMA coluna que rola na vertical. Herdava flex-wrap:wrap
+   de .seg: com mais itens do que cabem no max-height (320px) o flex em coluna
+   quebrava em colunas extras escondidas à direita (overflow-x:hidden), e os
+   últimos itens — inclusive "＋ New variable…" — sumiam sem barra de rolagem. */
+.dd-panel.seg { flex-wrap: nowrap; }
+.dd-panel.seg .seg-btn { flex-shrink: 0; }
 .set-input {
   background: var(--surf2); border: 1px solid var(--bdr); border-radius: 6px;
   color: var(--text); font-family: var(--mono); font-size: 12px; padding: 7px 10px;
@@ -684,7 +690,7 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 }
 .ln-var-dd .dd-panel { left: 0; right: auto; min-width: 200px; width: max-content; max-width: 280px; }
 /* "+ New variable…" e mini-formulário de criação dentro do seletor */
-.ln-var-dd .var-new-btn { color: var(--teal); font-weight: 600; border-top: 1px solid var(--bdr); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 7px; }
+.ln-var-dd .var-new-btn { position: sticky; bottom: -5px; z-index: 1; color: var(--teal); font-weight: 600; border-top: 1px solid var(--bdr); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 7px; }
 .ln-var-dd .var-empty { padding: 6px 8px; font-size: 11px; color: var(--muted); white-space: normal; }
 .ln-var-dd .dd-panel:has(.var-new-form) { width: 260px; max-width: 260px; }
 .var-new-form { display: flex; flex-direction: column; gap: 8px; padding: 4px; }
@@ -693,7 +699,7 @@ textarea.set-input { resize: vertical; min-height: 52px; font-family: var(--sans
 .var-new-hint { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 4px; font-family: var(--mono); }
 /* Cadastro rápido (SegControls QuickCreate) dentro dos seletores do editor */
 .dd-label.dd-placeholder { color: var(--muted); font-weight: 400; }
-.qc-new-btn { white-space: nowrap; color: var(--teal); font-weight: 600; border-top: 1px solid var(--bdr); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 7px; }
+.qc-new-btn { position: sticky; bottom: -5px; z-index: 1; white-space: nowrap; color: var(--teal); font-weight: 600; border-top: 1px solid var(--bdr); border-radius: 0 0 6px 6px; margin-top: 4px; padding-top: 7px; }
 .qc-blocked { padding: 6px 8px; font-size: 11px; color: var(--muted); white-space: normal; border-top: 1px solid var(--bdr); margin-top: 4px; }
 .qc-form { display: flex; flex-direction: column; gap: 8px; padding: 4px; min-width: 220px; }
 .qc-label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
